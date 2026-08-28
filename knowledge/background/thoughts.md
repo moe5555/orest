@@ -21,3 +21,6 @@ The requirments here are different than for most smart search AV tools. We are c
 *Search via body (live)*: using pose-estimation (e.g. via custom feature extractor in WISE), the actor "conjures" previous "takes" of the gesture they just made. This in particular fits well to the conflict-theme of Elektra: recognising not just the pose but also interpreting it. 
 
 In general, the smart search is not only about finding the similar moments, but also *judging* them and *drawing conclusions*. 
+
+# Practical 
+- Set up PC so I can control it remotely to run batch processing?

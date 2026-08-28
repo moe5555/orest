@@ -63,20 +63,6 @@ graph TD;
 ```
 
 
-### Hardware
-- Microphones (ASK Tonkids)
-- Cameras (ASK Nils)
-  
-### Software
-- [#TODO]: what is the most effective way of recording all this data in sync? 
-- [#TODO]: file naming standard
-- [#TODO]: database structure
-- [#TODO]: Perhaps a tool that allows a human to annotate exact timestamps with a tag during rehearsal? 
-
-### Anticipating Issues
-- capturing third-party individuals? e.g. technicians, AMA, etc. -> perhaps one full-room setup, one stage setup that we can easily switch between
-- explicit team-consent?
-
 ## [PROCESSING](processing.md)
 Process the rehearsal data to gather intelligence on the room + its activities & participants
 
@@ -110,18 +96,6 @@ graph TD;
     classDef mode fill:#e8eef7,stroke:#3f6ea8,stroke-dasharray:4 3,color:#12263a;
 ```
 
-
-### Hardware
-- PC to run local inference on 
-
-### Software
-- "smart" database existing between capture & processing. Features: annotation during collection, smart search. perhaps use this: [WISE](https://gitlab.com/vgg/wise/wise)
-- profile actors (+ team?)
-- compress data, optimising for footage to be used in the play. Current topic focus: teaching the AI to learn how to deal with conflicts by observing human conflict. 
-- 
-
-### Anticipating Issues 
-- EU AI Act for stuff like face & emotion recognition etc. 
 
 ## [RENDER](render.md)
 Get material back out of the database — by tag, by body, or by generating something new.
