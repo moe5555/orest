@@ -1,0 +1,18 @@
+diff --git a/environment.yml b/environment.yml
+index b40af73..9c5e518 100644
+--- a/environment.yml
++++ b/environment.yml
+@@ -5,7 +5,12 @@ channels:
+   - nodefaults  # ensure default channel is not used due to its ToS
+ 
+ dependencies:
+-  - python>=3.10
++  # Upper bound required: requirements.txt pins torch<2.9, and no torch
++  # wheel exists yet for Python versions newer than 3.13. `conda env
++  # create -f environment.yml python=3.x` does NOT override this -- the
++  # CLI arg is silently misparsed as a remote-file URL and ignored, so the
++  # bound must live here.
++  - python>=3.10,<3.13
+   - pip>=24
+   - conda-forge::ffmpeg>=6,<7
+   - libmagic

@@ -56,7 +56,17 @@ behaviour change on Linux/macOS). Reinstalled with
 
 **Net result:** `wise` conda env (Python 3.12) fully functional on this
 machine, installed via the plain documented command with no manual
-workarounds. Two local patches to vendored WISE — `environment.yml`
-(Python bound) and `src/wise/dataloader/utils.py` (libmagic skip) — will
-need reapplying if `external/wise` is re-pulled from upstream at a newer
-commit.
+workarounds.
+
+**On the two local patches surviving a re-clone:** `external/wise` is a
+plain git clone, gitignored wholesale by this repo's `external/` rule — so
+edits inside it are invisible to Orest's git and would be lost if
+`external/wise` is ever deleted and re-cloned. Both patches are saved as
+`.patch` files under `knowledge/source_of_truth/wise-patches/` (tracked by
+this repo) and documented in `knowledge/source_of_truth/versions.md` for
+reapplication:
+
+```bash
+git -C external/wise apply ../../knowledge/source_of_truth/wise-patches/0001-pin-python-upper-bound.patch
+git -C external/wise apply ../../knowledge/source_of_truth/wise-patches/0002-skip-libmagic-on-windows.patch
+```
