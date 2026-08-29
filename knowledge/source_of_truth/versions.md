@@ -1,0 +1,1 @@
+WISE pinned at fcfa443fbb46eb361bb19151339338616838a5b5 2026-08-06, cloned 2026-08-29, from github.com/ox-vgg/wise
