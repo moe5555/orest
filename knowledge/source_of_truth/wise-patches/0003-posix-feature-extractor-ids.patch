@@ -1,0 +1,18 @@
+diff --git a/src/wise/wise_project.py b/src/wise/wise_project.py
+index bdb957a..dbad621 100644
+--- a/src/wise/wise_project.py
++++ b/src/wise/wise_project.py
+@@ -332,8 +332,11 @@ class WiseProject:
+         assets = defaultdict(dict)
+         # 1. find all feature-extractor-id
+         for feature_dir in self._store_dir.glob("*/*/*/*/features/"):
+-            feature_extractor_id = str(
+-                feature_dir.relative_to(self._store_dir).parent
++            # Feature extractor ids are always slash-separated, independent of
++            # the platform's path separator, since they are parsed as
++            # USER/REPOSITORY/MODEL/DATASET when instantiating an extractor.
++            feature_extractor_id = (
++                feature_dir.relative_to(self._store_dir).parent.as_posix()
+             )
+             available_modality_types = set()
+             for feature_data in feature_dir.glob("*.*"):

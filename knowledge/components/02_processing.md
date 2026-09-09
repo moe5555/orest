@@ -10,8 +10,63 @@ Overview: components/pipeline.md
  
 - batch-process incoming video stream with Gemma-4 model 
 - write SITREP report
+  - who is in the scene (provide the system with images of each team member, perhaps their bio?)
+  - what they are doing 
+  - time frame covered
+  - categories per person: verantwortungsvoll, menschlich, gefahr, kollaborativ
+  - suggested action maybe, or prediction of what might happen next. 
 - write log file, but not necessary to time-sync with footage. Choice moments can be extracted if desired.  
 - prioritises low latency over accuracy 
+
+Implementation Steps: 
+1. Install Gemma-4b and deploy via Ollama
+2. Set up capture loop - select video and audio source (for now we'll be testing with webcam + laptop mic)
+3. Capture one frame every x seconds
+4. Transcribe everything that is said, speaker diarisation eventually. 
+5. Write SITREP report JSON format.
+6. Every x seconds, prompt a SITREP report. X is dependent on latency - do a p95, p99 test and make sure that the system only processes as many seconds as it can keep up with. e.g. if it takes 40 seconds to process a range of 30 seconds, that will cause increasing delay. 
+7. Output: video output (for testing, eventually this will be handled perhaps via TouchDesigner) and SITREP text beneath it. 
+
+#### Example SITREP 
+
+Implemented in `src/sitrep/report.py`. Deutsch, knapp, Behördenstil. Ollama erhält das Schema als Grammatik, die Antwort ist daher immer gültiges JSON.
+
+`zeitfenster` und `quelle` werden aus dem Capture-Window übernommen, nicht vom Modell erzeugt — das Modell kann sie nicht verifizieren, und jedes generierte Token kostet Latenz. Bewertungen 0–5.
+
+```json
+{
+  "zeitfenster": { "beginn": "2026-09-09T14:20:35", "ende": "2026-09-09T14:21:05", "dauer_s": 30 },
+  "quelle": { "bilder": 3, "ton": "142035.wav" },
+  "lage": "Zwei Personen auf der Probebühne, Gespräch über Szenenablauf.",
+  "personen": [
+    {
+      "kennung": "P-01",
+      "merkmale": "männlich, dunkle Jacke, Brille",
+      "taetigkeit": "steht mittig, gestikuliert",
+      "verantwortungsvoll": 3,
+      "menschlich": 4,
+      "gefahr": 0,
+      "kollaborativ": 4
+    }
+  ],
+  "ereignisse": ["P-02 tritt von links auf", "gemeinsame Betrachtung eines Textbuchs"],
+  "gesagt": "Nochmal von vorne, ab dem Einsatz.",
+  "prognose": "Wiederholung der Szene zu erwarten.",
+  "empfehlung": "Keine.",
+  "vertrauen": 4,
+  "latenz_s": 12.4
+}
+```
+
+**Halluzination:** Das Modell erfindet bei reinem Raumton Inhalte (beobachtet: „Wind in den Blättern, Vogelzwitschern, Plätschern von Wasser" bei einer Aufnahme ohne Sprache). Der Prompt verbietet Spekulation explizit und lässt `gesagt` leer, wenn keine Sprache zu hören ist. `vertrauen` ist die Selbsteinschätzung des Modells und entsprechend vorsichtig zu lesen.
+
+#### Latenz & Fenstergröße (Schritt 6)
+
+Gemessen mit `src/sitrep/benchmark.py` auf RTX 4070 Laptop / 8GB, `gemma4:e4b`, 10 Läufe pro Konfiguration. Details und Tabelle: changelog.md, Eintrag 2026-09-09.
+
+- **Latenz ist nahezu unabhängig von der Fenstergröße** (p95 4,4 s bei 10 s-Fenster bis 7,6 s bei 60 s-Fenster). Alle getesteten Konfigurationen halten Schritt.
+- Da die Generierung das nächste Fenster blockiert, entspricht die **Lücke zwischen zwei Fenstern der Latenz**. Abdeckung = W/(W+Latenz): 65 % bei 15 s, 83 % bei 30 s. **Längere Fenster sind für die Abdeckung besser** — X ist damit eine Frage der gewünschten Berichtsfrequenz, nicht der Rechenzeit.
+- **Audiolänge darf nicht auf einer 30-Sekunden-Grenze enden** (Encoder arbeitet in 30 s-Blöcken, sonst `Failed to tokenize prompt`). `capture.clip_for_encoder()` schneidet entsprechend zu.
 
 ### Smart Search 
 **data_in**: rehearsal corpus <br>
