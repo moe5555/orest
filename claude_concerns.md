@@ -54,17 +54,44 @@ the EU AI Act point already raised in `02_processing.md`.
 - Should I try the mitigations below, or is this good enough for now?
 
 **Mitigations available, roughly in order of expected effect:**
-1. **Step 4 (dedicated transcription).** Most of the invented material is
-   *speech*. Taking the transcript away from Gemma and giving it to
-   faster-whisper removes the largest error source structurally rather than by
-   asking the model nicely. This is already in the plan as step 4 and I would do
-   it first.
+1. **Step 4 (dedicated transcription) — done 2026-09-10.** `gesagt` is now
+   Whisper's transcript, written into the report verbatim, so the model can no
+   longer invent speech — and in the first live run with real German speech,
+   it didn't. It surfaced a new failure mode, below.
 2. **A larger model** — see hardware below.
 3. Prompt/schema tightening: force `merkmale` to be omitted rather than guessed,
    drop `prognose`/`empfehlung` (both are invitations to speculate), lower
-   temperature to 0.
+   temperature to 0. Related: e4b fills unknown fields with placeholders
+   ("Keine Angaben vorhanden.", "N/A") instead of leaving them empty as
+   instructed, and the console prints those as if they were content.
 4. Feed the model the previous window's report so descriptions stay consistent
    between windows. Costs latency and can entrench an early error.
+
+**New since transcription: the transcript is read as a description of whoever
+is on camera.** In the first live run the speech mentioned "ein junger Student
+aus Berlin". The model recorded P-01, the only person in frame, as "Junger
+Student aus Berlin (laut Transkript). Geschlecht: männlich", assumed P-01 was
+the speaker, inferred an audience from "ihr alle", and referred to a P-02 it
+never listed. Nothing links a voice to a face: the system cannot tell who is
+speaking, or whether the speech comes from someone off camera or from a device.
+That is the diarisation step 4 defers ("speaker diarisation eventually"), and it
+matters more now than before — the transcript is an authoritative-looking input
+the model builds on.
+
+**Question:** was the speech in that run you, or audio playing from a device?
+The "Student aus Berlin" attribution is wrong either way, but it decides
+whether "P-01 spricht" was.
+
+**The transcript itself is not always real speech.** In a run on 2026-09-10 in
+an empty, silent room, Whisper returned "Vielen Dank." with `vad_filter=True`
+— the phantom-text failure the filter was chosen to prevent, and the same
+phrase that motivated choosing it (`transcribe.py`). `gemma4:e4b` then
+recorded it as an event: "P-01 spricht: Vielen Dank." So the two failure modes
+compound: the transcript can be a hallucination, and the model treats it as
+the one authoritative input it is not allowed to doubt. Worth measuring how
+often the filter lets phantom text through on real room tone before the
+Probebühne — a rehearsal has long silences, and every one of them is an
+opportunity for this.
 
 ### 2. Which GPU will actually run this?
 
@@ -129,10 +156,31 @@ in a domestic room. Untested and expected to matter:
   models. If that was to free disk space, note that re-pulling is ~7.2GB and the
   registry download failed repeatedly over IPv6 on this machine
   (`WSAECONNABORTED`, all 16 parallel parts).
-- **Audio encoder boundary.** Clips whose length lands on a 30-second boundary
-  fail to tokenize. Handled in `capture.clip_for_encoder()`, but worth knowing
-  it exists if audio handling is ever rewritten — the 30s default window hit it
-  exactly, so it would have failed 100% of the time in production.
+- **Audio encoder boundary — no longer applies, but will return.** Gemma's audio
+  encoder rejects clips whose length lands within a hair of a 30-second
+  multiple (`Failed to tokenize prompt`). Since 2026-09-10 Gemma receives a
+  Whisper transcript instead of audio, so the bug cannot occur and
+  `capture.clip_for_encoder()` was removed. If audio is ever passed to Gemma
+  again — e.g. transcript *and* audio, to recover non-verbal information — the
+  trim has to come back: the 30s default window hit the boundary exactly.
 - **`vertrauen` is self-reported** by the model and did not correlate with
   actual accuracy in anything I observed. I would not display it to an operator
   as if it meant something.
+- **`src/data/` has been deleted** — the speech sample `test01_20s.wav` and
+  `test_frame.jpg`. The `data/` rule in `.gitignore` matches a directory of that
+  name at any depth, so both were never committed and cannot be restored from
+  git. As a result `src/sitrep/test.py` no longer runs, and `benchmark.py` now
+  takes the speech recording as a required `--speech` argument. **Was the
+  deletion intentional?** If test assets belong in the repo, they need a
+  directory name the rule does not match, or the rule narrowed to `/data/`.
+- **`__pycache__/` was committed** in `03de01f` (five `.pyc` files under
+  `src/sitrep/`). Worth adding `__pycache__/` to `.gitignore` and untracking
+  them with `git rm --cached`. I have not done either, since it changes the
+  repository.
+- **Both models download on first use, which needs internet.** Whisper
+  large-v3-turbo (~1.6GB) took about 4 minutes from Hugging Face on its first
+  run here, including load; `gemma4:e4b` is ~9.6GB from the Ollama registry,
+  whose download failed repeatedly over IPv6 on this machine. If the Probebühne
+  or production machine is offline or on a restricted network, both have to be
+  fetched in advance and a first run tested on that machine. **Will it have
+  internet access?**

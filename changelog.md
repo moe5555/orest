@@ -6,6 +6,149 @@ referenced below.
 
 ---
 
+## 2026-09-10 — Live SITREP records nothing (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`).
+
+The Realtime-SITREP streams in and streams out. `report.run_live()` yields
+each report to whatever consumes it and keeps no copy; `main.py` prints it and
+drops it. The `--log` option and `report.new_log_path()` are gone, and nothing
+in the real-time path opens a file. Capture already held frames and audio in
+memory only, so the whole live path is now non-recording.
+
+`data/sitrep/` is deleted — nine `.jsonl` report logs, plus six session
+folders holding 37 JPEG frames and 12 WAV clips written by a capture version
+predating the in-memory design. 6.7 MB, none of it tracked by git.
+
+**This diverges from the specification.**
+`knowledge/components/02_processing.md` line 18 (Realtime-SITREP,
+implementation steps) still asks to "write log file, but not necessary to
+time-sync with footage. Choice moments can be extracted if desired." Recording
+was removed on Moe's instruction; the Source of Truth is left untouched for
+him to reconcile.
+
+Note this concerns the real-time path only. The recorder feeding the rehearsal
+database is a separate node in `knowledge/source_of_truth/pipeline.md` (REC →
+local storage) and is unaffected, as is the Hindsight-SITREP, which works from
+recorded footage by definition.
+
+**Verified:** two live windows end to end; the repository and `data/` are
+byte-identical afterwards, and `data/sitrep/` is not recreated.
+`tests/test_report.py` asserts that a `run_live()` session leaves an empty
+directory behind. 50 tests pass.
+
+---
+
+## 2026-09-10 — SITREP refactor: package layout, typed report, test suite (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
+
+`src/sitrep/` is an installed package with one console entry point, a typed
+report document and a test suite. What the SITREP observes and reports is
+unchanged. The package layout is what the OSC and Hindsight-SITREP work in
+`knowledge/components/02_processing.md` needs, since both import this code
+rather than run it as a script.
+
+**Package.** `src/sitrep/` installs into the `orest` environment
+(`[build-system]` and `[project.scripts]` in `pyproject.toml`), and its
+modules import each other relatively. The entry point is `orest-sitrep`, or
+`python -m sitrep.<module>` for the per-module diagnostics; **`python
+src/sitrep/main.py` no longer works** and the READMEs and docstrings name the
+new commands. `pydantic` is now a declared dependency, pytest sits in a `dev`
+group, and `requires-python` is `>=3.12` — at that bound the lock resolves to
+identical versions of all 42 packages.
+
+**One entry point.** `main.py` is the only runner; `report.py`'s duplicate CLI
+is replaced by `orest-sitrep --json`. Source, timing and resolution arguments
+are defined once in the new `cli.py` and attached as parser parents. The
+default sampling interval is 10s everywhere — `capture.py`'s standalone CLI
+used 5s.
+
+**Typed SITREP.** `report.Sitrep` carries the model's `Lagebericht` as a
+nested field beside the measured `zeitfenster`, `quelle`, `gesagt` and
+`latenz_s`, rather than flattening it into a dict where a generated field
+could displace a measured one. **The log line changes shape: `bericht` is now
+a nested object.** `main.py` renders from attributes, and the rating
+categories come from `Person`'s fields instead of being restated.
+
+**Device selection.** A host API publishing no default input device
+(PortAudio answers -1) is reported with the candidate list, rather than
+falling through to whichever device enumerates first — on this machine a
+virtual cable sits ahead of the microphone array. Entry points resolve and
+print their sources; `capture.run()` and `report.run_live()` take resolved
+devices and print nothing.
+
+**Benchmark.** Reports coverage — W/(W+p95), the share of rehearsal actually
+observed — per configuration, and recommends the configuration with the best
+coverage. It previously recommended the smallest sustainable window, which is
+the worst coverage among those that keep up and contradicts the 2026-09-09
+entry and `claude_concerns.md` §3. Frame counts come from
+`capture.frames_per_window()`, shared with the capture loop.
+
+**Smaller changes.** The sampling loop sleeps until the next sample instead of
+polling every 10ms; `main._wrap()` is `textwrap.wrap()`; window times are
+formatted from datetimes rather than sliced out of ISO strings;
+`transcribe.py` applies its cuBLAS `PATH` fix on first model use rather than
+at import; `report.Analyse` is gone, its latency field having never been read.
+The five committed `.pyc` files under `src/sitrep/__pycache__/` are untracked.
+
+**Tests.** `tests/` covers device resolution, the audio ring, WAV encoding,
+the sampling loop against a fake camera, the report schema and the console
+block — 50 tests, no camera, microphone or GPU required: `uv run pytest`.
+
+**Verified:** live end to end — one 10s window, 2 frames, Whisper on GPU,
+`gemma4:e4b`, 8.3s latency, console block rendered and the JSONL line
+re-validating as a `Sitrep`. `uv pip check` clean across 42 packages.
+
+**Note for `claude_concerns.md` §1:** in that run Whisper returned "Vielen
+Dank." from an empty, silent room despite `vad_filter=True` — the phantom-text
+failure `transcribe.py` documents, which the filter was meant to prevent — and
+the model built an event from it, "P-01 spricht: Vielen Dank."
+
+---
+
+## 2026-09-10 — Live SITREP step 4: Whisper transcription replaces audio input (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
+
+Added `src/sitrep/transcribe.py`, implementing step 4 of the Realtime-SITREP
+steps in `knowledge/components/02_processing.md` ("Transcribe everything that
+is said"). Speaker diarisation is not implemented.
+
+Gemma no longer receives audio. Each window's audio is transcribed with
+faster-whisper; `report.py` gives the model the transcript as text and writes
+it into the report verbatim as `gesagt`, which was removed from the model's
+schema. Given audio directly, e4b had invented speeches, a play title and
+ambient sounds; a transcript it merely reads cannot be embellished that way.
+
+Design points:
+- `large-v3-turbo`, German fixed, greedy decoding: 02_processing.md asks the
+  Realtime-SITREP to prioritise latency over accuracy, and turbo covers German
+  where the distil models do not.
+- The voice-activity filter is required. On room tone, turbo with German fixed
+  transcribed "Vielen Dank." without it, and nothing with it.
+- GPU inference needs cuBLAS, added as the `nvidia-cublas-cu12` wheel.
+  CTranslate2 finds it only via `PATH` — `os.add_dll_directory()` still fails
+  with `cublas64_12.dll is not found` — so `transcribe.py` prepends the wheel's
+  `bin` directory to `PATH` on import.
+- `capture.clip_for_encoder()` was removed: the 30-second boundary bug lived in
+  Gemma's audio encoder, which no longer receives audio.
+- `benchmark.py` times transcription and generation separately and takes the
+  speech recording as a required `--speech` argument, since the bundled sample
+  in `src/data/` was deleted and room tone would understate transcription cost.
+
+**Verified:** the encoder runs on CUDA (0.20s warm); Whisper and Gemma resident
+together use 5.8 of 8.2GB; live end to end, a 15s window reports in 5.8s (the
+first window 14.3s, including model loads). Real German speech was transcribed
+and written verbatim, with some names misheard ("Dona Haraway").
+
+**Open:** the model now attributes transcript content to whoever is on camera —
+see `claude_concerns.md`, concern 1. Latency across window sizes has not been
+re-measured with transcription in the loop, pending a speech recording for
+`--speech`.
+
+---
+
 ## 2026-09-09 — Live SITREP MVP: continuous loop with console output (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`).
@@ -38,8 +181,7 @@ rehearsal scale.
 
 Added `src/sitrep/report.py` (step 5, "Write SITREP report JSON format") and
 `src/sitrep/benchmark.py` (step 6, the p95/p99 latency test). The German
-report format is documented under "Example SITREP" in
-`knowledge/components/02_processing.md`.
+report format is the `Lagebericht` schema in `report.py`.
 
     python src/sitrep/report.py --window 30 --interval 10
     python src/sitrep/benchmark.py --runs 10

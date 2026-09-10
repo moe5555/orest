@@ -6,10 +6,11 @@ and buffers the matching audio so a window carries the material a SITREP
 covers: several frames plus the sound recorded alongside them
 (step 5, "Write SITREP report JSON format").
 
-Nothing here is written to disk. A window holds encoded JPEG and WAV bytes and
-is handed straight to the model; the raw A/V recorder is a separate node in
-knowledge/source_of_truth/pipeline.md (REC, feeding the rehearsal database),
-not part of the real-time path. Only the SITREP text is logged, by report.py.
+Nothing here is written to disk. A window holds encoded JPEG and WAV bytes,
+handed straight to transcription and the model and then dropped; the raw A/V
+recorder is a separate node in knowledge/source_of_truth/pipeline.md (REC,
+feeding the rehearsal database), not part of the real-time path. The real-time
+path retains nothing at all.
 
 Frames are pulled continuously in the background and sampled from the newest
 available data. A camera left idle keeps filling its buffer, and the next read
@@ -20,12 +21,13 @@ accuracy".
 
 Run directly to watch the capture loop without generating reports:
 
-    python src/sitrep/capture.py --interval 5 --window 30
+    python -m sitrep.capture --interval 5 --window 30
 """
 
 import argparse
 import io
 import itertools
+import math
 import sys
 import threading
 import time
@@ -38,22 +40,17 @@ import cv2
 import numpy as np
 import sounddevice as sd
 
-import devices
+from . import cli, devices
 
 # JPEG quality for sampled frames. High enough that compression artefacts do
 # not reach the model, low enough to keep a window's payload small.
 _JPEG_QUALITY = 90
 
-# How often the sampling loop checks whether the next frame is due.
-_POLL_SECONDS = 0.01
+# Delay before retrying a camera read that returned no frame.
+_RETRY_SECONDS = 0.01
 
-# The model's audio encoder works in 30-second chunks. A clip whose length
-# lands on a chunk boundary, or a hair past one, leaves a final chunk with no
-# usable samples and the request fails with "Failed to tokenize prompt".
-# Measured on gemma4:e4b: 29.99998s and 30.01s are accepted, 30.0s and
-# 30.00002s are not. Clips are trimmed clear of the boundary.
-_ENCODER_CHUNK_SECONDS = 30
-_BOUNDARY_MARGIN_SECONDS = 0.05
+# How often the opening wait re-checks for the camera's first frame.
+_FIRST_FRAME_POLL_SECONDS = 0.02
 
 
 @dataclass(frozen=True)
@@ -98,7 +95,7 @@ class VideoStream:
         while not self._stop.is_set():
             ok, frame = self._capture.read()
             if not ok:
-                time.sleep(_POLL_SECONDS)
+                time.sleep(_RETRY_SECONDS)
                 continue
             with self._lock:
                 self._frame = frame
@@ -111,7 +108,7 @@ class VideoStream:
             with self._lock:
                 if self._frame is not None:
                     return True
-            time.sleep(0.02)
+            time.sleep(_FIRST_FRAME_POLL_SECONDS)
         return False
 
     def latest(self):
@@ -149,20 +146,20 @@ class AudioRing:
         return data[-self._capacity:]
 
 
+def frames_per_window(window: float, interval: float) -> int:
+    """How many frames run() samples in one window.
+
+    Sampling starts at the top of the window and repeats every interval for as
+    long as the window lasts, so a window always yields at least one frame.
+    """
+    return max(1, math.ceil(window / interval))
+
+
 def encode_jpeg(frame) -> bytes:
     ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_QUALITY])
     if not ok:
         raise RuntimeError("JPEG encoding failed.")
     return buffer.tobytes()
-
-
-def clip_for_encoder(samples, samplerate: int):
-    """Shorten a clip that ends too close to an audio encoder chunk boundary."""
-    margin = int(_BOUNDARY_MARGIN_SECONDS * samplerate)
-    remainder = len(samples) % (_ENCODER_CHUNK_SECONDS * samplerate)
-    if remainder < margin:
-        return samples[: len(samples) - margin]
-    return samples
 
 
 def encode_wav(samples, samplerate: int) -> bytes:
@@ -177,20 +174,13 @@ def encode_wav(samples, samplerate: int) -> bytes:
     return buffer.getvalue()
 
 
-def run(video_spec=None, audio_spec=None, hostapi=None,
-        interval=5.0, window=30.0, width=None, height=None):
+def run(video: devices.VideoDevice, audio: devices.AudioDevice, *,
+        interval: float, window: float, width=None, height=None):
     """Sample frames and audio, yielding one Window per SITREP interval.
 
     Yields indefinitely; the caller decides how long a session runs.
     """
-    video_device = devices.resolve_video_device(video_spec)
-    audio_device = devices.resolve_audio_device(audio_spec, hostapi)
-    samplerate = int(audio_device.samplerate)
-
-    print(f"video:  [{video_device.index}] {video_device.name}")
-    print(f"audio:  [{audio_device.index}] {audio_device.name} ({audio_device.hostapi})")
-    print(f"sampling every {interval:g}s, window {window:g}s")
-
+    samplerate = int(audio.samplerate)
     ring = AudioRing(samplerate, window)
 
     def on_audio(indata, frames, time_info, status):
@@ -199,7 +189,7 @@ def run(video_spec=None, audio_spec=None, hostapi=None,
             print(f"audio status: {status}", file=sys.stderr)
         ring.add(indata[:, 0].copy())
 
-    stream = VideoStream(video_device, width, height)
+    stream = VideoStream(video, width, height)
 
     def capture_window(index: int) -> Window:
         started = datetime.now()
@@ -207,18 +197,22 @@ def run(video_spec=None, audio_spec=None, hostapi=None,
         next_sample = time.monotonic()
         frames = []
 
-        while time.monotonic() < deadline:
-            if time.monotonic() >= next_sample:
+        while True:
+            now = time.monotonic()
+            if now >= deadline:
+                break
+            if now >= next_sample:
                 frames.append(encode_jpeg(stream.latest()))
                 next_sample += interval
-            time.sleep(_POLL_SECONDS)
+                continue
+            time.sleep(min(next_sample, deadline) - now)
 
-        samples = clip_for_encoder(ring.read(), samplerate)
+        samples = ring.read()
         return Window(index, started, datetime.now(), frames,
                       encode_wav(samples, samplerate), len(samples) / samplerate)
 
     try:
-        with sd.InputStream(device=audio_device.index, channels=1,
+        with sd.InputStream(device=audio.index, channels=1,
                             samplerate=samplerate, callback=on_audio):
             for index in itertools.count():
                 yield capture_window(index)
@@ -227,28 +221,23 @@ def run(video_spec=None, audio_spec=None, hostapi=None,
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--video", help="camera index or name fragment")
-    parser.add_argument("--audio", help="microphone index or name fragment")
-    parser.add_argument("--audio-api", help="host API filter, e.g. WASAPI, MME")
-    parser.add_argument("--interval", type=float, default=5.0,
-                        help="seconds between sampled frames (default: 5)")
-    parser.add_argument("--window", type=float, default=30.0,
-                        help="seconds per SITREP window (default: 30)")
-    parser.add_argument("--width", type=int, help="requested capture width")
-    parser.add_argument("--height", type=int, help="requested capture height")
-    parser.add_argument("--windows", type=int, help="stop after this many windows")
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0],
+        parents=[cli.sources(), cli.timing(), cli.resolution()],
+    )
     args = parser.parse_args(argv)
 
-    windows = run(
-        video_spec=args.video,
-        audio_spec=args.audio,
-        hostapi=args.audio_api,
-        interval=args.interval,
-        window=args.window,
-        width=args.width,
-        height=args.height,
-    )
+    try:
+        video, audio = devices.resolve(args.video, args.audio, args.audio_api)
+    except (ValueError, RuntimeError) as error:
+        print(error, file=sys.stderr)
+        return 1
+
+    print(devices.describe(video, audio))
+    print(f"sampling every {args.interval:g}s, window {args.window:g}s")
+
+    windows = run(video, audio, interval=args.interval, window=args.window,
+                  width=args.width, height=args.height)
 
     try:
         for captured in itertools.islice(windows, args.windows):
@@ -259,7 +248,7 @@ def main(argv=None) -> int:
                 f"{payload / 1024:.0f} KiB, {captured.seconds:.1f}s"
             )
     except KeyboardInterrupt:
-        print("\nstopped")
+        print()
     except (ValueError, RuntimeError) as error:
         print(error, file=sys.stderr)
         return 1

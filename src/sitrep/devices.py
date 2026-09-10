@@ -15,8 +15,8 @@ matching the inference PC the SITREP runs on.
 
 Run directly to list devices or to verify a selection:
 
-    python src/sitrep/devices.py --list
-    python src/sitrep/devices.py --check --video "FHD WebCam" --audio-api WASAPI
+    python -m sitrep.devices --list
+    python -m sitrep.devices --check --video "FHD WebCam" --audio-api WASAPI
 """
 
 import argparse
@@ -28,6 +28,8 @@ import cv2
 import numpy as np
 import sounddevice as sd
 from pygrabber.dshow_graph import FilterGraph
+
+from . import cli
 
 # Level meter floor. Room tone on the built-in array sits around -75 dBFS.
 _DBFS_FLOOR = -80.0
@@ -129,6 +131,7 @@ def resolve_audio_device(spec=None, hostapi=None) -> AudioDevice:
     """
     candidates = list_audio_devices()
     default_index = sd.default.device[0]
+    publisher = "PortAudio"
 
     if hostapi is not None:
         match = next(
@@ -140,17 +143,35 @@ def resolve_audio_device(spec=None, hostapi=None) -> AudioDevice:
             raise ValueError(f"No audio host API matching {hostapi!r}.")
         api_index, api = match
         candidates = [d for d in candidates if d.hostapi_index == api_index]
-        # Each host API publishes its own default input. Falling back to the
-        # first device of the API instead would quietly select whatever
-        # happens to enumerate first, such as a virtual microphone.
+        # Each host API publishes its own default input.
         default_index = api["default_input_device"]
+        publisher = api["name"]
 
     if spec is None:
         for device in candidates:
             if device.index == default_index:
                 return device
+        # PortAudio reports -1 where a host API publishes no default input.
+        # Naming a device is then the only way to say which one is wanted:
+        # taking the first of the list would select whatever enumerates first,
+        # such as a virtual microphone.
+        raise ValueError(
+            f"{publisher} publishes no default input device. Select one by "
+            f"name or index:\n{format_audio_devices(candidates)}"
+        )
 
     return _select(spec, candidates, "audio", format_audio_devices)
+
+
+def resolve(video_spec=None, audio_spec=None, hostapi=None) -> tuple[VideoDevice, AudioDevice]:
+    """Resolve the camera and the microphone for a capture session."""
+    return resolve_video_device(video_spec), resolve_audio_device(audio_spec, hostapi)
+
+
+def describe(video: VideoDevice, audio: AudioDevice) -> str:
+    """One line per selected source, for an entry point to print at startup."""
+    return (f"video:  [{video.index}] {video.name}\n"
+            f"audio:  [{audio.index}] {audio.name} ({audio.hostapi})")
 
 
 def open_video(device: VideoDevice, width=None, height=None) -> cv2.VideoCapture:
@@ -272,14 +293,12 @@ def _draw_overlay(frame, video, audio, fps, rms):
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0],
+        parents=[cli.sources(), cli.resolution()],
+    )
     parser.add_argument("--list", action="store_true", help="list available devices and exit")
     parser.add_argument("--check", action="store_true", help="capture from the selected devices")
-    parser.add_argument("--video", help="camera index or name fragment")
-    parser.add_argument("--audio", help="microphone index or name fragment")
-    parser.add_argument("--audio-api", help="host API filter, e.g. WASAPI, MME, WDM-KS")
-    parser.add_argument("--width", type=int, help="requested capture width")
-    parser.add_argument("--height", type=int, help="requested capture height")
     parser.add_argument("--seconds", type=float, default=10.0,
                         help="check duration; 0 runs until q/ESC in the preview "
                              "window, or Ctrl+C without it (default: 10)")

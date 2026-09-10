@@ -54,6 +54,35 @@ This is separate from `external/wise`'s own conda environment (`wise`)
 below, which is unaffected by this and still follows WISE's own install
 docs.
 
+### Running the live SITREP
+
+`src/sitrep/` is installed into the `orest` environment as the `sitrep`
+package, so `uv sync` puts the entry point on the path:
+
+    uv run orest-sitrep
+    uv run orest-sitrep --window 30 --interval 10 --audio-api WASAPI
+    uv run orest-sitrep --json     # raw report JSON instead of the console block
+
+Ollama must be running with the model given by `--model` (default
+`gemma4:e4b`) pulled. The live SITREP records nothing: reports are streamed to
+the console and not retained, and no frame or audio clip is written to disk.
+
+Each module also runs on its own, for diagnostics:
+
+    uv run python -m sitrep.devices --list
+    uv run python -m sitrep.devices --check --video "FHD WebCam"
+    uv run python -m sitrep.capture --interval 5 --window 30
+    uv run python -m sitrep.benchmark --speech <speech.wav>
+
+The console block is drawn with box-drawing characters, so redirecting it to
+a file needs UTF-8:
+
+    PYTHONIOENCODING=utf-8 uv run orest-sitrep > session.txt
+
+**Tests** (no camera, microphone or GPU required):
+
+    uv run pytest
+
 ### External Code: WISE  
 
 WISE is not vendored in this repo. Clone it into folder `external/`:
