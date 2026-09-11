@@ -1,0 +1,19 @@
+diff --git a/src/wise/_main/extract_features.py b/src/wise/_main/extract_features.py
+index 969cb69..6ad158a 100644
+--- a/src/wise/_main/extract_features.py
++++ b/src/wise/_main/extract_features.py
+@@ -1093,10 +1093,11 @@ def main(argv: list[str]):
+                         continue
+                     handle_chunk(_chunk, modality_type, feature_extractor_id)
+ 
+-            if "thumbnails" in chunks and chunks["thumbnails"] is not None:
++            _thumbnails = chunks.get(MediaChunkType.THUMBNAILS)
++            if _thumbnails is not None:
+                 # Handle thumbnails
+-                _thumb_jpegs = chunks["thumbnails"].tensor
+-                _thumb_pts = chunks["thumbnails"].pts
++                _thumb_jpegs = _thumbnails.tensor
++                _thumb_pts = _thumbnails.pts
+ 
+                 # Store in thumbnail store
+                 # (thumbnail will be N x 3 x 192 x W)

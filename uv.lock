@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.12"
 
+[manifest]
+members = [
+    "orest",
+    "orest-pose",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.8.0"
@@ -509,10 +515,12 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "faster-whisper" },
+    { name = "httpx" },
     { name = "numpy" },
     { name = "nvidia-cublas-cu12" },
     { name = "ollama" },
     { name = "opencv-python" },
+    { name = "orest-pose" },
     { name = "pydantic" },
     { name = "pygrabber" },
     { name = "sounddevice" },
@@ -526,10 +534,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "faster-whisper", specifier = ">=1.2.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "nvidia-cublas-cu12", specifier = ">=12.9.2.10" },
     { name = "ollama", specifier = ">=0.6.2" },
     { name = "opencv-python", specifier = ">=5.0.0.93" },
+    { name = "orest-pose", editable = "wise_ext" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pygrabber", specifier = ">=0.2" },
     { name = "sounddevice", specifier = ">=0.5.6" },
@@ -537,6 +547,11 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.4.2" }]
+
+[[package]]
+name = "orest-pose"
+version = "0.1.0"
+source = { editable = "wise_ext" }
 
 [[package]]
 name = "packaging"

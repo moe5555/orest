@@ -1,0 +1,220 @@
+"""Orest smart search: build, serve and query the rehearsal search index.
+
+Entry point for the Smart Search affordance of
+knowledge/components/02_processing.md.
+
+    orest-search extract                     # embed a folder of rehearsal footage
+    orest-search add-extractor --video-id ID # re-embed it with another model
+    orest-search index                       # build the nearest-neighbour indices
+    orest-search serve                       # run WISE, needed for the queries below
+    orest-search info
+    orest-search query "zwei Personen streiten"
+
+Equivalently, without the installed entry point:
+
+    python -m smartsearch.main query "..."
+"""
+
+import argparse
+import sys
+
+import httpx
+from orest_pose import EXTRACTOR_ID as POSE_ID
+
+from . import client, config, wise_cli
+
+
+def _project(parser: argparse.ArgumentParser):
+    parser.add_argument("--project", default=config.DEFAULT_PROJECT,
+                        help=f"WISE project name (default: {config.DEFAULT_PROJECT})")
+
+
+def _extractors(parser: argparse.ArgumentParser):
+    parser.add_argument("--video-id", action="append", default=[], metavar="ID",
+                        help="visual feature extractor; repeatable")
+    parser.add_argument("--audio-id", action="append", default=[], metavar="ID",
+                        help="audio feature extractor; repeatable")
+    parser.add_argument("--image-id", action="append", default=[], metavar="ID",
+                        help="still-image feature extractor; repeatable")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    extract = commands.add_parser("extract", help="extract features from a media folder")
+    _project(extract)
+    _extractors(extract)
+    extract.add_argument("--media", default=config.MEDIA_DIR, metavar="DIR",
+                         help=f"folder of rehearsal footage (default: {config.MEDIA_DIR})")
+    extract.add_argument("--include", action="append", default=[], metavar="GLOB",
+                         help="only files matching this glob; repeatable")
+    extract.add_argument("--workers", type=int, default=0, help="dataloader workers")
+    extract.add_argument("--no-thumbnails", action="store_true",
+                         help="skip thumbnail generation")
+    extract.add_argument("--autocast", action="store_true",
+                         help="mixed precision; not supported by the audio extractor")
+
+    add = commands.add_parser("add-extractor",
+                              help="re-embed a project's media with another model")
+    _project(add)
+    _extractors(add)
+    add.add_argument("--autocast", action="store_true")
+
+    index = commands.add_parser("index", help="build search indices over extracted features")
+    _project(index)
+    index.add_argument("--index-type", default="IndexFlatIP",
+                       choices=["IndexFlatIP", "IndexIVFFlat"])
+    index.add_argument("--feature-id", help="index only this extractor")
+    index.add_argument("--modality", action="append", default=[],
+                       choices=["audio", "video", "image"])
+    index.add_argument("--overwrite", action="store_true")
+
+    serve = commands.add_parser("serve", help="run the WISE server")
+    _project(serve)
+    serve.add_argument("--host", default=config.HOST)
+    serve.add_argument("--port", type=int, default=config.PORT)
+    serve.add_argument("--index-type")
+
+    info = commands.add_parser("info", help="report what a served project contains")
+    _project(info)
+
+    body = commands.add_parser("body", help="search by movement, using a clip as the query")
+    _project(body)
+    body.add_argument("clip", help="video file the query movement is taken from")
+    body.add_argument("--at", type=float, default=0.0, metavar="SECONDS",
+                      help="where the movement starts in that file (default: 0)")
+    body.add_argument("--feature-id", default=POSE_ID,
+                      help=f"pose extractor to search (default: {POSE_ID})")
+    body.add_argument("-n", "--limit", type=int, default=10)
+
+    query = commands.add_parser("query", help="search a served project by text")
+    _project(query)
+    query.add_argument("text", nargs="+", help="query text")
+    query.add_argument("--target", default=client.VIDEO,
+                       choices=[client.VIDEO, client.AUDIO, client.IMAGE],
+                       help="which index to search (default: video)")
+    query.add_argument("--feature-id", help="feature extractor; defaults to the first indexed")
+    query.add_argument("-n", "--limit", type=int, default=10)
+    query.add_argument("--no-prefix", action="store_true",
+                       help="send the text as written, without the caption template")
+    query.add_argument("--not", dest="negative", action="append", default=[], metavar="TEXT",
+                       help="text to search away from; repeatable")
+
+    return parser
+
+
+def format_info(payload: dict) -> str:
+    duration = payload.get("total_duration", 0.0)
+    lines = [
+        f"project   {payload.get('project_name', '')}",
+        f"media     {payload.get('num_media_files', 0)} files, {client.timecode(duration)}",
+        f"vectors   {payload.get('num_vectors', 0)}",
+        f"thumbs    {payload.get('num_thumbnails', 0)}",
+        f"shots     {payload.get('num_shots', 0)}",
+        "targets",
+    ]
+    targets = payload.get("search_targets", {})
+    if not targets:
+        lines.append("  none — extraction produced nothing, or no index was built")
+    for modality, ids in targets.items():
+        for extractor_id in ids:
+            lines.append(f"  {modality:<8} {extractor_id}")
+    return "\n".join(lines)
+
+
+def format_hits(hits: list[client.Hit]) -> str:
+    if not hits:
+        return "no results"
+    width = max(len(hit.filename) for hit in hits)
+    # ASCII only: the Windows console default code page cannot encode the
+    # typographic dash, and this table is meant to be redirectable as-is.
+    return "\n".join(
+        f"{rank:>3}  {hit.score:>7.3f}  {hit.filename:<{width}}  "
+        f"{client.timecode(hit.ts)} - {client.timecode(hit.te)}  {hit.media_url}"
+        for rank, hit in enumerate(hits, start=1)
+    )
+
+
+def main(argv=None) -> int:
+    args = build_parser().parse_args(argv)
+    project = config.project_dir(args.project)
+
+    if args.command == "extract":
+        return wise_cli.extract(
+            project, [args.media],
+            video_ids=args.video_id, audio_ids=args.audio_id, image_ids=args.image_id,
+            include=args.include, num_workers=args.workers,
+            thumbnails=not args.no_thumbnails, autocast=args.autocast,
+        )
+
+    if args.command == "add-extractor":
+        if not (args.video_id or args.audio_id or args.image_id):
+            print("Name at least one feature extractor to add.", file=sys.stderr)
+            return 1
+        # No media directories: WISE re-embeds the media already registered in
+        # the project rather than scanning the source folder again.
+        return wise_cli.extract(
+            project,
+            video_ids=args.video_id, audio_ids=args.audio_id, image_ids=args.image_id,
+            autocast=args.autocast,
+        )
+
+    if args.command == "index":
+        return wise_cli.create_index(
+            project, index_type=args.index_type, modalities=args.modality,
+            feature_id=args.feature_id, overwrite=args.overwrite,
+        )
+
+    if args.command == "serve":
+        print(f"serving {project} at {config.base_url()}/{args.project}/")
+        return wise_cli.serve(project, host=args.host, port=args.port,
+                              index_type=args.index_type)
+
+    with client.Wise(args.project) as wise:
+        try:
+            if args.command == "info":
+                print(format_info(wise.info()))
+                return 0
+
+            if args.command == "body":
+                # Imported here so the batch and text commands do not pay for
+                # loading the pose model's dependencies.
+                from . import pose
+
+                vector = pose.encode_clip(args.clip, args.at)
+                if not vector.any():
+                    print(f"No body found in {args.clip} at {args.at:g}s.", file=sys.stderr)
+                    return 1
+                hits = wise.search_vector(
+                    vector,
+                    feature_extractor_id=args.feature_id,
+                    limit=args.limit,
+                )
+                print(format_hits(hits))
+                return 0
+
+            hits = wise.search(
+                " ".join(args.text),
+                negative_text=args.negative,
+                target=args.target,
+                feature_extractor_id=args.feature_id,
+                limit=args.limit,
+                add_prefix=not args.no_prefix,
+            )
+            print(format_hits(hits))
+            return 0
+        except httpx.HTTPStatusError as error:
+            print(f"{error.response.status_code}: {error.response.text}", file=sys.stderr)
+            return 1
+        except httpx.RequestError:
+            print(f"No WISE server at {wise.base_url}. Start one with "
+                  f"'orest-search serve'.", file=sys.stderr)
+            return 1
+        except RuntimeError as error:
+            print(error, file=sys.stderr)
+            return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

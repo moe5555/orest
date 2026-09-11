@@ -79,6 +79,78 @@ a file needs UTF-8:
 
     PYTHONIOENCODING=utf-8 uv run orest-sitrep > session.txt
 
+### Running smart search
+
+`src/smartsearch/` drives WISE from the `orest` environment: batch work through
+WISE's command line, retrieval through its HTTP API. WISE itself stays in its
+own conda environment (below) and is never imported.
+
+Build an index over a folder of rehearsal footage:
+
+    uv run orest-search extract --project rehearsals --media <folder>
+    uv run orest-search index --project rehearsals
+
+Then serve it and search. `serve` runs in the foreground, so use a second
+terminal for the queries:
+
+    uv run orest-search serve --project rehearsals
+    uv run orest-search info --project rehearsals
+    uv run orest-search query "zwei Personen streiten" --project rehearsals
+    uv run orest-search query "applause" --project rehearsals --target av
+
+`--target video` searches the picture, `--target av` the sound. `-n` is the
+number of moments wanted, not the number of vectors retrieved. Add a second
+model to an existing project without re-scanning the footage:
+
+    uv run orest-search add-extractor --project rehearsals --video-id <id>
+    uv run orest-search index --project rehearsals
+
+Projects are written to `data/wise-projects/<name>/` and each batch run is
+logged to `data/logs/`. Both are outside `external/`, which is deleted whenever
+WISE is re-cloned. A project stores paths to the footage rather than copies, so
+moving or renaming source files breaks playback.
+
+Locations are overridable for another machine: `OREST_WISE_EXE`,
+`OREST_WISE_ENV`, `OREST_WISE_REPO`, `OREST_WISE_PROJECTS`, `OREST_MEDIA_DIR`,
+`OREST_WISE_HOST`, `OREST_WISE_PORT`.
+
+### Searching by body
+
+A second index describes what bodies do rather than what a scene looks like, so
+a movement can be the query. Build it over a project that already has media:
+
+    uv run orest-search add-extractor --project rehearsals --video-id orest/pose/rtmo-s/body7
+    uv run orest-search index --project rehearsals
+
+Then search with a few seconds of movement taken from any video file:
+
+    uv run orest-search body <clip.mp4> --at 90 --project rehearsals
+
+`--at` is where the movement starts in that file. The query covers four seconds,
+matching the indexed segment length.
+
+The encoder lives in `wise_ext/` as the `orest_pose` package and is installed
+into **both** environments, because indexing runs inside WISE and the query is
+encoded here. It must be the same code on both sides or a query lands in a
+different space from the index and retrieves nothing useful.
+
+    uv pip install --no-deps rtmlib --python orest/Scripts/python.exe
+    uv add --editable ./wise_ext
+
+    conda activate wise
+    pip install --no-deps rtmlib
+    pip install --no-deps -e ./wise_ext
+
+`--no-deps` is required in both. `rtmlib` depends on `opencv-contrib-python`,
+which would install a second, conflicting `cv2` here and would drag numpy above
+the `numpy<2` ceiling that WISE's audio extractor holds. Everything rtmlib
+actually uses is present already. `pip check` reports the missing
+`opencv-contrib-python` as a result; that is expected.
+
+Pose detection runs on CPU in both environments, at roughly 1.1 s per indexed
+segment. See `hardware_issues.md` for why, and what to re-test on the
+production machine.
+
 **Tests** (no camera, microphone or GPU required):
 
     uv run pytest

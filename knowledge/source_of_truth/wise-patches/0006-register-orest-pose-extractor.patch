@@ -1,0 +1,38 @@
+diff --git a/src/wise/feature/feature_extractor_factory.py b/src/wise/feature/feature_extractor_factory.py
+index f71698d..20ac8b7 100644
+--- a/src/wise/feature/feature_extractor_factory.py
++++ b/src/wise/feature/feature_extractor_factory.py
+@@ -102,6 +102,11 @@ def get_feature_extractor_class(_id: str):
+ 
+         return HFMultiModalFeatureExtractor
+ 
++    if _id.startswith("orest/pose/"):
++        from orest_pose.extractor import PoseSegmentFeatureExtractor
++
++        return PoseSegmentFeatureExtractor
++
+     raise ValueError(f"Unknown feature extractor id {_id}")
+ 
+ 
+diff --git a/src/wise/feature/hf_models.py b/src/wise/feature/hf_models.py
+index 8921923..17b55a1 100644
+--- a/src/wise/feature/hf_models.py
++++ b/src/wise/feature/hf_models.py
+@@ -34,6 +34,17 @@ REGISTRY: dict[str, dict] = {
+         "segment_overlap": 4.0,
+         "segment_num_frames": 16,
+     },
++    # Body-pose retrieval for Orest. Shorter and more finely sampled than the
++    # Qwen entries above: at 4 fps a fall is separable from a slow descent,
++    # which 2 fps blurs together, and a 4s window is the length of the captured
++    # phrase the query side produces.
++    "orest/pose/rtmo-s/body7": {
++        "hf_model_id": None,
++        "modalities": ["video_segment"],
++        "segment_duration": 4.0,
++        "segment_overlap": 2.0,
++        "segment_num_frames": 16,
++    },
+ }
+ 
+ 

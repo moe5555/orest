@@ -6,6 +6,223 @@ referenced below.
 
 ---
 
+## 2026-09-11 — Smart Search phase 2: search by body movement (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
+
+A second index describes what bodies do rather than what a scene looks like, so
+a few seconds of movement can be the query. This is the "body" half of embodied
+search in `knowledge/components/02_processing.md` and the `QB["BODY SEARCH"]`
+node of `knowledge/source_of_truth/pipeline.md`.
+
+    orest-search add-extractor --project P --video-id orest/pose/rtmo-s/body7
+    orest-search index --project P
+    orest-search body <clip.mp4> --at 134 --project P
+
+**One encoder, installed in both environments.** `wise_ext/` holds the
+`orest_pose` package: RTMO keypoint detection and the embedding, in pure numpy
+with no declared dependencies. WISE's environment imports it to build the index,
+Orest's imports it to encode a live query. A query encoded even slightly
+differently from the index lands in a different space and retrieves nothing, so
+there is one implementation rather than two. It installs with `--no-deps` in
+both: `rtmlib` pulls `opencv-contrib-python`, which would add a second
+conflicting `cv2` and lift numpy over the `numpy<2` ceiling that MS CLAP holds
+in the `wise` environment.
+
+**The embedding is a movement, not a posture.** Sixteen frames spanning four
+seconds, each skeleton centred on the hip midpoint and scaled by torso length,
+concatenated and L2-normalised into 544 dimensions. Centring and scaling are
+what make the same action match whether it happens upstage or down, near the
+camera or far from it. Torso length rather than bounding box: a raised arm
+enlarges the box but not the body, and would otherwise rescale the whole
+skeleton. Four seconds at 4 fps separates a fall from a slow descent, which the
+2 fps the Qwen entries use blurs together.
+
+**Only the largest body in each frame is indexed.** WISE stores one vector per
+segment, so one skeleton has to stand for the frame. Everyone else in shot is
+dropped. This is the main known limitation and the natural next increment.
+
+**Registered through WISE's documented extension point**, a hardcoded prefix
+chain in the feature extractor factory, as
+`0006-register-orest-pose-extractor.patch`. Only the two registration lines are
+patched; the extractor itself stays in this repository.
+
+**No WISE patch is needed to query it.** WISE decodes every visual query as a
+still image and cannot embed a clip, but `/search_with_feature` accepts a
+finished vector, so Orest runs the same encoder on the query clip and posts the
+result. This is why clip-as-query left the critical path.
+
+**Measured** on the 12-minute probe:
+
+| | |
+|---|---|
+| Pose detection, RTMO-s on CPU | 43 ms/frame |
+| Indexing | 364 segments in 7.2 min, 1.2 s/segment |
+| Embedding | 544 dimensions, unit length |
+| Full 4h08m corpus would take | ~2.3 hours, not yet run |
+
+ONNX Runtime resolves no CUDA provider in either environment, so this is CPU
+throughout — see `hardware_issues.md` H-10.
+
+**Verified.** Self-retrieval: a clip taken from the corpus at 134s returns the
+span containing 134s at rank 1, scoring 0.942 against 0.504 for the next
+result; the same at 400s returns its own span at 0.928. On held-out clips the
+embedding separates movements — two samples of one crawl score 0.77 against each
+other and 0.01 to 0.11 against a different action. Detection was checked by eye
+on rendered skeletons: correct on a floor posture under a single spotlight, two
+bodies resolved on a wide outdoor stage shot, and limb confusion on an extreme
+foreshortened crawl toward the camera. 84 tests pass, 11 of them new, needing
+neither model nor video.
+
+**Known behaviour:** because indexed segments overlap by half, a run of matching
+segments merges into a long span — a four-second query can return a
+thirty-second result. The merge is correct for browsing; a precise mode would
+read the unmerged windows instead.
+
+---
+
+## 2026-09-11 — Video playback in WISE is 66x faster (MININT-ITT28VU)
+
+Found by Moe browsing the indexed corpus: clicking between segments of a long
+video took a long time to load.
+
+`send_bytes_range_requests()` streamed media in **10 KB** chunks. Each chunk is
+one message through the ASGI send path, which costs roughly 830 microseconds
+against a read that costs nothing, so throughput was governed by the chunk size
+and not by the disk. Raised to 1 MB in
+`knowledge/source_of_truth/wise-patches/0005-media-streaming-chunk-size.patch`.
+
+Measured on `Othello 2022.mp4` (4.29 GB), serving a range from the two-billionth
+byte:
+
+| | Before | After |
+|---|---|---|
+| Bounded 8 MB range | 12 MB/s | 811 MB/s |
+| Open-ended range to end of file (2.29 GB) | ~190s | 1.4s |
+| Raw disk read of the same region, for reference | 2,617 MB/s | |
+
+The open-ended case is the one that was felt. Browsers request video as
+`Range: bytes=N-`, so every seek made the server stream from the seek point to
+the end of the file; the client aborts once buffered, which is the
+`ConnectionResetError [WinError 10054]` that accompanied it. At 12 MB/s that was
+over three minutes of streaming per seek on the Othello recording, and it
+compounded as seeks stacked up. The error itself is normal for range requests
+and is unchanged.
+
+**Not fixed, and left deliberately:** the high-resolution still view raises
+`AttributeError: 'list' object has no attribute 'keys'` on every modal open.
+`WiseProject.thumbnail()` passes `AVDataset` a list of paths where it now
+expects a map of media id to path, and the line after reads `chunks["video"]`
+with a string key on an enum-keyed dictionary — the same defect class as patch
+0004. The path has not worked since that refactor. The frontend's `onerror`
+handler falls back to the stored thumbnail, so the cost is a soft preview image
+rather than a crisp one. See `claude_concerns.md`.
+
+---
+
+## 2026-09-11 — Smart Search phase 1: WISE driven from Orest, sample corpus indexed (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
+
+`src/smartsearch/` is an installed package that builds, serves and queries a
+WISE search index from the `orest` environment. It implements the "Process
+rehearsal footage from folder on computer" and "Feature embedding that WISE
+offers out of the box" points of the Smart Search affordance in
+`knowledge/components/02_processing.md`, and fills the
+`IDX[("Search index")]` node of `knowledge/source_of_truth/pipeline.md`. The
+4h08m test corpus is indexed and searchable by text over both picture and sound.
+
+The roadmap for the rest of Smart Search — clip-as-query, embodied search, the
+pose extractor, speech, the localhost UI — is in `progress_tracker.md`.
+
+    orest-search extract --project rehearsals --media <folder>
+    orest-search index --project rehearsals
+    orest-search serve --project rehearsals
+    orest-search query "zwei Personen streiten" --project rehearsals
+    orest-search query "applause" --project rehearsals --target av
+
+**Two processes, one HTTP boundary.** WISE keeps its own conda environment,
+whose torch stack is pinned under `numpy<2` by MS CLAP, and is never imported.
+Batch operations go through its command line as a subprocess; retrieval goes
+through its REST API. `wise_cli.py` builds each command line as a pure function
+and runs it separately, so argument lists are testable without a subprocess, and
+every batch run is written to `data/logs/` as well as the terminal.
+
+**WISE is invoked as the console script in its environment, without activating
+it.** `<conda>/envs/wise/Scripts/wise.exe` resolves torch and CUDA from its own
+site-packages; `conda run` is not needed and starts 2.4x slower (6.9s against
+2.9s). `config.executable()` finds it by `OREST_WISE_EXE`, then `PATH`, then the
+standard conda prefixes. Every other location is overridable the same way, since
+the Probebuehne machine is not this one.
+
+**Projects live in `data/wise-projects/`, not under `external/`.** Everything
+below `external/` is lost whenever `external/wise` is re-cloned to reapply the
+Windows patches, and an index over a season is expensive to rebuild.
+
+**Thumbnails were never written by WISE, and now are.** The extraction loop
+looks the thumbnail chunk up under the string `"thumbnails"` in a dictionary
+keyed by the `MediaChunkType` enum, so the branch could not fire and
+`--thumbnails` had no effect. Saved as
+`knowledge/source_of_truth/wise-patches/0004-thumbnails-enum-key.patch` and
+listed in `versions.md`. A second thumbnail defect is left alone: the on-demand
+high-resolution route raises `AttributeError: 'list' object has no attribute
+'keys'`. Both are upstream at `fcfa443` and neither is Windows-specific — see
+`claude_concerns.md` for why the first had to be fixed before indexing.
+
+**A search returns moments, not frames.** WISE ranks one vector per sampled
+frame and merges neighbouring hits into playable segments afterwards, so
+requesting five results returned one: the top five frames were all the same
+moment. `client.py` treats `limit` as the number of moments wanted and retrieves
+ten vectors per moment to fill it, measured at roughly seven vectors per moment
+on this footage. A search response is flattened into one ranked list of `Hit`
+regardless of which modality block it arrived in, which is the type the planned
+UI, OSC bridge and hybrid ranking all consume.
+
+**Corpus indexed** (`Desktop/moritz/test_data_orest`, 3 files, 4h08m01s, 5.0GB):
+
+| | Count | Rate |
+|---|---|---|
+| Video vectors (SigLIP2-512, 2 fps) | 29,763 | exactly duration x 2 |
+| Audio vectors (MS CLAP) | 3,719 | one per 4.0s |
+| Thumbnails | 29,763 | one per indexed frame |
+| Extraction wall time | 2,254s (37.6 min) | 6.6x realtime |
+| Index build (`IndexFlatIP`, both) | under 1s | |
+| Project on disk | 525 MB | ~127 MB per hour of footage |
+
+Extraction is decode-bound rather than GPU-bound: the process held about two
+cores busy while the GPU idled between batches, and the 12-minute probe ran at
+8.4x realtime against 6.6x for the corpus, whose largest file is 4K.
+
+**The segment-level visual index is deferred and the roadmap is reordered.**
+`hf/Qwen/Qwen3-VL-Embedding/2B` runs at **55 s per 8-second segment** on this
+GPU with VRAM at 7,862 MiB of 8,188 — 13.6x slower than realtime, which is 2.7
+hours for the 12-minute probe and ~56 hours for the corpus. SigLIP2 indexed the
+same probe in 87 s. The run was stopped after 17 segments, with the rate still
+rising; the 4.0 GB of weights stay cached for a re-test on better hardware.
+
+The custom pose extractor therefore moves ahead of it as the body-search route,
+and the clip-as-query patch leaves the critical path: a pose embedding can be
+computed in Orest and submitted to `/search_with_feature`, so no WISE patch is
+needed for live body queries. `progress_tracker.md` carries the new order.
+
+This is the second model rejected for VRAM on this machine after
+`gemma4:12b-it-qat`. Hardware-dependent limits are now collected in
+`hardware_issues.md`, to be worked through in one pass once the production
+machine is decided.
+
+**Verified end to end.** `"a person kneeling on the floor"` returns five
+moments, all from the rehearsal recording rather than the staged Othello;
+`"two people arguing on a stage"` returns Othello and clusters around 34-36
+minutes; `"applause"` on the audio index puts 2:52:08 of Othello first, near the
+end of the performance. Querying with a frame taken from 36:20 returns 36:20 as
+its own top hit at 88.6, and a vector pulled back out of the index through
+`/vectors` and resubmitted to `/search_with_feature` retrieves its own segment —
+the escape hatch that later phases need for embeddings computed outside WISE.
+Thumbnails serve as 342x192 JPEGs. 73 tests pass, 23 of them new, none needing a
+GPU, camera or server.
+
+---
+
 ## 2026-09-10 — Live SITREP records nothing (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`).
