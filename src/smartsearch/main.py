@@ -9,6 +9,7 @@ knowledge/components/02_processing.md.
     orest-search serve                       # run WISE, needed for the queries below
     orest-search info
     orest-search query "zwei Personen streiten"
+    orest-search query "..." --send-td       # cut clips and announce them to TouchDesigner
 
 Equivalently, without the installed entry point:
 
@@ -16,12 +17,13 @@ Equivalently, without the installed entry point:
 """
 
 import argparse
+import subprocess
 import sys
 
 import httpx
 from orest_pose import EXTRACTOR_ID as POSE_ID
 
-from . import client, config, wise_cli
+from . import client, clips, config, td, wise_cli
 
 
 def _project(parser: argparse.ArgumentParser):
@@ -36,6 +38,17 @@ def _extractors(parser: argparse.ArgumentParser):
                         help="audio feature extractor; repeatable")
     parser.add_argument("--image-id", action="append", default=[], metavar="ID",
                         help="still-image feature extractor; repeatable")
+
+
+def _delivery(parser: argparse.ArgumentParser):
+    parser.add_argument("--cut", choices=clips.MODES,
+                        help="cut each result into a clip: fast copies the stream, "
+                             "precise re-encodes it (default with --send-td: fast)")
+    parser.add_argument("--encoder", choices=clips.ENCODERS, default=clips.LIBX264,
+                        help=f"H.264 encoder for precise clips (default: {clips.LIBX264})")
+    parser.add_argument("--send-td", action="store_true",
+                        help=f"announce each clip over OSC to "
+                             f"{config.TD_HOST}:{config.TD_PORT}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -87,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     body.add_argument("--feature-id", default=POSE_ID,
                       help=f"pose extractor to search (default: {POSE_ID})")
     body.add_argument("-n", "--limit", type=int, default=10)
+    _delivery(body)
 
     query = commands.add_parser("query", help="search a served project by text")
     _project(query)
@@ -100,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="send the text as written, without the caption template")
     query.add_argument("--not", dest="negative", action="append", default=[], metavar="TEXT",
                        help="text to search away from; repeatable")
+    _delivery(query)
 
     return parser
 
@@ -136,6 +151,21 @@ def format_hits(hits: list[client.Hit]) -> str:
     )
 
 
+def deliver(hits: list[client.Hit], project: str, mode: str, encoder: str,
+            send_td: bool):
+    """Cut hits into clips in rank order, announcing each one as it is written."""
+    sender = td.Sender() if send_td else None
+    query_id = td.new_query_id()
+    if sender:
+        sender.send(td.begin_message(query_id, len(hits)))
+    for rank, hit, clip in clips.cut_all(hits, mode, config.clips_dir(project), encoder):
+        print(f"{rank:>3}  {clip.path}  preroll {clip.preroll:.3f}s", flush=True)
+        if sender:
+            sender.send(td.hit_message(query_id, rank, clip, hit))
+    if sender:
+        sender.send(td.end_message(query_id))
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     project = config.project_dir(args.project)
@@ -154,10 +184,14 @@ def main(argv=None) -> int:
             return 1
         # No media directories: WISE re-embeds the media already registered in
         # the project rather than scanning the source folder again.
+        #
+        # Thumbnails are off. They were generated when the media was first
+        # added and are keyed by media and timestamp, not by extractor, so a
+        # second pass decodes them again and appends a duplicate set.
         return wise_cli.extract(
             project,
             video_ids=args.video_id, audio_ids=args.audio_id, image_ids=args.image_id,
-            autocast=args.autocast,
+            autocast=args.autocast, thumbnails=False,
         )
 
     if args.command == "index":
@@ -192,6 +226,9 @@ def main(argv=None) -> int:
                     limit=args.limit,
                 )
                 print(format_hits(hits))
+                if args.cut or args.send_td:
+                    deliver(hits, args.project, args.cut or clips.FAST,
+                            args.encoder, args.send_td)
                 return 0
 
             hits = wise.search(
@@ -203,6 +240,9 @@ def main(argv=None) -> int:
                 add_prefix=not args.no_prefix,
             )
             print(format_hits(hits))
+            if args.cut or args.send_td:
+                deliver(hits, args.project, args.cut or clips.FAST,
+                        args.encoder, args.send_td)
             return 0
         except httpx.HTTPStatusError as error:
             print(f"{error.response.status_code}: {error.response.text}", file=sys.stderr)
@@ -213,6 +253,11 @@ def main(argv=None) -> int:
             return 1
         except RuntimeError as error:
             print(error, file=sys.stderr)
+            return 1
+        except subprocess.CalledProcessError as error:
+            # ffmpeg has already printed its own error above.
+            print(f"ffmpeg exited with {error.returncode} while cutting a clip.",
+                  file=sys.stderr)
             return 1
 
 

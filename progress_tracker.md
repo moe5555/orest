@@ -34,9 +34,13 @@ earlier code.
 | 2 | Custom pose feature extractor — the body index | **done** |
 | 3 | Embodied search: live capture becomes the query | next |
 | 4 | Speech as query — transcript import and live line matching | not started |
-| 5 | Localhost UI, hybrid search, TouchDesigner over OSC | not started |
+| 5 | Localhost UI, hybrid search, TouchDesigner over OSC | **OSC bridge done**; UI not started |
 | 6 | Hindsight-SITREP | spec is a TODO |
 | — | Segment-level visual index (Qwen3-VL) | **deferred, hardware** |
+
+**Reordered 2026-09-17.** The TouchDesigner bridge — clip cutting and OSC —
+was pulled forward from phase 5 ahead of phase 3. Every search mode ends in it,
+and it is what lets the video department work with real results.
 
 **Reordered 2026-09-11.** Pose was phase 4 and the body index was to be
 Qwen3-VL's. Qwen runs 13.6x slower than realtime on the 8 GB GPU
@@ -64,7 +68,13 @@ Open increments, in rough order of value:
   segment, so everyone else in shot is dropped. Supporting several people means
   patching WISE's segment loop, which currently creates exactly one vector row
   per segment.
-- **The full corpus is not indexed yet** — ~2.3 hours on CPU, pending H-10.
+- **Common postures barely discriminate.** On the full corpus, distinctive
+  movement retrieves itself with a margin of 0.25–0.33, but a query of two
+  actors in ordinary stage posture returns six results within 0.011 of each
+  other, its own segment at rank 2. Candidates: index every body rather than
+  the largest, weight motion over static posture, or down-weight the most
+  common postures by frequency. The full corpus is indexed (7,439 vectors,
+  108.5 min), so any of these can be evaluated against it directly.
 - **Hits merge into long spans** because indexed segments overlap by half. A
   precise mode would read the unmerged windows.
 - **A still cannot query the pose index**, since the vector spans 16 frames.
@@ -96,6 +106,21 @@ voice stays out of reach: neither CLAP nor a transcript carries prosody.
 The localhost interface of `02_processing.md`: text, still and live-camera
 search, hybrid search against Hindsight metadata, results to TouchDesigner over
 OSC. FastAPI plus plain HTML.
+
+**OSC bridge done:** `smartsearch.clips` cuts results in fast (stream copy) or
+precise (H.264 re-encode) mode, `smartsearch.td` announces each clip, both
+behind `--cut` / `--send-td` on `query` and `body`. The UI calls the same
+`main.deliver()`. Open:
+
+- **Pre-roll trimming in TouchDesigner.** TouchDesigner ignores the edit list
+  hiding a fast clip's pre-roll, so the hit message carries it; trimming it on
+  the Movie File In TOP is set up but not yet verified on the test clip.
+- **TouchDesigner hangs while editing** a network with several players, on the
+  laptop's Non-Commercial licence; playback of two players is stable. Not
+  investigated until the production workstation.
+- **HAP** is not in the `wise` environment's ffmpeg build.
+- **Simultaneous H.264 streams** in TouchDesigner are unmeasured.
+- Clips are cut one at a time; precise mode could cut several in parallel.
 
 Hybrid search needs no new retrieval machinery — WISE's `metadata_filter`
 already constrains a vector search to the rows an FTS query matched.

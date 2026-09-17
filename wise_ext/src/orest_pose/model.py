@@ -35,15 +35,42 @@ _lock = threading.Lock()
 _model = None
 
 
-def device() -> str:
-    """Execution provider to run pose detection on.
+def _add_cuda_libraries_to_path():
+    """Make the CUDA runtime visible to ONNX Runtime's provider library.
 
-    Falls back to CPU, which is the live situation in both environments, but
-    reads the provider list rather than assuming it.
+    ONNX Runtime loads its CUDA provider as a separate DLL, whose own
+    dependencies are resolved by the Windows loader against PATH.
+    os.add_dll_directory() does not cover that second hop and the load still
+    fails with cublasLt64_12.dll missing — the same behaviour CTranslate2 shows
+    in sitrep/transcribe.py.
+
+    The libraries are not installed on their own account: torch ships a
+    complete CUDA 12 runtime, and pointing at it avoids a second multi-gigabyte
+    copy. Absent in environments without torch, where pose falls back to CPU.
+    """
+    try:
+        import torch
+    except ImportError:
+        return
+
+    libraries = os.path.join(os.path.dirname(torch.__file__), "lib")
+    if os.path.isdir(libraries) and libraries not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = libraries + os.pathsep + os.environ["PATH"]
+
+
+def device() -> str:
+    """Execution provider to request for pose detection.
+
+    A listed CUDA provider is not necessarily a working one — ONNX Runtime
+    advertises it from the package it was built as, then falls back to CPU at
+    session creation if the matching CUDA runtime is missing. What was actually
+    used is reported by `active_provider()` after loading.
     """
     override = os.environ.get("OREST_POSE_DEVICE")
     if override:
         return override
+
+    _add_cuda_libraries_to_path()
     try:
         import onnxruntime
 
@@ -52,6 +79,13 @@ def device() -> str:
     except ImportError:
         pass
     return "cpu"
+
+
+def active_provider() -> str | None:
+    """Execution provider the loaded session is really running on."""
+    if _model is None:
+        return None
+    return _model.session.get_providers()[0]
 
 
 def load():
@@ -68,9 +102,16 @@ def load():
             from rtmlib import RTMO
 
             target = device()
-            logger.info("Loading RTMO pose model on %s", target)
             _model = RTMO(MODEL_URL, backend="onnxruntime", device=target,
                           score_thr=SCORE_THRESHOLD)
+            running = _model.session.get_providers()[0]
+            logger.info("RTMO pose model loaded on %s", running)
+            if target == "cuda" and running != "CUDAExecutionProvider":
+                logger.warning(
+                    "CUDA was requested but the session runs on %s. Pose "
+                    "detection is roughly four times slower; see "
+                    "hardware_issues.md H-10.", running,
+                )
         return _model
 
 

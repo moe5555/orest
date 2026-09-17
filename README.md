@@ -134,6 +134,33 @@ into **both** environments, because indexing runs inside WISE and the query is
 encoded here. It must be the same code on both sides or a query lands in a
 different space from the index and retrieves nothing useful.
 
+### Sending results to TouchDesigner
+
+`query` and `body` cut each result into a clip and can announce it over OSC.
+In TouchDesigner, an **OSC In DAT** on port 10000 receives:
+
+    /orest/results/begin  <query_id> <count>
+    /orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
+    /orest/results/end    <query_id>
+
+    uv run orest-search query "zwei Personen streiten" --send-td
+    uv run orest-search query "zwei Personen streiten" --cut precise --send-td
+    uv run orest-search body <clip.mp4> --at 90 --send-td
+    uv run orest-search query "zwei Personen streiten" --cut fast
+
+`--cut fast` (the default with `--send-td`) copies the stream: about 0.1s per
+clip, in the recording's own codec. A fast clip file begins at the keyframe
+before the hit; `preroll` is the seconds to skip, which TouchDesigner must trim
+since it ignores the MP4 edit list that hides them from other players. `--cut precise` re-encodes to H.264: about
+1s per 8 seconds of 1080p and 3.5s per 8 seconds of 4K; `--encoder h264_nvenc`
+is faster where the GPU is free. Clips cover exactly the range WISE returned,
+are written to `data/clips/<project>/`, and are reused when a later search finds
+the same moment. Each clip is announced as soon as it is written, best result
+first. The WISE server must be running, since clips are read through it.
+
+ffmpeg is taken from PATH or the `wise` conda environment. Overrides:
+`OREST_FFMPEG_EXE`, `OREST_CLIPS_DIR`, `OREST_TD_HOST`, `OREST_TD_PORT`.
+
     uv pip install --no-deps rtmlib --python orest/Scripts/python.exe
     uv add --editable ./wise_ext
 
@@ -147,9 +174,18 @@ the `numpy<2` ceiling that WISE's audio extractor holds. Everything rtmlib
 actually uses is present already. `pip check` reports the missing
 `opencv-contrib-python` as a result; that is expected.
 
-Pose detection runs on CPU in both environments, at roughly 1.1 s per indexed
-segment. See `hardware_issues.md` for why, and what to re-test on the
-production machine.
+Pose detection uses the GPU in the `wise` environment and the CPU in Orest's,
+which has no CUDA runtime. That only affects live queries, where a single clip
+costs well under a second either way.
+
+The GPU path depends on `onnxruntime-gpu` matching the CUDA line that torch
+brings — currently 1.22.0 against CUDA 12 — and **fails quietly to CPU if they
+diverge**, logging a warning rather than raising. After upgrading either, check:
+
+    python -c "from orest_pose import model; model.load(); print(model.active_provider())"
+
+`CUDAExecutionProvider` is the answer you want. `hardware_issues.md` H-10 has
+the detail, and `OREST_POSE_DEVICE` forces the choice.
 
 **Tests** (no camera, microphone or GPU required):
 

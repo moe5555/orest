@@ -49,6 +49,16 @@ DEFAULT_PROJECT = os.environ.get("OREST_WISE_PROJECT", "test_data_orest")
 HOST = os.environ.get("OREST_WISE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("OREST_WISE_PORT", "9670"))
 
+# Clips cut from search results, one folder per project. Under data/, which git
+# ignores: clips are footage of identifiable people, like the corpus itself.
+CLIPS_ROOT = Path(os.environ.get("OREST_CLIPS_DIR", REPO_ROOT / "data" / "clips"))
+
+# Where search results are announced over OSC: TouchDesigner's OSC In DAT
+# (knowledge/components/03_render.md, "Control: OSC"). Loopback while
+# TouchDesigner runs on the same machine as Orest.
+TD_HOST = os.environ.get("OREST_TD_HOST", "127.0.0.1")
+TD_PORT = int(os.environ.get("OREST_TD_PORT", "10000"))
+
 # Defaults WISE applies when no feature extractor is named.
 OPEN_CLIP_ID = "mlfoundations/open_clip/ViT-B-16-SigLIP2-512/webli"
 CLAP_ID = "microsoft/clap/2023/four-datasets"
@@ -59,6 +69,10 @@ CLAP_ID = "microsoft/clap/2023/four-datasets"
 QWEN_ID = "hf/Qwen/Qwen3-VL-Embedding/2B"
 
 _SCRIPT = "Scripts/wise.exe" if sys.platform == "win32" else "bin/wise"
+
+# ffmpeg as conda installs it into an environment: WISE's decoding stack brings
+# one along.
+_FFMPEG = "Library/bin/ffmpeg.exe" if sys.platform == "win32" else "bin/ffmpeg"
 
 
 def _conda_roots() -> list[Path]:
@@ -102,9 +116,45 @@ def executable() -> Path:
     )
 
 
+def ffmpeg() -> Path:
+    """Locate an ffmpeg executable for cutting clips.
+
+    Found by override, then on PATH, then in the WISE conda environment, which
+    carries a GPL build with libx264 and NVENC.
+    """
+    override = os.environ.get("OREST_FFMPEG_EXE")
+    if override:
+        return Path(override)
+
+    on_path = shutil.which("ffmpeg")
+    if on_path:
+        return Path(on_path)
+
+    for root in _conda_roots():
+        candidate = root / "envs" / ENV_NAME / _FFMPEG
+        if candidate.exists():
+            return candidate
+
+    raise RuntimeError(
+        f"No ffmpeg found on PATH or in conda environment {ENV_NAME!r}. "
+        f"Set OREST_FFMPEG_EXE to the full path of an ffmpeg executable."
+    )
+
+
+def ffprobe() -> Path:
+    """The ffprobe executable installed alongside ffmpeg."""
+    executable = ffmpeg()
+    return executable.with_name(executable.name.replace("ffmpeg", "ffprobe"))
+
+
 def project_dir(name: str | None = None) -> Path:
     """Directory of a WISE project, which also names it in every URL path."""
     return PROJECTS_ROOT / (name or DEFAULT_PROJECT)
+
+
+def clips_dir(name: str | None = None) -> Path:
+    """Folder holding the clips cut from a project's search results."""
+    return CLIPS_ROOT / (name or DEFAULT_PROJECT)
 
 
 def frontend_dist() -> Path:

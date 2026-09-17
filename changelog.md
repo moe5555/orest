@@ -6,6 +6,207 @@ referenced below.
 
 ---
 
+## 2026-09-17 — Search results reach TouchDesigner: clip cutting and OSC (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM;
+TouchDesigner Non-Commercial on the same machine.
+
+A search result becomes a clip file and an OSC message, so TouchDesigner can
+play what Orest finds. This is the `HITS → CUT` node of the RENDER graph in
+`knowledge/source_of_truth/pipeline.md` and "Results are piped into
+TouchDesigner" in `knowledge/components/02_processing.md`, following the
+interface drafted in `knowledge/components/03_render.md`.
+
+    orest-search query "zwei Personen streiten" --send-td
+    orest-search query "zwei Personen streiten" --cut precise --send-td
+    orest-search body <clip.mp4> --at 90 --send-td
+
+**Two cutting modes** in `smartsearch.clips`, both cutting exactly the range
+WISE returned:
+
+| | fast (default with `--send-td`) | precise |
+|---|---|---|
+| Method | stream copy | re-encode to H.264, `libx264 veryfast` |
+| 8 s, Othello 1080p H.264 | 0.12 s, 2.7 MB | 1.15 s, 3.0 MB |
+| 8 s, Theaterprobe 4K VP9 | 0.09 s, 9.3 MB | 3.53 s, 10.8 MB |
+| Picture | recording's own codec and resolution | H.264, yuv420p |
+
+`h264_nvenc` cuts precise clips in about 70% of the time (`--encoder`);
+libx264 is the default because during a performance the GPU holds live pose
+encoding and Whisper. Intermediate codecs cost far more space for no gain here:
+DNxHD at 1080p was 117 MB for the same 8 s.
+
+**Fast clips carry pre-roll, reported in every hit message.** Stream copy can
+only begin at a keyframe, and Othello's keyframes are 0.5–10 s apart. ffmpeg
+keeps the frames from that keyframe with negative timestamps and writes an MP4
+edit list hiding them: through ffmpeg, a clip cut at 2100 s shows a first frame
+pixel-identical to the source at 2100 s. **TouchDesigner ignores the edit
+list** and starts at the keyframe: `data/td_test/copy_cut_at_13s.mp4`, a fast
+cut at 13 s from a timecode source with keyframes every 5 s, shows 00:00:10 as
+its first frame. Each clip's pre-roll is therefore read back from its first
+video packet with ffprobe (about 0.07 s) and sent as `preroll`, for
+TouchDesigner to trim. It matched the source's keyframe gaps exactly (3.000 s on
+the test clip, 0.458 s and 0.958 s on Othello) and is 0 for precise clips.
+
+    /orest/results/begin  <query_id> <count>
+    /orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
+    /orest/results/end    <query_id>
+
+**Clips are read through WISE's media route**, not from disk. WISE's API does
+not expose source paths, but it serves byte ranges, which ffmpeg seeks with.
+Against local disk this costs under 0.1 s per clip and gives byte-identical
+output, and nothing about where recordings live has to be configured on the
+theatre machine. The WISE server must therefore be running to cut clips.
+
+**Delivery.** Clips go to `data/clips/<project>/`, named from media id,
+recording, range and mode, so a moment found again reuses its clip. ffmpeg
+writes to a `.part` name that is renamed on completion, so an interrupted cut
+is never taken for a finished clip. Clips are cut in rank order and each is
+announced by `smartsearch.td` as soon as it is written, between a begin and an
+end message carrying a per-search id. Paths are absolute with forward slashes.
+Orest sends every result; how many are used is decided in TouchDesigner
+(`03_render.md`, "How many results reach the stage"). OSC goes to
+`127.0.0.1:10000` by default.
+
+ffmpeg 6.1.2 (GPL) is taken from the `wise` conda environment, found the same
+way as `wise.exe`. `python-osc` 1.10.2 was added to the `orest` project.
+
+**Verified end to end** against the served corpus with a stand-in OSC receiver
+on port 10000. `"two people arguing on a stage"`, five results: fast clips cut
+and announced in 1.1 s including search and process start; precise in 8.0 s,
+the five hit messages arriving 1.1–2.5 s apart in rank order; a repeated
+search reused all five clips in 0.5 s. Clip durations match the hit ranges
+(precise exact, fast within 0.12 s). First frames were compared with the source
+at the hit start: fast clips pixel-identical, precise clips within
+re-encoding loss and closer to the source frame at the hit start than to either
+neighbour. Pre-roll arrived on every hit, 0.46–2.0 s on fast clips and 0 on
+precise ones. In TouchDesigner, an OSC In DAT callback filling a results table
+and a Movie File In TOP reading from it play fast VP9, fast H.264 and precise
+H.264 clips, and two simultaneous players are stable. 108 tests pass, 24 of
+them new, needing neither ffmpeg, the WISE server nor TouchDesigner.
+
+**Open:**
+- Trimming `preroll` on the Movie File In TOP is not yet verified; on the test
+  clip the first frame should then read 00:00:13.
+- TouchDesigner stops responding while the network is edited with several
+  players loaded, on the laptop's Non-Commercial licence. Not investigated
+  before the production workstation.
+- HAP is not in the `wise` environment's ffmpeg build.
+- Simultaneous H.264 playback capacity in TouchDesigner is unmeasured, and the
+  Non-Commercial licence caps resolution, so the laptop is a lower bound.
+
+---
+
+## 2026-09-11 — Pose index built over the full corpus (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
+
+The 4h08m test corpus is searchable by body movement.
+`orest/pose/rtmo-s/body7` holds **7,439 vectors**, one per four-second segment,
+and each file is covered end to end:
+
+| File | Vectors | Covers |
+|---|---|---|
+| Othello 2022 (1080p) | 6,503 | 0 – 13,007 s of 13,007 s |
+| Rehearsal Techniques workshop | 364 | 0 – 729 s of 729 s |
+| Theaterprobe DT Berlin (4K) | 572 | 0 – 1,145 s of 1,146 s |
+
+Extraction took **6,513 s (108.5 min)**. The pose store is 31 MB, about 7.5 MB
+per hour of footage — small beside the 75 MB/h of thumbnails. The index built
+in under a second. No thumbnail was duplicated.
+
+**The 4K file sets the pace.** Throughput held at about 1.3 segments/s through
+the two 1080p-and-smaller files and fell to about 0.35 segments/s on the 4K
+recording, with the GPU idle and CPU at 7–12%. Pose extraction is decode-bound
+like the stock extractors (`hardware_issues.md` H-3), and a 4K stream costs
+roughly four times as much to decode per segment.
+
+**Verified across files**, with a clip from the corpus as the query:
+
+| Query | Rank 1 | Score | Next |
+|---|---|---|---|
+| Dancer on the floor, arm raised (Theaterprobe 1008 s) | its own segment, 1008 s | 0.796 | 0.545 |
+| Crawling toward the camera (Theaterprobe 300 s) | its own span, 286–314 s | 0.973 | 0.648 |
+| Two actors, one seated (Othello 2093 s) | another moment, 4330 s | 0.970 | 0.966, its own segment |
+
+Distinctive movement discriminates clearly, with margins of 0.25 to 0.33 over
+the next result. **Ordinary stage posture barely discriminates at all:** the
+Othello query's top six all fall between 0.959 and 0.970, with the source at
+rank 2. The likely reason is the one
+`knowledge/background/agent_session_notes/bloom-wise-architecture.md` predicts
+for any pose archive — a body standing or sitting on stage is the most common
+thing in it, and one standing body looks much like another. Indexing only the
+largest body in frame adds to it, since in a two-hander that is usually whoever
+is standing nearest.
+
+**The first full attempt died silently and the cause is not known.** It stopped
+after 2,169 segments and 26 minutes, with no traceback, no Windows crash record
+and no sleep transition; the "exit code 0" it reported belonged to the `grep` at
+the end of the pipeline. Ruled out: memory growth in pose inference (flat over
+400 frames) and in the decoder (flat over 900 segments), a decode failure at
+that point in the file, and a truncating break condition in WISE's segment
+loop. The second attempt, run with the true exit code captured, completed
+cleanly. Until a failure reproduces, long runs should be started without a
+pipeline so the exit status is WISE's own.
+
+---
+
+## 2026-09-11 — Pose detection on the GPU, and a thumbnail bug of ours (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
+
+Pose detection runs on the GPU at **9 ms/frame** against 43 ms on CPU. Indexing
+the corpus went from an estimated four hours to a measured **108.5 minutes**, of
+which the GPU is only part: the larger single win was stopping `add-extractor`
+from regenerating thumbnails.
+
+**Three stacked causes kept ONNX Runtime on CPU**, each hiding the next.
+
+1. `onnxruntime` and `onnxruntime-gpu` were both installed. They share a module
+   name and overwrite each other; the CPU build's binding won, so no CUDA
+   provider was offered.
+2. With only `onnxruntime-gpu` 1.29 installed, the provider appeared in the list
+   and then failed at session creation: it requires **CUDA 13**, and this
+   machine has CUDA 12.8 from torch. **A listed provider is not a working one** —
+   it degrades to CPU silently. Fixed by `onnxruntime-gpu==1.22.0`, the newest
+   CUDA 12 line.
+3. The CUDA 12 libraries were not on `PATH`. ONNX Runtime loads its CUDA
+   provider as a separate DLL whose own dependencies the Windows loader resolves
+   against `PATH` only; `os.add_dll_directory()` does not cover that hop. The
+   same defeat CTranslate2 shows in `sitrep/transcribe.py`.
+
+`orest_pose.model` now prepends torch's `lib` directory to `PATH`, where a
+complete CUDA 12 runtime already sits, so nothing extra was downloaded. It also
+reports the provider the session actually got and warns when CUDA was asked for
+and not granted, because the failure is otherwise invisible.
+`coloredlogs` was added, a declared dependency of `onnxruntime-gpu`.
+
+**`add-extractor` was regenerating thumbnails.** Thumbnails are keyed by media
+and timestamp rather than by extractor, so adding a second model to an existing
+project decoded them all again and appended a duplicate set — 1,838 duplicate
+rows in the probe, more than doubling `thumbs.db` to 33 MB. It now passes
+`--no-thumbnails`, and the duplicates in both projects were deleted.
+
+**Where the time actually goes**, measured over 20 segments of the corpus:
+
+| | Per 4-second segment |
+|---|---|
+| Decode | 498 ms |
+| Pose inference on GPU | 247 ms |
+| Tensor conversion | under 1 ms |
+
+Extraction is decode-bound even for pose, so the 4.8x gain on inference becomes
+about 1.6x on the pipeline. The indexed segments overlap by half, so every frame
+is decoded twice; removing the overlap would halve the work and is the next
+lever if this needs to be faster, at the cost of splitting movements that
+straddle a boundary.
+
+**This arrangement is fragile in a specific way.** Upgrading `onnxruntime-gpu`,
+or moving torch to a different CUDA line, silently returns pose to CPU with only
+a warning. `hardware_issues.md` H-10 records what to re-check.
+
+---
+
 ## 2026-09-11 — Smart Search phase 2: search by body movement (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
@@ -59,10 +260,10 @@ result. This is why clip-as-query left the critical path.
 | Pose detection, RTMO-s on CPU | 43 ms/frame |
 | Indexing | 364 segments in 7.2 min, 1.2 s/segment |
 | Embedding | 544 dimensions, unit length |
-| Full 4h08m corpus would take | ~2.3 hours, not yet run |
 
-ONNX Runtime resolves no CUDA provider in either environment, so this is CPU
-throughout — see `hardware_issues.md` H-10.
+Those are CPU figures. Pose moved to the GPU later the same day and the
+thumbnail waste described in the entry above was removed; see that entry for
+the numbers that now apply.
 
 **Verified.** Self-retrieval: a clip taken from the corpus at 134s returns the
 span containing 134s at rank 1, scoring 0.942 against 0.504 for the next

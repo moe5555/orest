@@ -34,14 +34,15 @@ Three independent properties, in order of how much they change:
 1. **VRAM** — H-1, H-2, H-8. At 8 GB, two models have already been rejected for
    it (`gemma4:12b-it-qat`, Qwen3-VL-2B) and a third is in use because it fits,
    not because it is good. This is the number that changes the most.
-2. **CPU cores and disk** — H-3, H-4, H-10. Stock feature extraction is
-   decode-bound rather than GPU-bound, pose detection currently has no GPU path
-   at all, and the index costs ~127 MB per hour of footage.
+2. **CPU cores and disk** — H-3, H-4. Stock feature extraction is decode-bound
+   rather than GPU-bound, so cores matter more than the card, and the index
+   costs ~127 MB per hour of footage.
 3. **Network access** — H-5. Decides whether ~15 GB of model weights can be
    fetched on site or must travel with the machine.
 
 The rest (H-6, H-7, H-9) are things that can only be measured in the real room
-on the real machine.
+on the real machine. **H-10 is resolved** but listed because it fails silently
+and must be re-confirmed on any new machine or dependency upgrade.
 
 ---
 
@@ -119,6 +120,13 @@ includes a 4K file.
 
 **Consequence:** a faster GPU alone will not speed up stock extraction much.
 Cores, and the decoder, are what matter.
+
+**The same holds for pose.** Per four-second segment, decode costs 498 ms
+against 247 ms for pose inference on the GPU. Over the corpus the pose index
+took 108.5 minutes, and throughput fell from ~1.3 to ~0.35 segments/s on
+reaching the 4K file, with the GPU idle and the CPU at 7–12% — a single
+decoder thread working through a stream four times the size. Resolution of the
+rehearsal cameras therefore sets indexing time more directly than the GPU does.
 
 **At scale:** `bloom-wise-architecture.md` estimates 1,400 hours for the season.
 At 6.6× that is **~9 days of continuous extraction**, which is why that document
@@ -215,34 +223,44 @@ confirm there is room for diarisation, which is still unimplemented.
 
 ---
 
-### H-10 · ONNX Runtime has no GPU provider, so pose detection runs on CPU
+### H-10 · ONNX Runtime on GPU — RESOLVED 2026-09-11, but version-fragile
 
-**Measured 2026-09-11.** Both environments report only
-`['AzureExecutionProvider', 'CPUExecutionProvider']`. The `wise` environment has
-**both** `onnxruntime` and `onnxruntime-gpu` installed at 1.29.0, and the CPU
-package shadows the GPU one — a known conflict between the two distributions,
-which share the `onnxruntime` module name.
+**Was:** pose detection ran on CPU at 43 ms/frame because no CUDA provider was
+available. **Now:** 9 ms/frame on the GPU, a **4.8x** speedup, and InsightFace
+face search gains the same GPU path.
 
-Consequences today:
+Three separate causes, each of which had to be fixed:
 
-- Pose indexing runs at ~1.2 s per 4-second segment. The 12-minute probe took
-  7.2 minutes; the 4h08m corpus would take **~2.3 hours**. Tolerable as an
-  overnight job, not as a nightly one over a rehearsal season.
-- **InsightFace face search is silently on CPU too.** Nothing has been indexed
-  with it yet, but `02_processing.md` anticipates face search from team member
-  photographs, and it would be slow on the same cause.
+1. **Both `onnxruntime` and `onnxruntime-gpu` were installed.** They share the
+   `onnxruntime` module name and install over each other; the CPU build's core
+   binding won, so no CUDA provider was offered at all.
+2. **`onnxruntime-gpu` 1.29 requires CUDA 13.** This machine has CUDA 12.8, from
+   torch. Installing 1.29 alone made the provider *appear* in the list and then
+   fail at session creation — `cublasLt64_13.dll` missing — falling back to CPU
+   silently. **A listed provider is not a working one**, which is why
+   `orest_pose.model.active_provider()` reports what the session actually got.
+3. **The CUDA 12 libraries were not on `PATH`.** ONNX Runtime loads its CUDA
+   provider as a separate DLL whose own dependencies the Windows loader resolves
+   against `PATH`; `os.add_dll_directory()` does not cover that second hop. The
+   same defeat as CTranslate2 in `sitrep/transcribe.py`.
 
-**The likely fix is narrow:** uninstall the CPU `onnxruntime`, keeping
-`onnxruntime-gpu`, which provides the same module. **Untested**, and not
-attempted here because it can fail the other way: `onnxruntime-gpu` locates
-cuDNN and cuBLAS through `PATH`, and this machine has already needed a manual
-`PATH` fix to get CTranslate2 to find `cublas64_12.dll` (changelog, 2026-09-10).
-Leaving both installed is at least a working CPU path.
+**What is installed now:** `onnxruntime-gpu==1.22.0` only, the newest CUDA 12
+line, plus `coloredlogs`. `orest_pose.model` prepends torch's `lib` directory to
+`PATH` at load, which is where a complete CUDA 12 runtime already sits —
+nothing extra was downloaded.
 
-**When hardware is final:** try the uninstall, confirm `CUDAExecutionProvider`
-appears, and re-measure pose throughput. Keep the ability to reinstall
-`onnxruntime` if the GPU package cannot find its libraries. `OREST_POSE_DEVICE`
-forces the device if detection needs overriding.
+**This is fragile in a specific way.** An upgrade of `onnxruntime-gpu`, or of
+torch to a different CUDA line, silently returns pose detection to CPU. It will
+not error; it will log a warning and run ~5x slower. Check
+`orest_pose.model.active_provider()` after any change to either.
+
+**Orest's own environment is still CPU** for pose, since it has no torch and so
+no CUDA runtime. That only affects live queries, where a single clip is 16
+frames — about 0.7 s, acceptable — not indexing.
+
+**When hardware is final:** confirm `active_provider()` still reports
+`CUDAExecutionProvider`, and match the `onnxruntime-gpu` major line to whatever
+CUDA the installed torch brings. `OREST_POSE_DEVICE` forces the device.
 
 ---
 
@@ -264,7 +282,7 @@ Suggested order once the machine exists, since the early items change the value
 of the later ones:
 
 1. **H-1** — settle the SITREP model. Decides how much SITREP accuracy work is needed at all.
-2. **H-10** — try the ONNX Runtime uninstall. Cheap, and it decides whether pose indexing is minutes or hours.
+2. **H-10** — confirm pose still runs on the GPU; it is version-fragile and fails quietly.
 3. **H-2** — re-test Qwen. Decides whether the roadmap reorder of 2026-09-11 stands.
 4. **H-4** — settle disk and sampling rate. Expensive to reverse after the first rehearsal week.
 5. **H-3** — re-measure extraction, test `--num-workers`, decide on downscaling.
