@@ -118,3 +118,15 @@ def test_timecode_reads_as_a_position_in_a_recording():
     assert client.timecode(0) == "0:00:00"
     assert client.timecode(134.5) == "0:02:14"
     assert client.timecode(13054) == "3:37:34"
+
+
+def test_segment_results_are_the_indexed_windows_rather_than_merged_spans(wise):
+    hits = wise._hits(RESPONSE, merged=False)
+    assert [(hit.ts, hit.te) for hit in hits] == [(450.0, 454.0)]
+    assert hits[0].media_url == f"{BASE}/{PROJECT}/media/1#t=450.0,454.0"
+
+
+def test_segment_results_retrieve_one_vector_per_result_wanted(wise):
+    # Nothing collapses, so no allowance for merging is needed.
+    assert wise._window(limit=10, candidates=None, merged=False) == 10
+    assert wise._window(limit=5000, candidates=None, merged=False) == 1000

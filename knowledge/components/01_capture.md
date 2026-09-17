@@ -27,3 +27,24 @@ TODO: unified file naming. For now, we will use test data that I will point to t
 ## Anticipating Issues
 - capturing third-party individuals? e.g. technicians, AMA, etc. -> perhaps one full-room setup, one stage setup that we can easily switch between
 - explicit team-consent?
+
+---
+
+> **⚠ Written by Claude (2026-09-17), not yet reviewed by Moe.**
+
+### Camera framing affects body search
+
+The camera used for live body queries should frame bodies the way the archive
+camera does — ideally the same camera and the same shot.
+
+Consequences for the rehearsal setup:
+
+- A live query from a differently framed camera is pulled toward whichever
+  archive material happens to match that framing.
+- A switch between a full-room setup and a stage setup, as considered above,
+  splits the archive into two framings; a live query then favours the half that
+  matches the camera it came from.
+- Whole bodies in frame carry the most movement information, since no keypoints
+  are lost.
+
+> **⚠ End of Claude-written section.**

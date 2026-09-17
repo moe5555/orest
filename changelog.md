@@ -6,6 +6,125 @@ referenced below.
 
 ---
 
+## 2026-09-17 — Segment results: `--segments` (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`).
+
+`query`, `body` and `body-live` take `--segments`, which returns the indexed
+four-second windows in place of merged spans.
+
+    orest-search query "zwei Personen streiten" --segments --send-td
+    orest-search body-live --segments --send-td
+
+**Why.** A merged span grows with every neighbouring window that matches, so
+where a long stretch of a recording resembles the query — one person, barely
+moving, in the webcam test — a single result ran to 122 s, and its bounds
+shifted from search to search as different windows matched, so the same moment
+was cut to a new clip file each time: 70 of 209 clips overlapped another by
+more than 80%, about 1.2 GB. Segment results are always four seconds and always
+on the index grid, so a moment found again reuses its clip.
+
+**What WISE sends.** Every result block carries both forms, `merged_windows`
+and `unmerged_windows`, with identical fields; `client.py` names them and
+picks one. The client's earlier fallback looked for a `vectors` key WISE does
+not send. In segment mode one vector is one result, so exactly `limit` vectors
+are retrieved rather than ten per wanted moment.
+
+**Live captures do not merge in segment mode.** Windows of one movement
+retrieve the same segments, so a segment found by several windows is kept once
+with its best score, and neighbouring segments are left separate; joining them
+would rebuild the long spans.
+
+**Granularity differs by index.** The text index holds one vector per frame at
+2 fps, and its windows sit half a second apart, so a strongly matching moment
+yields several near-identical results (567.0–571.0 and 567.5–571.5). The pose
+index is segment-level and steps by two seconds.
+
+**Verified** against the served corpus: `"a person kneeling on the floor"`
+returns the same top moments in both modes with identical scores, as
+four-second windows in segment mode; cutting the top three twice produced three
+clip files, not six. 137 tests pass.
+
+**Left open, on Moe's decision:** a maximum clip length for merged results.
+Whether merged spans need capping, and at what length, is to be judged once the
+system is used in rehearsal. Scores also rise with the length of a live
+capture, since the best score over all its windows is kept; a threshold in
+TouchDesigner must allow for this.
+
+---
+
+## 2026-09-17 — Smart Search phase 3: search by a movement performed live (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
+
+A movement performed in front of a camera is the query. A start press and a
+stop press bracket the capture, and the results reach TouchDesigner like any
+other search. This is embodied search, "body", in
+`knowledge/components/02_processing.md` ("press a button, then press a button
+again after a few seconds to capture that live sequence") and the
+`QB["BODY SEARCH"] → ENC["Live encoder"]` path of the RENDER graph in
+`knowledge/source_of_truth/pipeline.md`.
+
+    orest-search body-live --send-td
+    orest-search body-live --video "FHD WebCam" --per-file 2 --send-td
+    orest-search body-live --file <recording.mp4> --at 300
+
+**Presses** come from the terminal (Enter toggles) and over OSC,
+`/orest/body/start` and `/orest/body/stop` on `127.0.0.1:10001` — the return
+channel from TouchDesigner or QLab drafted in `knowledge/components/03_render.md`.
+A start while capturing or a stop while idle is ignored, so a doubled button
+press neither cuts a capture short nor searches with nothing.
+
+**Bodies are detected while the movement happens.** `smartsearch.live` samples
+the camera at the index's rate, four frames a second, detects poses immediately
+and keeps only keypoints. Detection runs on the CPU in Orest's environment at
+42–45 ms per frame whatever the resolution, since RTMO letterboxes to 640 px:
+under a fifth of the sampling interval. A capture of any length costs next to no
+memory, and its query is ready when the stop press arrives. If detection ever
+falls behind the sampling interval it is reported, since the movement would
+then be spread over fewer frames than the index expects.
+
+**A capture is searched in the shape of the index.** Indexed segments are 16
+frames over four seconds, stepped by two, and a query of a different length
+describes a differently paced movement. A capture is therefore cut into
+four-second windows stepped by two seconds, the last aligned to the end of the
+capture, and each window is searched on its own. A capture shorter than four
+seconds is extended backwards from the stop press to a full segment, which is
+how the index saw a short movement. Windows with no body are skipped. Results
+from the windows are merged: overlapping hits in one recording become one hit
+spanning both, with the better score.
+
+**`--per-file N`** keeps at most N results from any one recording, retrieving
+five times as many candidates so the list still fills. This is the result cap
+`progress_tracker.md` placed in this phase; excluding the recent past is not
+implemented, as the offline index holds nothing from the session being
+captured.
+
+**`--file`** plays a recording in real time in place of the camera, so the
+workflow can be rehearsed and tested on footage whose content is known.
+
+**Verified** against the served corpus, with presses sent over OSC and the
+workshop and 4K Theaterprobe recordings played through `--file`:
+
+| Capture | Rank 1 | Score | Next |
+|---|---|---|---|
+| 4.2 s, workshop 133.7–137.9 s, 2 windows | its own span, 132–165.75 s | 0.931 | 0.570 |
+| 10.0 s, workshop 139.8–149.9 s, 5 windows | its own span, 134–165.75 s | 0.982 | 0.612 |
+| 6.1 s, Theaterprobe crawl 300.6–306.7 s, 3 windows | its own span, 284–335.75 s | 0.929 | 0.674 |
+
+From the stop press to the result table took 0.23 s, and to the first clip
+announced 0.64 s. `--per-file 2` held the Theaterprobe capture to two results
+per recording. 4K VP9 playback kept real time and detection never fell behind.
+130 tests pass, 22 of them new, needing no camera, model, server or
+TouchDesigner.
+
+**Open:** the camera itself is untested in this path — `--file` exercised
+everything but `sitrep.capture.VideoStream`, which the SITREP already uses.
+Merged spans are long (51 s for a 6 s capture), carried over from phase 2's
+overlap merge into clip length.
+
+---
+
 ## 2026-09-17 — Search results reach TouchDesigner: clip cutting and OSC (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM;

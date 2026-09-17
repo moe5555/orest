@@ -134,33 +134,6 @@ into **both** environments, because indexing runs inside WISE and the query is
 encoded here. It must be the same code on both sides or a query lands in a
 different space from the index and retrieves nothing useful.
 
-### Sending results to TouchDesigner
-
-`query` and `body` cut each result into a clip and can announce it over OSC.
-In TouchDesigner, an **OSC In DAT** on port 10000 receives:
-
-    /orest/results/begin  <query_id> <count>
-    /orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
-    /orest/results/end    <query_id>
-
-    uv run orest-search query "zwei Personen streiten" --send-td
-    uv run orest-search query "zwei Personen streiten" --cut precise --send-td
-    uv run orest-search body <clip.mp4> --at 90 --send-td
-    uv run orest-search query "zwei Personen streiten" --cut fast
-
-`--cut fast` (the default with `--send-td`) copies the stream: about 0.1s per
-clip, in the recording's own codec. A fast clip file begins at the keyframe
-before the hit; `preroll` is the seconds to skip, which TouchDesigner must trim
-since it ignores the MP4 edit list that hides them from other players. `--cut precise` re-encodes to H.264: about
-1s per 8 seconds of 1080p and 3.5s per 8 seconds of 4K; `--encoder h264_nvenc`
-is faster where the GPU is free. Clips cover exactly the range WISE returned,
-are written to `data/clips/<project>/`, and are reused when a later search finds
-the same moment. Each clip is announced as soon as it is written, best result
-first. The WISE server must be running, since clips are read through it.
-
-ffmpeg is taken from PATH or the `wise` conda environment. Overrides:
-`OREST_FFMPEG_EXE`, `OREST_CLIPS_DIR`, `OREST_TD_HOST`, `OREST_TD_PORT`.
-
     uv pip install --no-deps rtmlib --python orest/Scripts/python.exe
     uv add --editable ./wise_ext
 
@@ -186,6 +159,67 @@ diverge**, logging a warning rather than raising. After upgrading either, check:
 
 `CUDAExecutionProvider` is the answer you want. `hardware_issues.md` H-10 has
 the detail, and `OREST_POSE_DEVICE` forces the choice.
+
+### Searching by a live movement
+
+`body-live` watches a camera and searches with whatever movement is captured
+between a start and a stop press:
+
+    uv run orest-search body-live --send-td
+    uv run orest-search body-live --video "FHD WebCam" --per-file 2 --send-td
+    uv run orest-search body-live --file <recording.mp4> --at 300
+
+Enter in the terminal toggles a capture. From TouchDesigner or QLab, send OSC
+to `127.0.0.1:10001`:
+
+    /orest/body/start
+    /orest/body/stop
+
+A capture of any length is searched in four-second windows stepped by two
+seconds, the shape of the indexed segments, and a capture shorter than four
+seconds is extended backwards from the stop press. Results from the windows are
+merged. `--per-file N` keeps at most N results from any one recording. `--file`
+plays a recording in real time in place of the camera, for rehearsing the
+workflow on known footage. Overrides: `OREST_CONTROL_HOST`,
+`OREST_CONTROL_PORT`.
+
+### Sending results to TouchDesigner
+
+`query`, `body` and `body-live` cut each result into a clip and can announce it
+over OSC.
+In TouchDesigner, an **OSC In DAT** on port 10000 receives:
+
+    /orest/results/begin  <query_id> <count>
+    /orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
+    /orest/results/end    <query_id>
+
+    uv run orest-search query "zwei Personen streiten" --send-td
+    uv run orest-search query "zwei Personen streiten" --cut precise --send-td
+    uv run orest-search body <clip.mp4> --at 90 --send-td
+    uv run orest-search query "zwei Personen streiten" --cut fast
+
+`--cut fast` (the default with `--send-td`) copies the stream: about 0.1s per
+clip, in the recording's own codec. A fast clip file begins at the keyframe
+before the hit; `preroll` is the seconds to skip, which TouchDesigner must trim
+since it ignores the MP4 edit list that hides them from other players.
+`--cut precise` re-encodes to H.264: about
+1s per 8 seconds of 1080p and 3.5s per 8 seconds of 4K; `--encoder h264_nvenc`
+is faster where the GPU is free. Clips cover exactly the range WISE returned,
+are written to `data/clips/<project>/`, and are reused when a later search finds
+the same moment. Each clip is announced as soon as it is written, best result
+first. The WISE server must be running, since clips are read through it.
+
+ffmpeg is taken from PATH or the `wise` conda environment. Overrides:
+`OREST_FFMPEG_EXE`, `OREST_CLIPS_DIR`, `OREST_TD_HOST`, `OREST_TD_PORT`.
+
+**Merged spans or segments.** By default a result is a span of neighbouring
+matches merged into one moment, which can run to a minute or more where a long
+stretch matches, and whose bounds shift from search to search. `--segments`
+returns the indexed four-second windows instead: every clip is four seconds,
+and the same moment always maps to the same clip file. On the text index the
+windows sit half a second apart, so several results may cover one moment; on
+the body index they step by two seconds. Available on `query`, `body` and
+`body-live`.
 
 **Tests** (no camera, microphone or GPU required):
 

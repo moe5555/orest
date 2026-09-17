@@ -10,6 +10,7 @@ knowledge/components/02_processing.md.
     orest-search info
     orest-search query "zwei Personen streiten"
     orest-search query "..." --send-td       # cut clips and announce them to TouchDesigner
+    orest-search body-live --send-td         # search by a movement performed in front of a camera
 
 Equivalently, without the installed entry point:
 
@@ -19,6 +20,8 @@ Equivalently, without the installed entry point:
 import argparse
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 import httpx
 from orest_pose import EXTRACTOR_ID as POSE_ID
@@ -49,6 +52,8 @@ def _delivery(parser: argparse.ArgumentParser):
     parser.add_argument("--send-td", action="store_true",
                         help=f"announce each clip over OSC to "
                              f"{config.TD_HOST}:{config.TD_PORT}")
+    parser.add_argument("--segments", action="store_true",
+                        help="return the indexed 4s windows rather than merged spans")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,6 +106,22 @@ def build_parser() -> argparse.ArgumentParser:
                       help=f"pose extractor to search (default: {POSE_ID})")
     body.add_argument("-n", "--limit", type=int, default=10)
     _delivery(body)
+
+    live = commands.add_parser("body-live",
+                               help="search by a movement performed live: Enter or OSC "
+                                    "starts and stops a capture")
+    _project(live)
+    source = live.add_mutually_exclusive_group()
+    source.add_argument("--video", help="camera index or name fragment (default: system default)")
+    source.add_argument("--file", help="play a recording in real time in place of a camera")
+    live.add_argument("--at", type=float, default=0.0, metavar="SECONDS",
+                      help="where playback of --file starts (default: 0)")
+    live.add_argument("--feature-id", default=POSE_ID,
+                      help=f"pose extractor to search (default: {POSE_ID})")
+    live.add_argument("-n", "--limit", type=int, default=10)
+    live.add_argument("--per-file", type=int, metavar="N",
+                      help="at most N results from any one recording")
+    _delivery(live)
 
     query = commands.add_parser("query", help="search a served project by text")
     _project(query)
@@ -166,6 +187,63 @@ def deliver(hits: list[client.Hit], project: str, mode: str, encoder: str,
         sender.send(td.end_message(query_id))
 
 
+def live_session(wise: client.Wise, args) -> int:
+    """Capture movements on demand and search with each, until interrupted."""
+    # Imported here so the batch and text commands do not pay for loading the
+    # pose model and camera dependencies.
+    from . import live
+
+    if args.file:
+        source = live.FilePlayback(Path(args.file), args.at)
+        where = lambda: f" at {source.position():.1f}s of {Path(args.file).name}"
+    else:
+        from sitrep import capture, devices
+
+        camera = devices.resolve_video_device(args.video)
+        print(f"camera [{camera.index}] {camera.name}")
+        source = capture.VideoStream(camera)
+        where = lambda: ""
+
+    recorder = live.PoseRecorder(source.latest)
+    triggers = live.Triggers()
+    began = {}
+
+    def on_start(event):
+        began["at"] = time.monotonic()
+        print(f"capturing{where()} [start from {live.source(event)}] - Enter or "
+              f"{live.STOP_ADDRESS} to stop", flush=True)
+
+    def on_capture(detections, event):
+        seconds = time.monotonic() - began["at"]
+        windows = live.query_windows(detections)
+        print(f"captured {seconds:.1f}s{where()} [stop from {live.source(event)}]: "
+              f"{len(detections)} poses, "
+              f"{len(windows)} query window{'s' if len(windows) != 1 else ''}", flush=True)
+        hits = live.search(wise, detections, feature_id=args.feature_id,
+                           limit=args.limit, per_file=args.per_file,
+                           merged=not args.segments)
+        if not hits:
+            print("No body found in the capture.", flush=True)
+            return
+        print(format_hits(hits), flush=True)
+        if args.cut or args.send_td:
+            deliver(hits, args.project, args.cut or clips.FAST, args.encoder, args.send_td)
+
+    try:
+        while not recorder.ready:
+            time.sleep(0.1)
+        print(f"ready - Enter or {live.START_ADDRESS} on "
+              f"{config.CONTROL_HOST}:{config.CONTROL_PORT} starts a capture", flush=True)
+        live.run(recorder, triggers, on_start, on_capture)
+    except KeyboardInterrupt:
+        print()
+        return 0
+    finally:
+        triggers.close()
+        recorder.close()
+        source.close()
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     project = config.project_dir(args.project)
@@ -211,6 +289,9 @@ def main(argv=None) -> int:
                 print(format_info(wise.info()))
                 return 0
 
+            if args.command == "body-live":
+                return live_session(wise, args)
+
             if args.command == "body":
                 # Imported here so the batch and text commands do not pay for
                 # loading the pose model's dependencies.
@@ -224,6 +305,7 @@ def main(argv=None) -> int:
                     vector,
                     feature_extractor_id=args.feature_id,
                     limit=args.limit,
+                    merged=not args.segments,
                 )
                 print(format_hits(hits))
                 if args.cut or args.send_td:
@@ -238,6 +320,7 @@ def main(argv=None) -> int:
                 feature_extractor_id=args.feature_id,
                 limit=args.limit,
                 add_prefix=not args.no_prefix,
+                merged=not args.segments,
             )
             print(format_hits(hits))
             if args.cut or args.send_td:

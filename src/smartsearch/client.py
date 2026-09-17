@@ -31,6 +31,15 @@ IMAGE = "image"
 # Which modality each search target draws its feature extractors from.
 _MODALITY = {VIDEO: "video", AUDIO: "audio", "audio": "audio", IMAGE: "image"}
 
+# The two forms every result block carries: neighbouring matches merged into one
+# playable moment, and the individual indexed windows behind them. A window is
+# 4 seconds in both indices. Merged spans are what browsing wants, but a long
+# run of matching windows collapses into one span of a minute or more, and the
+# span's bounds shift with the query, so a moment found twice is described
+# differently each time (changelog.md, 2026-09-17).
+MERGED = "merged_windows"
+UNMERGED = "unmerged_windows"
+
 # Result blocks in a search response, and the media table each one refers to.
 _BLOCKS = (
     ("video_results", "videos", VIDEO),
@@ -127,10 +136,15 @@ class Wise:
             )
         return available[0]
 
-    def _window(self, limit: int, candidates: int | None) -> int:
-        """How many vectors to retrieve to yield `limit` distinct moments."""
+    def _window(self, limit: int, candidates: int | None, merged: bool = True) -> int:
+        """How many vectors to retrieve to yield `limit` results.
+
+        Unmerged results are one per vector, so no allowance for collapsing is
+        needed.
+        """
         if candidates is None:
-            candidates = max(limit * _CANDIDATES_PER_HIT, _MIN_CANDIDATES)
+            candidates = (max(limit * _CANDIDATES_PER_HIT, _MIN_CANDIDATES) if merged
+                          else limit)
         return min(candidates, _MAX_CANDIDATES)
 
     def search(
@@ -146,6 +160,7 @@ class Wise:
         candidates: int | None = None,
         metadata_filter: Sequence[str] = (),
         add_prefix: bool = True,
+        merged: bool = True,
     ) -> list[Hit]:
         """Search one index by text, uploaded stills, uploaded audio, or a mix.
 
@@ -164,7 +179,7 @@ class Wise:
             ("search_in", target),
             ("feature_extractor_id", self._resolve_extractor(target, feature_extractor_id)),
             ("start", "0"),
-            ("end", str(self._window(limit, candidates))),
+            ("end", str(self._window(limit, candidates, merged))),
             ("add_prefix", str(bool(add_prefix)).lower()),
         ]
         params += [("text_queries", value) for value in _as_sequence(text)]
@@ -176,7 +191,7 @@ class Wise:
 
         response = self._client.post(f"{self.root}/search", params=params, files=files or None)
         response.raise_for_status()
-        return self._hits(response.json())[:limit]
+        return self._hits(response.json(), merged)[:limit]
 
     def search_vector(
         self,
@@ -187,6 +202,7 @@ class Wise:
         limit: int = 20,
         candidates: int | None = None,
         metadata_filter: Sequence[str] = (),
+        merged: bool = True,
     ) -> list[Hit]:
         """Search with an embedding computed outside WISE.
 
@@ -198,7 +214,7 @@ class Wise:
             ("search_in", target),
             ("feature_extractor_id", self._resolve_extractor(target, feature_extractor_id)),
             ("start", "0"),
-            ("end", str(self._window(limit, candidates))),
+            ("end", str(self._window(limit, candidates, merged))),
         ]
         params += [("metadata_filter", value) for value in metadata_filter]
 
@@ -214,9 +230,9 @@ class Wise:
             f"{self.root}/search_with_feature", params=params, json=body
         )
         response.raise_for_status()
-        return self._hits(response.json())[:limit]
+        return self._hits(response.json(), merged)[:limit]
 
-    def _hits(self, payload: dict) -> list[Hit]:
+    def _hits(self, payload: dict, merged: bool = True) -> list[Hit]:
         """Flatten a search response into one list, ranked by score."""
         hits = []
         for block_name, media_name, target in _BLOCKS:
@@ -224,9 +240,7 @@ class Wise:
             if not block:
                 continue
             media = block.get(media_name, {})
-            # Video results arrive both raw and merged into shots or
-            # neighbouring windows; the merged form is the playable moment.
-            rows = block.get("merged_windows", block.get("vectors", []))
+            rows = block.get(MERGED if merged else UNMERGED) or []
             for row in rows:
                 media_id = str(row["media_id"])
                 hits.append(Hit(

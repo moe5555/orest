@@ -32,7 +32,7 @@ earlier code.
 |---|---|---|
 | 1 | Drive WISE from Orest; index the sample corpus | **done** |
 | 2 | Custom pose feature extractor — the body index | **done** |
-| 3 | Embodied search: live capture becomes the query | next |
+| 3 | Embodied search: live capture becomes the query | **done** |
 | 4 | Speech as query — transcript import and live line matching | not started |
 | 5 | Localhost UI, hybrid search, TouchDesigner over OSC | **OSC bridge done**; UI not started |
 | 6 | Hindsight-SITREP | spec is a TODO |
@@ -81,19 +81,29 @@ Open increments, in rough order of value:
   Fine as specified, where the query is a captured sequence, but it forecloses
   querying from a photograph.
 
-### Phase 3 — embodied search
+### Phase 3 — embodied search — done
 
-Press a key to start, press again to stop, and the captured seconds become the
-query — the "body" half of embodied search in `02_processing.md`. Builds on
-`sitrep.capture`, which already streams frames and audio, and on
-`smartsearch.pose`, which already encodes a clip and searches with it; what is
-missing is only the live capture in place of a file.
+`orest-search body-live`: Enter or OSC `/orest/body/start` and
+`/orest/body/stop` on port 10001 bracket a capture, which is searched in
+index-shaped windows and delivered to TouchDesigner like any other search.
+Verified on known footage played in real time with `--file`; details in
+`changelog.md`.
 
-**No WISE patch needed**, confirmed in phase 2: Orest encodes the query and
-posts the vector to `/search_with_feature`.
+Open:
 
-Retrieval hygiene belongs here: exclude the recent past, cap results per file so
-one afternoon does not fill the list.
+- **The camera path is untested live.** `--file` exercised everything but
+  `sitrep.capture.VideoStream`, which the SITREP already uses.
+- **Excluding the recent past** is not implemented. The index is built offline,
+  so it holds nothing from the session being captured; it becomes necessary
+  once the rehearsal recording feeds the index while rehearsal continues.
+- **Merged spans are long**, up to 122 s in a webcam test — the phase 2
+  overlap merge, carried into clip length. `--segments` sidesteps it with
+  four-second windows. **A maximum clip length for merged results is
+  deliberately left open** until the system has been used in rehearsal, where
+  the right length will be apparent.
+- **Scores rise with capture length.** Results carry the best score over all
+  windows of the capture, so a 45 s capture scored 0.988 on moments a 2 s
+  capture scored 0.5. A score threshold in TouchDesigner must allow for this.
 
 ### Phase 4 — speech
 

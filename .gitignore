@@ -2,7 +2,6 @@
 external/
 data/
 __pycache__/
-
-# TouchDesigner writes a copy of the previous save and crash autosaves beside the project
 TouchDesigner/Backup/
 TouchDesigner/**/CrashAutoSave*
+TouchDesigner/*.[0-9]*.toe
