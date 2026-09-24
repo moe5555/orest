@@ -53,17 +53,10 @@ PORT = int(os.environ.get("OREST_WISE_PORT", "9670"))
 # ignores: clips are footage of identifiable people, like the corpus itself.
 CLIPS_ROOT = Path(os.environ.get("OREST_CLIPS_DIR", REPO_ROOT / "data" / "clips"))
 
-# Where search results are announced over OSC: TouchDesigner's OSC In DAT
-# (knowledge/components/03_render.md, "Control: OSC"). Loopback while
-# TouchDesigner runs on the same machine as Orest.
-TD_HOST = os.environ.get("OREST_TD_HOST", "127.0.0.1")
-TD_PORT = int(os.environ.get("OREST_TD_PORT", "10000"))
-
-# Where Orest listens for OSC from TouchDesigner or QLab, such as the start and
-# stop of a live body capture. The return channel beside TD_PORT
-# (knowledge/components/03_render.md, "Control: OSC").
-CONTROL_HOST = os.environ.get("OREST_CONTROL_HOST", "127.0.0.1")
-CONTROL_PORT = int(os.environ.get("OREST_CONTROL_PORT", "10001"))
+# Where TouchDesigner is reached, and where Orest is reached from it. Defined
+# in the `osc` package and re-exported here, because the live SITREP addresses
+# the same OSC In DAT and two definitions of one receiver would drift apart.
+from osc import CONTROL_HOST, CONTROL_PORT, TD_HOST, TD_PORT  # noqa: E402,F401
 
 # Defaults WISE applies when no feature extractor is named.
 OPEN_CLIP_ID = "mlfoundations/open_clip/ViT-B-16-SigLIP2-512/webli"

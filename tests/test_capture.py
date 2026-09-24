@@ -101,6 +101,46 @@ def test_camera_is_released_when_the_caller_stops(sources):
     assert camera.released
 
 
+def test_a_caller_owned_camera_is_left_open(sources):
+    """The sampling loop reads a shared stream; closing it is its owner's job,
+    since the presence tracker and the TouchDesigner feed read the same one."""
+    video, audio = sources
+    camera = capture.devices.open_video(video)
+    stream = capture.VideoStream(video)
+    try:
+        windows = capture.windows(stream, audio, interval=0.2, window=0.4)
+        next(windows)
+        windows.close()
+        assert not camera.released
+    finally:
+        stream.close()
+    assert camera.released
+
+
+def test_the_sampling_loop_is_the_same_whoever_owns_the_camera(sources):
+    """Splitting camera ownership out of the loop must not change what it
+    samples, which benchmark.py's latency figures are measured against."""
+    video, audio = sources
+    owned = capture.run(video, audio, interval=0.3, window=1.0)
+    try:
+        by_run = next(owned)
+    finally:
+        owned.close()
+
+    stream = capture.VideoStream(video)
+    try:
+        shared = capture.windows(stream, audio, interval=0.3, window=1.0)
+        try:
+            by_windows = next(shared)
+        finally:
+            shared.close()
+    finally:
+        stream.close()
+
+    assert len(by_windows.frames) == len(by_run.frames)
+    assert by_windows.index == by_run.index == 0
+
+
 def test_audio_ring_keeps_the_most_recent_samples():
     ring = capture.AudioRing(samplerate=10, seconds=1.0)
     for start in (0, 6, 12):

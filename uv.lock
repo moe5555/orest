@@ -209,6 +209,31 @@ wheels = [
 ]
 
 [[package]]
+name = "cyndilib"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/00/fbd1af08eb2cd4034a2bd7df2f5cc4b504d8b3afa9fab8a7ed641cdc5680/cyndilib-0.1.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:51d2a1eedf58e6357511d93889060761dbdb2dcf86583bd5d2e4b555decb00ff", size = 11276539, upload-time = "2026-03-22T21:11:48.889Z" },
+    { url = "https://files.pythonhosted.org/packages/77/a7/cf9f3d0b92f4ff3ec6dea1c8cd2b5e5556691cc3926f943f01de7e807858/cyndilib-0.1.1-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:28e0500a68175c3743a5c2a900ede5db065396451d19804858e186e992f94e5d", size = 11335705, upload-time = "2026-03-22T21:11:51.941Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/2a/17d390abdce8cbb9f1bc24ea9240e639a1bb0d1822bc6d486a50ce62da50/cyndilib-0.1.1-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:db50ee051c589bb56aa3500c7b2ab6811e9f17fc5c0bdd7c52275aa7a0e9f3a1", size = 12426618, upload-time = "2026-03-22T21:11:54.669Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/0d/234b85bbbe1c013a93894cca5a73fdd18b29fcbdceef60109b1533c0e15d/cyndilib-0.1.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:f540b98ad34d517400da912361e7ded09b54ac8567bb634744e838263e508917", size = 15680916, upload-time = "2026-03-22T21:11:57.698Z" },
+    { url = "https://files.pythonhosted.org/packages/79/95/a76783ffce895f491ff1e057bfdf2c3a7b8f88b63720b6b53e9acbe7e5fe/cyndilib-0.1.1-cp312-cp312-win_amd64.whl", hash = "sha256:312687e6396ec1a4322d6b310a2bb13cbc7abd567dcf087eca4f354bd78c17fb", size = 13266126, upload-time = "2026-03-22T21:12:00.498Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/69/6ded9b6994c32a455f8b6012f50067aee7f05f5dacc042c53833cb3db659/cyndilib-0.1.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:3f79cf1345a17d4cea92a948f3e8ee8966c3a0b623f544801c97b8d25feef745", size = 11267347, upload-time = "2026-03-22T21:12:03.362Z" },
+    { url = "https://files.pythonhosted.org/packages/00/d0/0a9f743f380d34545342d6f87ca6d4605491ae2aa40b4ac1d2e46882282a/cyndilib-0.1.1-cp313-cp313-macosx_11_0_x86_64.whl", hash = "sha256:3839947d2127180f5055744d2834d25d4e65a2ca81c772317bc56f1700dce1a6", size = 11323220, upload-time = "2026-03-22T21:12:06.27Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/c6/18d93d9e8ae9b17a8d8612483c7a891000c22a06298f6ca68a972c5711b7/cyndilib-0.1.1-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:ca1ffa4457e0758cf309ff7260a5a247ed763c1f1d4922a63ea3fa46e0345ae2", size = 12357532, upload-time = "2026-03-22T21:12:09.064Z" },
+    { url = "https://files.pythonhosted.org/packages/47/9d/2c0e8ee781de4be194a6dff5923e494d05292e0f52c01820cc975fe14571/cyndilib-0.1.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:aae35f9173ea2858b10c8f06cb67b838e974198ec4a601868e1cfa2595cc67ce", size = 15604018, upload-time = "2026-03-22T21:12:12.855Z" },
+    { url = "https://files.pythonhosted.org/packages/97/0a/e38061c9ec5a5d9426e111641ec40e6b9f1b91987ec15f845a4e5eb82344/cyndilib-0.1.1-cp313-cp313-win_amd64.whl", hash = "sha256:8543c2ffd05362c9d5ed72d4a2bacdd0b9ccf6421a13245489bc24a010432628", size = 13260139, upload-time = "2026-03-22T21:12:15.654Z" },
+    { url = "https://files.pythonhosted.org/packages/84/e5/52a075de101a49d9afc0ae7fad0e824a10e3a4a3e1ba4daeb19fc5beda72/cyndilib-0.1.1-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:f94a5fd914e01372b75e7edea2cd3c61f1f3d7027cdf35b23b65e82d93a69d1a", size = 11312407, upload-time = "2026-03-22T21:12:18.838Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/5b/3f52ded785d082ff6a2c3a7f0b19d8a1dd7a045566369f5df8306c217afc/cyndilib-0.1.1-cp314-cp314-macosx_11_0_x86_64.whl", hash = "sha256:d905745a8b095b06f54854dcde1dc51a5c5ad8be304e0fc61bac9f8442983a58", size = 11325124, upload-time = "2026-03-22T21:12:21.778Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/60/77d149a984064956b9cc85f2d58f29ea73f61a4ef0354ef4c80c2df0cb95/cyndilib-0.1.1-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:b7f7d6189a2105fc7707d1f931443e8dbf52136a571be721cdd94831c33d2ad4", size = 12386913, upload-time = "2026-03-22T21:12:24.6Z" },
+    { url = "https://files.pythonhosted.org/packages/07/25/a9a28cbb8799f2105fbdeccc842be069e1e9035521ee5567e22e2dafcd6f/cyndilib-0.1.1-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:255caa91ee35e6d4e06f8892a9a309bb330a56e54c7e7da9fb6209fb746e44b1", size = 15604849, upload-time = "2026-03-22T21:12:27.867Z" },
+    { url = "https://files.pythonhosted.org/packages/40/ab/2dffef626dd429baf0191d632f26f9f91c76353de8ea1d218afdf01ec9be/cyndilib-0.1.1-cp314-cp314-win_amd64.whl", hash = "sha256:86f075aefd708b98767283c41df2bf99973126dfc2bd9380ba7d923e7d31a61a", size = 15895012, upload-time = "2026-03-22T21:12:31.024Z" },
+]
+
+[[package]]
 name = "faster-whisper"
 version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -514,6 +539,7 @@ name = "orest"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cyndilib" },
     { name = "faster-whisper" },
     { name = "httpx" },
     { name = "numpy" },
@@ -534,6 +560,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cyndilib", specifier = ">=0.1.1" },
     { name = "faster-whisper", specifier = ">=1.2.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "numpy", specifier = ">=2.5.3" },

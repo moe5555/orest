@@ -22,17 +22,19 @@ without repair. Field descriptions are part of that schema and steer the model,
 so they are kept short: every token in the schema and the reply costs latency,
 which step 6 caps.
 
-The live loop is run from main.py.
+A run is assembled by session.py, which owns the camera and the microphone and
+feeds `sitreps()` the windows they produce.
 """
 
 import sys
 import time
+from collections.abc import Iterable, Iterator
 from datetime import datetime
 
 from ollama import ResponseError, chat
 from pydantic import BaseModel, Field, ValidationError
 
-from . import capture, devices, transcribe
+from . import capture, transcribe
 
 # e4b fits well on an 8GB GPU.
 MODEL = "gemma4:e4b"
@@ -163,28 +165,24 @@ def sitrep(window: capture.Window, model=MODEL) -> Sitrep:
     )
 
 
-def run_live(video: devices.VideoDevice, audio: devices.AudioDevice, *,
-             interval: float, window: float, model=MODEL):
+def sitreps(windows: Iterable[capture.Window], *, model=MODEL) -> Iterator[Sitrep]:
     """Yield one SITREP per capture window.
 
-    Runs until the caller stops consuming. A window whose reply is unusable is
-    skipped rather than ending the session.
+    Takes the windows rather than the devices that produce them, so the caller
+    decides where the camera comes from: a loop of its own, a shared stream, or
+    a fixture. Runs until the caller stops consuming, and a window whose reply
+    is unusable is skipped rather than ending the session.
     """
-    windows = capture.run(video, audio, interval=interval, window=window)
+    for captured in windows:
+        try:
+            document = sitrep(captured, model=model)
+        except (ValidationError, ResponseError) as error:
+            # A reply that ran into the token cap is truncated and does not
+            # parse; a rejected prompt returns an error. Losing one window
+            # beats ending the session.
+            kind = ("unparseable reply" if isinstance(error, ValidationError)
+                    else "rejected prompt")
+            print(f"window {captured.index}: {kind}, skipped", file=sys.stderr)
+            continue
 
-    try:
-        for captured in windows:
-            try:
-                document = sitrep(captured, model=model)
-            except (ValidationError, ResponseError) as error:
-                # A reply that ran into the token cap is truncated and does not
-                # parse; a rejected prompt returns an error. Losing one window
-                # beats ending the session.
-                kind = ("unparseable reply" if isinstance(error, ValidationError)
-                        else "rejected prompt")
-                print(f"window {captured.index}: {kind}, skipped", file=sys.stderr)
-                continue
-
-            yield document
-    finally:
-        windows.close()
+        yield document

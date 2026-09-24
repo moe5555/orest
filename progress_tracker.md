@@ -17,7 +17,7 @@ was built and why is in `changelog.md`; open questions are in
 | 4 · Transcription | done — `sitrep.transcribe`; speaker diarisation not implemented |
 | 5 · SITREP JSON | done — `sitrep.report` |
 | 6 · Latency budget | done — `sitrep.benchmark` |
-| 7 · Output | console only; TouchDesigner handover open |
+| 7 · Output | done — console, plus NDI video and OSC to TouchDesigner |
 | — · Cast recognition | built — `face`, `sitrep.presence`; roster not yet in the report |
 
 Report content is not yet trustworthy (`claude_concerns.md`, concern 1).
@@ -36,7 +36,12 @@ Open increments, in rough order of value:
   field beside `quelle` and `gesagt`, and `Person.kennung` should become a
   value the model selects from a fixed roster rather than one it assigns. This
   is what closes concern 4's "person re-identification is not implemented at
-  all" in `claude_concerns.md`.
+  all" in `claude_concerns.md`. Until then TouchDesigner receives two unjoined
+  views of the same room: the roster's `label` and the report's `kennung` do
+  not correspond, and nothing there should try to join those tables.
+- **The roster has never run end to end**, because `data/cast` holds no
+  enrolment photographs yet. Everything below it is measured; a rehearsal with
+  names in it is not.
 - **Guessed names are gender-blind.** An unrecognised person is called
   `Vielleicht: Jakob`, drawn at random from a mixed list, so the guess
   contradicts what is on screen about half the time. `buffalo_l` already ships

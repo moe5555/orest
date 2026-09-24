@@ -67,6 +67,89 @@ Ollama must be running with the model given by `--model` (default
 `gemma4:e4b`) pulled. The live SITREP records nothing: reports are streamed to
 the console and not retained, and no frame or audio clip is written to disk.
 
+### Sending the live SITREP to TouchDesigner
+
+Two channels, turned on separately — pixels and messages travel differently
+(`knowledge/components/03_render.md`):
+
+    uv run orest-sitrep --send-ndi                  # the camera, as an NDI source
+    uv run orest-sitrep --send-td                   # report and roster, over OSC
+    uv run orest-sitrep --send-ndi --send-td --cast data/cast
+
+In TouchDesigner, an **NDI In TOP** receives the picture — the source is named
+`Orest SITREP` by default, changed with `--ndi-name`. An **OSC In DAT on port
+10000** receives the text, on the same port search results already use; the
+addresses are namespaced so one DAT can route both:
+
+    /orest/sitrep/begin  <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
+                         <ton_s> <latenz_s> <personen> <ereignisse>
+    /orest/sitrep/lage   <id> <lage> <prognose> <empfehlung> <vertrauen>
+    /orest/sitrep/gesagt <id> <gesagt>
+    /orest/sitrep/person <id> <zeile> <kennung> <merkmale> <taetigkeit>
+                         <verantwortungsvoll> <menschlich> <gefahr> <kollaborativ>
+    /orest/sitrep/ereignis <id> <zeile> <text>
+    /orest/sitrep/end    <id>
+
+With `--cast`, a second and faster stream reports who is in the room, about
+twice a second, framed by a rising `tick`:
+
+    /orest/presence/begin  <tick> <zeit> <anwesend>
+    /orest/presence/person <tick> <zeile> <label> <name> <vermutet>
+                           <aehnlichkeit> <sichtungen> <seit> <dauer_s>
+    /orest/presence/end    <tick>
+
+`name` is empty and `vermutet` is 1 when the cast gallery did not recognise the
+person, so a guess can be set apart from a recognition. The roster and the
+report are two separate readings of the room: a roster `label` does not
+correspond to a report `kennung`, and the two tables must not be joined.
+
+Host and port come from `OREST_TD_HOST` and `OREST_TD_PORT`, shared with
+`orest-search`. Only one process can hold port 10000, so a second TouchDesigner
+instance will not receive anything.
+
+Each module also runs on its own, for diagnostics:
+
+    uv run python -m sitrep.devices --list
+    uv run python -m sitrep.devices --check --video "FHD WebCam"
+    uv run python -m sitrep.capture --interval 5 --window 30
+    uv run python -m sitrep.presence --cast data/cast
+    uv run python -m sitrep.benchmark --speech <speech.wav>
+
+The console block is drawn with box-drawing characters, so redirecting it to
+a file needs UTF-8:
+
+    PYTHONIOENCODING=utf-8 uv run orest-sitrep > session.txt
+
+### Recognising the cast
+
+`src/face/` detects and identifies faces, and `sitrep.presence` follows them
+across a rehearsal. Put a few photographs of each person in a folder named
+after them:
+
+    data/cast/
+      klara/01.jpg  02.jpg  03.jpg
+      moritz/01.jpg 02.jpg  03.jpg
+
+Five to ten images each, varied in angle, profiles included. Measured on the
+corpus, one image identifies 62% of later sightings, three 76%, ten 86%.
+
+Check the enrolment before a rehearsal — every value off the diagonal should be
+well below the naming threshold:
+
+    uv run python -m face.gallery data/cast
+
+Then watch who the system sees, live or over a recording:
+
+    uv run python -m sitrep.presence --cast data/cast
+    uv run python -m sitrep.presence --cast data/cast --recording rehearsal.mp4 --start 300
+
+A face the enrolment does not match is given an invented name marked as a
+guess, such as `Vielleicht: Jakob`, which holds until that person leaves.
+
+The models download on first use (288 MB) to `~/.cache/orest/`. Nothing in
+`data/` is tracked by git: the photographs are of identifiable people and the
+consent questions in `knowledge/components/01_capture.md` are open.
+
 ### Running smart search
 
 `src/smartsearch/` drives WISE from the `orest` environment: batch work through

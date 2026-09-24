@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 
 import pytest
+from ollama import ResponseError
 from pydantic import ValidationError
 
 from sitrep import capture, report
@@ -55,11 +56,10 @@ def test_prompt_marks_silence_rather_than_leaving_it_blank():
     assert "(keine Sprache erkannt)" in report._prompt("")
 
 
-def test_run_live_streams_without_writing_anything(monkeypatch, tmp_path, sitrep):
-    """The live SITREP is streamed and not retained, so a session must leave
-    nothing behind on disk."""
-    captured = capture.Window(
-        index=0,
+def window_at(index: int) -> capture.Window:
+    """A captured window carrying the shape the model is given."""
+    return capture.Window(
+        index=index,
         started=datetime(2026, 9, 10, 14, 30, 0),
         ended=datetime(2026, 9, 10, 14, 30, 30),
         frames=[b"jpeg"],
@@ -67,14 +67,41 @@ def test_run_live_streams_without_writing_anything(monkeypatch, tmp_path, sitrep
         audio_seconds=30.0,
     )
 
-    def one_window(*args, **kwargs):
-        yield captured
 
-    monkeypatch.setattr(report.capture, "run", one_window)
+def test_sitreps_streams_without_writing_anything(monkeypatch, tmp_path, sitrep):
+    """The live SITREP is streamed and not retained, so a run must leave
+    nothing behind on disk."""
     monkeypatch.setattr(report, "sitrep", lambda window, model=None: sitrep)
     monkeypatch.chdir(tmp_path)
 
-    produced = list(report.run_live(None, None, interval=10, window=30))
+    produced = list(report.sitreps([window_at(0)]))
 
     assert produced == [sitrep]
     assert list(tmp_path.rglob("*")) == []
+
+
+def test_a_window_whose_reply_does_not_parse_is_skipped(monkeypatch, sitrep):
+    """A truncated reply costs one window, not the session."""
+    replies = iter([ValidationError.from_exception_data("Lagebericht", []), sitrep])
+
+    def answer(window, model=None):
+        reply = next(replies)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(report, "sitrep", answer)
+    assert list(report.sitreps([window_at(0), window_at(1)])) == [sitrep]
+
+
+def test_a_rejected_prompt_does_not_end_the_session(monkeypatch, sitrep):
+    replies = iter([ResponseError("rejected"), sitrep])
+
+    def answer(window, model=None):
+        reply = next(replies)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(report, "sitrep", answer)
+    assert list(report.sitreps([window_at(0), window_at(1)])) == [sitrep]

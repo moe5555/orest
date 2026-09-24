@@ -6,6 +6,115 @@ referenced below.
 
 ---
 
+## 2026-09-24 — The live SITREP reaches TouchDesigner: NDI and OSC (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, TouchDesigner
+2025.31760 Non-Commercial on the same machine.
+
+The live camera and the generated report now leave Orest for TouchDesigner,
+which is step 7 of the Realtime-SITREP in
+`knowledge/components/02_processing.md` ("Output: video output ... and SITREP
+text beneath it"). The two channels are the ones
+`knowledge/components/03_render.md` describes: "OSC carries messages, not
+pixels."
+
+    orest-sitrep --send-ndi                      # the camera as an NDI source
+    orest-sitrep --send-td                       # report and roster over OSC
+    orest-sitrep --send-ndi --send-td --cast data/cast
+
+**Pixels travel as NDI.** `src/sitrep/feed.py` publishes the camera as an NDI
+source that TouchDesigner receives with its native NDI In TOP. Spout would have
+been the obvious same-machine choice and is what 03_render.md names, but
+`SpoutGL` publishes no wheel for CPython 3.14, which this environment runs;
+TouchDesigner's Shared Mem In TOP requires a licence above Non-Commercial; and
+Video Stream In TOP takes RTSP, HLS/DASH, SRT and WebRTC but not HTTP MJPEG.
+`cyndilib` was the one NDI binding with a 3.14 Windows wheel. The NDI runtime
+needed no separate install: TouchDesigner ships `Processing.NDI.Lib.x64.dll`.
+
+The transport is one class. `feed.Sink` is opened through `feed.open_sink`, so
+TouchDesigner's shared memory, or an ffmpeg process serving SRT, would
+substitute without anything above that line changing. **A TouchDesigner licence
+upgrade would not change this design**: neither operator used is licence-gated,
+and Spout stays blocked by the Python version rather than by the licence.
+
+**Cost: 0.94 ms p50 per frame** at 640x360 on CPU, sending at 30 fps — far
+below the 226 ms the presence pass costs. Publishing does not show up in the
+report path either: four consecutive windows with NDI running came in at 4.6,
+6.5, 5.1 and 6.9 s against a 15 s window, none skipped. Both figures are at the
+webcam's default 640x480; a 1080p stage camera is untested.
+
+**Messages travel as OSC**, in the begin/row/end shape `smartsearch/td.py`
+established, so one OSC In DAT receives search results and the live SITREP and
+routes on the address prefix:
+
+    /orest/sitrep/begin  /sitrep/lage  /sitrep/gesagt
+    /orest/sitrep/person /sitrep/ereignis  /sitrep/end
+    /orest/presence/begin  /presence/person  /presence/end
+
+`begin` carries the row counts so TouchDesigner can size a table before its
+rows arrive. Ratings are read off `report.BEWERTUNGEN` rather than named, so
+renaming a category fails a test instead of silently shifting a column in
+TouchDesigner. The transcript is sent even when the room was silent, so the
+table keeps its shape.
+
+The roster is a second, faster stream rather than a field of the report: a
+report arrives once a window while the tracker reads the room twice a second,
+and carrying the roster on the report would make "who is on stage now" lag by
+up to a whole window. Its `tick` counts upward so a receiver can discard a
+reading that arrived out of order.
+
+**One camera, three readers.** `capture.run()` opened and closed its own
+`VideoStream`, which is what prevented sharing — and DirectShow refuses a
+second process the device, so TouchDesigner cannot open the camera itself.
+`capture.windows()` is now the sampling loop over a stream it does not own, and
+`run()` is the standalone form that opens one. `src/sitrep/session.py` holds the
+camera, the microphone, the presence tracker, the publisher and the OSC sender;
+readers are closed before the camera, and a reader that fails to start unwinds
+the session rather than stranding the device with no handle to it.
+`report.run_live()` is replaced by `report.sitreps(windows)`, which takes the
+windows rather than the devices that produce them and is testable without a
+camera.
+
+`Session` is also the shape the localhost interface of `02_processing.md` will
+need: one object to start, one to stop. Its options are a pydantic model so
+that interface receives them as a request body.
+
+**`src/osc/` is a new shared package.** `Sender`, `Message` and the TouchDesigner
+host and port moved there from `smartsearch`. There is one TouchDesigner and
+one OSC In DAT; two definitions of its address would drift, and the live path
+should not have to import the retrieval path to reach it.
+
+**`uv sync` used to remove `rtmlib`**, which `orest_pose` imports to load the
+RTMO model, because it was installed by hand with `--no-deps` and was therefore
+absent from the lock. It is now declared in the root project, with a uv override
+dropping its request for `opencv-contrib-python` — that package ships its own
+`cv2` and collides with the pinned `opencv-python`, which is why the manual
+install skipped its dependencies. Body search survives a sync now.
+
+**Verified end to end:** two reports with both channels open, on the real
+camera and microphone. Latency 8.7 s and 4.7 s against a 15 s window, so the
+run keeps pace with the video feed running. TouchDesigner held port 10000
+throughout and received the messages directly. 228 tests pass, none of them
+needing a camera, a model, NDI or TouchDesigner.
+
+**Open:**
+- **The roster path is untested end to end**, because `data/cast` holds no
+  enrolment photographs yet. The messages and the stream are unit-tested; what
+  has not run is a rehearsal with names in it.
+- **Two unjoined views of the same room.** The roster's `label` does not
+  correspond to the `Person.kennung` the model assigns in the report; the model
+  is still not told who is present. Joining them is the first open increment
+  under "Cast recognition" in `progress_tracker.md`. Nothing in TouchDesigner
+  should try to join those two tables.
+- **NDI cost at 1080p** is untested. The webcam delivers 640x480 by default,
+  which is a quarter of the pixels a stage camera will; `--ndi-fps` and
+  `--width/--height` are the levers if it bites.
+- `03_render.md` names Spout or NDI for live frames without deciding; the
+  decision taken here, and why Spout was not available, is recorded in this
+  entry for Moe to reconcile into that file.
+
+---
+
 ## 2026-09-24 — Presence tracker: `sitrep/presence.py` (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM, 32 cores.

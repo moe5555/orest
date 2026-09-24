@@ -19,6 +19,12 @@ draining continuously keeps the sampled frame current, which 02_processing.md
 asks for where it notes the Realtime-SITREP "prioritises low latency over
 accuracy".
 
+A `VideoStream` serves any number of readers, and `windows()` is the sampling
+loop over one it does not own. DirectShow refuses a second process the camera,
+so everything that watches the room during a rehearsal — this loop, the
+presence tracker, the TouchDesigner feed — reads a single open stream.
+`run()` is the standalone form that opens and closes a stream of its own.
+
 Run directly to watch the capture loop without generating reports:
 
     python -m sitrep.capture --interval 5 --window 30
@@ -80,6 +86,9 @@ class VideoStream:
     """
 
     def __init__(self, device: devices.VideoDevice, width=None, height=None, timeout=5.0):
+        # Kept so a caller sharing the stream can report which camera a run is
+        # watching without holding the device alongside it.
+        self.device = device
         self._capture = devices.open_video(device, width, height)
         self._frame = None
         self._lock = threading.Lock()
@@ -174,9 +183,14 @@ def encode_wav(samples, samplerate: int) -> bytes:
     return buffer.getvalue()
 
 
-def run(video: devices.VideoDevice, audio: devices.AudioDevice, *,
-        interval: float, window: float, width=None, height=None):
-    """Sample frames and audio, yielding one Window per SITREP interval.
+def windows(stream: VideoStream, audio: devices.AudioDevice, *,
+            interval: float, window: float):
+    """Sample an open camera and the microphone, one Window per interval.
+
+    The stream is read, never opened or closed: its owner does that. This is
+    what lets the presence tracker and the TouchDesigner feed read the same
+    camera as the SITREP, which DirectShow would otherwise forbid by refusing
+    a second process the device.
 
     Yields indefinitely; the caller decides how long a session runs.
     """
@@ -188,8 +202,6 @@ def run(video: devices.VideoDevice, audio: devices.AudioDevice, *,
         if status:
             print(f"audio status: {status}", file=sys.stderr)
         ring.add(indata[:, 0].copy())
-
-    stream = VideoStream(video, width, height)
 
     def capture_window(index: int) -> Window:
         started = datetime.now()
@@ -211,11 +223,23 @@ def run(video: devices.VideoDevice, audio: devices.AudioDevice, *,
         return Window(index, started, datetime.now(), frames,
                       encode_wav(samples, samplerate), len(samples) / samplerate)
 
+    with sd.InputStream(device=audio.index, channels=1,
+                        samplerate=samplerate, callback=on_audio):
+        for index in itertools.count():
+            yield capture_window(index)
+
+
+def run(video: devices.VideoDevice, audio: devices.AudioDevice, *,
+        interval: float, window: float, width=None, height=None):
+    """Open a camera of this loop's own and sample it, releasing it at the end.
+
+    The standalone form, for a caller with nothing else reading the camera.
+    A session sharing one camera between several readers opens the stream
+    itself and calls `windows()`.
+    """
+    stream = VideoStream(video, width, height)
     try:
-        with sd.InputStream(device=audio.index, channels=1,
-                            samplerate=samplerate, callback=on_audio):
-            for index in itertools.count():
-                yield capture_window(index)
+        yield from windows(stream, audio, interval=interval, window=window)
     finally:
         stream.close()
 

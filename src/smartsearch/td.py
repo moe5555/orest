@@ -22,17 +22,14 @@ cue driving it; Orest sends everything the search returned.
 import uuid
 from pathlib import Path
 
-from pythonosc.udp_client import SimpleUDPClient
+from osc import Message, Sender  # noqa: F401  (Sender is re-exported)
 
-from . import config
 from .client import Hit
 from .clips import Clip
 
 BEGIN = "/orest/results/begin"
 HIT = "/orest/results/hit"
 END = "/orest/results/end"
-
-Message = tuple[str, list]
 
 
 def new_query_id() -> str:
@@ -52,14 +49,3 @@ def hit_message(query_id: str, rank: int, clip: Clip, hit: Hit) -> Message:
 
 def end_message(query_id: str) -> Message:
     return END, [query_id]
-
-
-class Sender:
-    """Sends messages to one OSC receiver over UDP."""
-
-    def __init__(self, host: str = config.TD_HOST, port: int = config.TD_PORT):
-        self._client = SimpleUDPClient(host, port)
-
-    def send(self, message: Message):
-        address, arguments = message
-        self._client.send_message(address, arguments)

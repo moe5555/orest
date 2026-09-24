@@ -4,11 +4,16 @@ Capture sources, window timing and capture resolution are selected the same
 way wherever they appear, so each group is defined once and attached to a
 parser as a parent.
 
-This module deliberately depends on nothing else in the package: the device
-layer builds its own command line from these groups.
+`devices` builds its own command line from these groups, so this module must
+not import anything that imports `devices`. `feed` is safe on that count and
+supplies the defaults its flags advertise, which keeps one definition of each.
 """
 
 import argparse
+
+import osc
+
+from . import feed
 
 # Defaults for the command line only. The library functions take window and
 # interval as required arguments, because step 6 of
@@ -44,4 +49,25 @@ def resolution() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--width", type=int, help="requested capture width")
     parser.add_argument("--height", type=int, help="requested capture height")
+    return parser
+
+
+def touchdesigner() -> argparse.ArgumentParser:
+    """The two channels a run can open to TouchDesigner.
+
+    Pixels and messages travel separately (knowledge/components/03_render.md),
+    so each is turned on by its own flag. Host and port stay environment-only,
+    as they are for the search side: the Probebuehne machine is not the machine
+    this was written on.
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--send-td", action="store_true",
+                        help=f"announce each SITREP and the roster over OSC to "
+                             f"{osc.TD_HOST}:{osc.TD_PORT}")
+    parser.add_argument("--send-ndi", action="store_true",
+                        help="publish the camera as an NDI source for TouchDesigner")
+    parser.add_argument("--ndi-name", default=feed.NAME,
+                        help=f"NDI source name (default: {feed.NAME})")
+    parser.add_argument("--ndi-fps", type=float, default=feed.FPS,
+                        help=f"frames per second sent (default: {feed.FPS:g})")
     return parser

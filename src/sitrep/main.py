@@ -15,10 +15,11 @@ Equivalently, without the installed entry point:
 
 import argparse
 import itertools
+import pathlib
 import sys
 import textwrap
 
-from . import cli, devices, report
+from . import cli, devices, report, session
 
 # Label column width, sized to the longest field name.
 _LABEL = 10
@@ -141,9 +142,11 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__.splitlines()[0],
-        parents=[cli.sources(), cli.timing()],
+        parents=[cli.sources(), cli.timing(), cli.resolution(), cli.touchdesigner()],
     )
     parser.add_argument("--model", default=report.MODEL)
+    parser.add_argument("--cast", type=pathlib.Path,
+                        help="folder of enrolment images; names the people on stage")
     parser.add_argument("--json", action="store_true",
                         help="print raw report JSON instead of the console block")
     parser.add_argument("--no-colour", action="store_true", help="plain output")
@@ -151,32 +154,28 @@ def main(argv=None) -> int:
 
     try:
         video, audio = devices.resolve(args.video, args.audio, args.audio_api)
+        live = session.Session(video, audio, session.Options.from_args(args))
     except (ValueError, RuntimeError) as error:
         print(error, file=sys.stderr)
         return 1
 
-    print(devices.describe(video, audio))
-
-    reports = report.run_live(
-        video, audio,
-        interval=args.interval,
-        window=args.window,
-        model=args.model,
-    )
+    print(live.describe())
+    for path in live.missing_enrolment:
+        print(f"no face found in {path}", file=sys.stderr)
 
     try:
-        for document in itertools.islice(reports, args.windows):
-            if args.json:
-                print(document.model_dump_json(indent=2))
-            else:
-                print(format_sitrep(document, use_colour=not args.no_colour), flush=True)
+        with live:
+            for document in itertools.islice(live.reports(), args.windows):
+                if args.json:
+                    print(document.model_dump_json(indent=2))
+                else:
+                    print(format_sitrep(document, use_colour=not args.no_colour),
+                          flush=True)
     except KeyboardInterrupt:
         print()
     except (ValueError, RuntimeError) as error:
         print(error, file=sys.stderr)
         return 1
-    finally:
-        reports.close()
     return 0
 
 
