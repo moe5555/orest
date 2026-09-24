@@ -6,6 +6,109 @@ referenced below.
 
 ---
 
+## 2026-09-23 — Face recognition: `src/face/`, measured on the corpus (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM, 32 cores.
+
+`src/face/` detects faces, embeds them and matches them against an enrolled
+cast. This is the identity half of "who is in the scene" in the Realtime-SITREP
+of `knowledge/components/02_processing.md`, and the mechanism behind that
+file's "provide the system with images of each team member". The SITREP does
+not use it yet; this step establishes what it does on footage like the corpus.
+
+    python -m face.gallery data/cast
+
+**Two ONNX models from InsightFace's `buffalo_l`**, run directly rather than
+through the `insightface` package: SCRFD-10GF for detection, which returns a
+box and the five landmarks alignment needs, and ArcFace R50 for a
+512-dimension embedding. `insightface` builds from source on this
+environment's Python 3.14 and carries a second numpy stack; the models need
+only onnxruntime, numpy and cv2. `buffalo_l` is chosen over the smaller
+bundles because WISE's own face extractor uses it
+(`knowledge/background/wise_clip_as_query.md`), so a future Hindsight-SITREP
+face index would share one embedding space with the live path rather than
+two.
+
+The package sits in `src/` beside `sitrep` and `smartsearch`, not in
+`wise_ext/`. `orest_pose` lives there because it registers a feature extractor
+inside WISE's conda environment; face recognition runs on the live camera
+stream and has no such constraint.
+
+**Identity is measured, not generated.** The design follows the separation
+already in `src/sitrep/report.py`, where the transcript is Whisper's and the
+model may not invent speech. A name will reach the report as a measured field
+beside `zeitfenster` and `quelle`, not as something `gemma4:e4b` is asked to
+read off a photograph. A person is kept as the set of their enrolled vectors
+rather than one average, and a match below threshold is reported as unknown
+rather than as the nearest name.
+
+### Measured on the corpus
+
+Two videos, sampled as stills: the characterisation workshop (12 min, 720p,
+1582 faces from 365 stills) and Othello (first 2 hours, 1080p, 2173 faces from
+900 stills). Ground truth was built by clustering the embeddings and then
+confirming every cluster and every merge by eye against contact sheets: 6
+identities in the workshop, 12 in Othello.
+
+Recall at 100% precision, enrolling the three largest faces per person:
+
+| | thr 0.30 | thr 0.35 | thr 0.40 | thr 0.45 |
+|---|---|---|---|---|
+| workshop, 6 people | 0.955 | 0.905 | 0.796 | 0.606 |
+| Othello, 12 people | 0.992 | 0.979 | 0.937 | 0.883 |
+| Othello, enrolled on close shots, probed on faces under 50px | 0.980 | 0.955 | 0.864 | 0.763 |
+| Othello, enrolled in the first 20 min, probed after the first hour | 0.992 | 0.983 | 0.965 | 0.902 |
+
+**No wrong name was produced anywhere in any sweep.** In the last row 149 of
+the 811 probes are actors who appear only later and were never enrolled; all
+were correctly left unnamed. Stage lighting does not break the match: the same
+face under a deep blue wash and under a red wash scores 0.6-0.8.
+
+**Strangers stay unnamed.** Leave-one-person-out, each identity in turn removed
+from the gallery: 0 of 2028 Othello probes and 0 of 1212 workshop probes were
+given a name at threshold 0.35 or above. Across 60,600 different-person pairs
+the highest similarity observed was 0.35, against a same-person median of 0.48
+(workshop) and 0.60 (Othello).
+
+**Face size is the limit, not lighting.** Recall at threshold 0.40 by size in
+frame: 0.49 under 30px, 0.79-0.82 at 30-40px, 0.90 at 40-60px, 0.98 above
+120px. Enrolment count matters about as much: one photograph gives 0.62,
+three 0.76, ten 0.86 on the same probes.
+
+Threshold 0.40 is the default in `gallery.THRESHOLD`: it sits above every
+different-person pair observed and still names four probes in five. Lowering
+it buys recall the measurements say is still free of wrong names, but the
+sample is 18 people.
+
+**Caveat on recall.** Ground-truth clusters were formed by this same model, so
+faces it embeds oddly are over-represented among those excluded from the
+labelled set. The precision figures do not have this problem; they come from
+held-out identities.
+
+### ONNX Runtime thread default costs 3.6x on CPU
+
+A detect-and-embed pass over a 1080p frame with 3.6 faces takes **802 ms p50**
+at ONNX Runtime's default thread count and **222 ms p50 / 493 ms p95** at four
+threads. The default is one thread per core, which on 32 cores costs more in
+synchronisation than it wins, and costs more again when two sessions are called
+alternately. `face.model.THREADS` caps it at four, overridable with
+`OREST_FACE_THREADS`.
+
+Both models run on `CPUExecutionProvider`: ONNX Runtime resolves no CUDA
+provider in this environment, the same condition pose detection runs under
+(`hardware_issues.md` H-10). `orest_pose` does not pay this penalty: measured
+again alongside the face models it runs at 42 ms per frame on CPU at the
+default thread count, matching its original figure. The cost appears when two
+sessions are called alternately, which pose alone never does.
+
+**Next:** the presence tracker that turns per-frame recognition into a per-
+window roster, then wiring that roster into the SITREP prompt and schema.
+At 222 ms a pass, a tracker reading the camera at 2 fps fits alongside Whisper
+and Ollama; the blocking question is what it costs during generation, which is
+untested.
+
+---
+
 ## 2026-09-17 — Segment results: `--segments` (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`).
