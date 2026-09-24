@@ -6,6 +6,106 @@ referenced below.
 
 ---
 
+## 2026-09-24 — Presence tracker: `sitrep/presence.py` (MININT-ITT28VU)
+
+**Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM, 32 cores.
+
+`src/sitrep/presence.py` follows every face the camera shows, names the ones
+the enrolled cast matches and guesses at the rest. It turns the per-frame recognition of the entry
+below into a roster of who was in the room over a stretch of time, which is
+what the Realtime-SITREP of `knowledge/components/02_processing.md` needs for
+"who is in the scene". The report does not consume the roster yet.
+
+    python -m sitrep.presence --cast data/cast
+    python -m sitrep.presence --cast data/cast --recording rehearsal.mp4 --start 4200
+
+**Runs at its own rate, not the window's.** Two passes a second against a
+SITREP window that reaches the model every five or ten seconds. A window is far
+too sparse to follow a person across, and the tracker also keeps observing
+during generation, when capture is otherwise blind (`claude_concerns.md`,
+"Coverage gaps between windows"). The source is anything presenting a
+`latest()`, which is how `capture.VideoStream` already presents the camera, so
+the two share one camera rather than opening it twice.
+
+**Face detection alone, no body detection.** The tracker was designed around
+RTMO supplying bodies and face recognition naming them. Measured first: across
+the Othello stage footage and the DT Berlin rehearsal, face detection finds
+94-100% of the people RTMO's body detection finds. The second model was
+dropped, which keeps one model in the live path. This holds for camera-facing
+performance and documentary footage, which is all the corpus has; a Probebühne
+wide shot with actors turned upstage is untested and is where a body layer
+would earn its place.
+
+**Two association cues, and the second one is what makes it work.** A face
+close enough to a track's own stored faces joins it, greedily, strongest pair
+first. A face the gallery *names* then joins whichever live track already
+carries that name. The first cue alone fragmented badly: in a 120-second
+replay one actor appeared as three simultaneous `person_02` tracks, because a
+person's own frontal and profile views can sit below the link threshold — the
+same person across a long stretch drops to 0.39 at the fifth percentile — while
+the enrolment holds several angles and recognises both. Live tracks that end up
+sharing a name are folded into the earliest of them, which keeps its identifier
+and its first sighting.
+
+**Everyone in the room is accounted for, and unknown people are guessed at.**
+A face the cast gallery does not match is given an invented German first name
+marked as a guess — `Vielleicht: Jakob` — rather than a number, and every
+detection reaches the roster on its first sighting. The guess lasts as long as
+the track: a person seen again after an absence is guessed at afresh, so the
+same face can be Bastian and later Theo. Once the gallery does recognise
+someone, the guess gives way to their real name.
+
+An earlier version required three sightings before a track counted as present,
+to keep single-frame detections off the roster. Dropped on Moe's instruction:
+every person entering has to be recognised by the system.
+
+**Measured on Othello.** Enrolment photographs were cut from the first 20
+minutes for 10 of the 12 identities, and the tracker replayed 120 seconds
+starting at 70 minutes — footage the enrolment never saw. Two identities were
+deliberately left unenrolled, both of them absent from the first 20 minutes.
+
+- No name was ever held by two live tracks at once.
+- No track ever changed name.
+- Named tracks held for 44-114 seconds and 25-151 sightings.
+- 15% of detected faces were guessed at rather than recognised, across 20
+  short tracks.
+- Every recognised track was checked by eye against its enrolment photographs
+  and was the right person. The largest guessed track, 25 sightings of one of
+  the two unenrolled actors, held one invented name throughout.
+
+**`face.detect.SCORE_THRESHOLD` is 0.60**, raised from 0.50. Everything the
+detector returns becomes a person on the roster, and at 0.50 that included
+panels of patterned stage cloth. Over 150 frames the change drops 14 of 341
+detections: four panels of scenery, several backs of heads, one actor's face
+repeatedly covered by a hand, and one clear profile.
+
+It does not reduce the number of guessed people — twelve at both thresholds —
+because removing a weak sighting also splits a track, so single-sighting
+guesses rose from six to eight. Recognition is untouched: the same five people
+are recognised, with one sighting fewer out of 294. The threshold is the right
+lever for scenery, not for phantoms; the lever for those is `FORGET`, which
+holds a lone detection on the roster for thirty seconds.
+
+**Cost: 226 ms p50, 320 ms p95 per pass** on a 1080p frame, CPU, at four
+inference threads — about a tenth of the machine at two passes a second. What
+this costs while Ollama is generating is still untested.
+
+**Replay time is counted from `REPLAY_EPOCH`**, an arbitrary reference far
+enough from `datetime.min` that subtracting the forget window cannot underflow.
+Counting from `datetime.min` crashed any replay started at the first frame.
+
+`data/cast/` holds the enrolment: one folder per person, named after them,
+carrying five to ten photographs. The convention is in `README.md` and in that
+folder's own README; `data/` stays untracked, since the photographs are of
+identifiable people.
+
+**Next:** wiring the roster into the SITREP. `Window` gains the people seen
+during it, `Sitrep` carries them as a measured field beside `quelle` and
+`gesagt`, and `Person.kennung` becomes a value the model selects from a fixed
+roster rather than one it assigns.
+
+---
+
 ## 2026-09-23 — Face recognition: `src/face/`, measured on the corpus (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM, 32 cores.

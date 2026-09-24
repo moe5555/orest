@@ -18,8 +18,48 @@ was built and why is in `changelog.md`; open questions are in
 | 5 · SITREP JSON | done — `sitrep.report` |
 | 6 · Latency budget | done — `sitrep.benchmark` |
 | 7 · Output | console only; TouchDesigner handover open |
+| — · Cast recognition | built — `face`, `sitrep.presence`; roster not yet in the report |
 
 Report content is not yet trustworthy (`claude_concerns.md`, concern 1).
+
+### Cast recognition
+
+`src/face/` identifies faces against an enrolment in `data/cast/`, and
+`sitrep.presence` follows them across a rehearsal to produce the roster the
+report will name people from. Recognised on the corpus at 100% precision, with
+no wrong name in any measurement; details in `changelog.md` (2026-09-23,
+2026-09-24).
+
+Open increments, in rough order of value:
+
+- **The roster is not in the report.** `Sitrep` should carry it as a measured
+  field beside `quelle` and `gesagt`, and `Person.kennung` should become a
+  value the model selects from a fixed roster rather than one it assigns. This
+  is what closes concern 4's "person re-identification is not implemented at
+  all" in `claude_concerns.md`.
+- **Guessed names are gender-blind.** An unrecognised person is called
+  `Vielleicht: Jakob`, drawn at random from a mixed list, so the guess
+  contradicts what is on screen about half the time. `buffalo_l` already ships
+  `genderage.onnx` (1.3 MB, in the bundle already downloaded, not extracted),
+  which would let the guess match. Nice to have, not blocking. Whether a
+  wrong-gendered guess is a defect or is the point is a dramaturgical question
+  rather than a technical one.
+- **A lone false detection stays on the roster for 30 seconds**, the forget
+  window. Raising the detector score to 0.60 removed the stage fabric the
+  detector was reading as faces but did not reduce the number of guessed
+  people, since dropping weak detections also splits tracks. Shortening the
+  forget window would help and would cost tracks of people who turn upstage
+  for half a minute.
+- **Actors facing away are not counted.** Face detection finds 94-100% of the
+  people body detection finds across the corpus, but every corpus recording is
+  camera-facing. A Probebühne wide shot is where a body-detection layer would
+  earn its place, and it cannot be evaluated until there is such footage.
+- **Cost alongside generation is unmeasured.** A pass costs 226 ms p50 on CPU;
+  what it costs while Ollama is generating and Whisper transcribing is not
+  known.
+- **Nothing links a voice to a face.** The enrolment answers who is in the
+  room, not who is speaking. An enrolled voice gallery is the audio twin of
+  this and is the diarisation step 4 defers.
 
 ---
 

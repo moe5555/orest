@@ -67,18 +67,6 @@ Ollama must be running with the model given by `--model` (default
 `gemma4:e4b`) pulled. The live SITREP records nothing: reports are streamed to
 the console and not retained, and no frame or audio clip is written to disk.
 
-Each module also runs on its own, for diagnostics:
-
-    uv run python -m sitrep.devices --list
-    uv run python -m sitrep.devices --check --video "FHD WebCam"
-    uv run python -m sitrep.capture --interval 5 --window 30
-    uv run python -m sitrep.benchmark --speech <speech.wav>
-
-The console block is drawn with box-drawing characters, so redirecting it to
-a file needs UTF-8:
-
-    PYTHONIOENCODING=utf-8 uv run orest-sitrep > session.txt
-
 ### Running smart search
 
 `src/smartsearch/` drives WISE from the `orest` environment: batch work through
