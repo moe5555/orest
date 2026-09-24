@@ -14,6 +14,10 @@ dependencies = [
     "pydantic>=2.13.5",
     "pygrabber>=0.2",
     "python-osc>=1.10.2",
+    # Loads the RTMO pose model orest_pose runs. Declared here rather than in
+    # orest_pose, which stays dependency-free so that installing it into WISE's
+    # conda environment cannot re-resolve that environment's pinned stack.
+    "rtmlib>=0.0.16",
     "sounddevice>=0.5.6",
 ]
 
@@ -35,6 +39,12 @@ packages = ["src/sitrep", "src/smartsearch", "src/face", "src/osc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv]
+# rtmlib asks for opencv-contrib-python, which ships its own cv2 and collides
+# with the opencv-python this project pins. The marker is never satisfiable,
+# which drops the request while leaving the rest of rtmlib's resolution intact.
+override-dependencies = ["opencv-contrib-python; python_version < '3'"]
 
 [tool.uv.workspace]
 members = [
