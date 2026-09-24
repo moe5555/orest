@@ -5,3 +5,4 @@ __pycache__/
 TouchDesigner/Backup/
 TouchDesigner/**/CrashAutoSave*
 TouchDesigner/*.[0-9]*.toe
+desktop.ini
