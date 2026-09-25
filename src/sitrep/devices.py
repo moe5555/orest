@@ -24,6 +24,7 @@ import sys
 import time
 from dataclasses import dataclass
 
+import comtypes
 import cv2
 import numpy as np
 import sounddevice as sd
@@ -61,7 +62,18 @@ def list_video_devices() -> list[VideoDevice]:
     Virtual cameras (OBS, headset passthrough) are listed alongside physical
     ones and are indistinguishable at this layer; the name tells them apart.
     """
-    return [VideoDevice(i, name) for i, name in enumerate(FilterGraph().get_input_devices())]
+    # DirectShow is a COM API, and COM must be initialised on every thread that
+    # uses it. comtypes does so for the main thread on import; a run started
+    # from the interface resolves its devices on a thread of its own. The call
+    # is counted, so on an initialised thread it is balanced by the release.
+    comtypes.CoInitialize()
+    try:
+        graph = FilterGraph()
+        names = graph.get_input_devices()
+        del graph
+    finally:
+        comtypes.CoUninitialize()
+    return [VideoDevice(i, name) for i, name in enumerate(names)]
 
 
 def list_audio_devices() -> list[AudioDevice]:

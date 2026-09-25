@@ -17,10 +17,13 @@ was built and why is in `changelog.md`; open questions are in
 | 4 · Transcription | done — `sitrep.transcribe`; speaker diarisation not implemented |
 | 5 · SITREP JSON | done — `sitrep.report` |
 | 6 · Latency budget | done — `sitrep.benchmark` |
-| 7 · Output | done — console, plus NDI video and OSC to TouchDesigner |
-| — · Cast recognition | built — `face`, `sitrep.presence`; roster not yet in the report |
+| 7 · Output | done — operator page (`orest-ui`): camera with the report beneath it; console; NDI video and OSC data to TouchDesigner |
+| — · Cast recognition | built — `face`, `sitrep.presence`; the roster names the people in the report |
 
-Report content is not yet trustworthy (`claude_concerns.md`, concern 1).
+Report content is not yet trustworthy (`claude_concerns.md`, concern 1). A
+first run of `gemma4:26b` on the production machine described a stage frame
+correctly (`changelog.md`, 2026-09-25); the model choice is not settled
+(`hardware_issues.md`, H-1).
 
 ### Cast recognition
 
@@ -32,13 +35,15 @@ no wrong name in any measurement; details in `changelog.md` (2026-09-23,
 
 Open increments, in rough order of value:
 
-- **The roster is not in the report.** `Sitrep` should carry it as a measured
-  field beside `quelle` and `gesagt`, and `Person.kennung` should become a
-  value the model selects from a fixed roster rather than one it assigns. This
-  is what closes concern 4's "person re-identification is not implemented at
-  all" in `claude_concerns.md`. Until then TouchDesigner receives two unjoined
-  views of the same room: the roster's `label` and the report's `kennung` do
-  not correspond, and nothing there should try to join those tables.
+- **A name drawn on a frame can go stale within its window.** Since
+  2026-09-25 each sampled frame shows the name its face's track carried at
+  that moment, while the roster the prompt lists is read at the window's end.
+  A guess that becomes a recognition mid-window therefore appears under two
+  names, and the frame tag loses; the model can only use the later one. Rare,
+  and it resolves in the next window.
+- **People who never face the camera are `Unbekannt`.** Only faces carry tags,
+  so someone seen from behind throughout a window cannot be named. This is
+  the same gap as "actors facing away are not counted" below.
 - **The roster has never run end to end**, because `data/cast` holds no
   enrolment photographs yet. Everything below it is measured; a rehearsal with
   names in it is not.
@@ -79,7 +84,7 @@ earlier code.
 | 2 | Custom pose feature extractor — the body index | **done** |
 | 3 | Embodied search: live capture becomes the query | **done** |
 | 4 | Speech as query — transcript import and live line matching | not started |
-| 5 | Localhost UI, hybrid search, TouchDesigner over OSC | **OSC bridge done**; UI not started |
+| 5 | Localhost UI, hybrid search, TouchDesigner over OSC | **OSC bridge done**; UI started — operator page serves the live SITREP; search not yet on it |
 | 6 | Hindsight-SITREP | spec is a TODO |
 | — | Segment-level visual index (Qwen3-VL) | **deferred, hardware** |
 

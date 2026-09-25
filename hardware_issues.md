@@ -19,7 +19,7 @@ several of the design decisions taken so far exist only to work around one.
 |---|---|---|
 | `MININT-ITT28VU` | TongFang GM5IX7A laptop, Win 11, 32 GB RAM, **RTX 4070 Laptop, 8 GB VRAM** | every measurement below unless stated |
 | `ctechadmin` | Win 11 workstation, Film University Babelsberg, MDM-enrolled (Sophos + AppLocker) | WISE install only, 2026-08-29 |
-| **Probebühne / production** | **unknown — this document exists to be re-run against it** | — |
+| `VSH-ARLT-5090` | Win 11 workstation, i9-14900KF (24 cores / 32 threads), 128 GB RAM, **RTX 5090, 32 GB VRAM**, 514 GB free on C: | **production machine**, from 2026-09-25 |
 
 Confirmed by Moe on 2026-09-11: this machine runs **either** Smart Search **or**
 the live SITREP, never both. That removes what would otherwise be the tightest
@@ -66,6 +66,14 @@ speech field empty.
 **At ≥12 GB VRAM:** re-run the 12b fully on GPU and re-measure p95. Much of
 concern 1 may simply disappear, which would make prompt-tuning e4b wasted work.
 **Do this before investing in any other SITREP accuracy mitigation.**
+
+**On `VSH-ARLT-5090`, 2026-09-25:** `gemma4:26b` (Mixture-of-Experts, 25.2B
+parameters, 3.8B active, 18 GB) is pulled and was run on three frames of stage
+footage with five people in shot: **3.7 s and 4.2 s warm**, 14.3 s including
+the model load, with a description that matched the frame. That is three
+generations, not a p95. Still to do: `benchmark.py --model gemma4:26b` for p95
+against the window, the same against `gemma4:12b`, and VRAM with Whisper
+resident (H-8).
 
 ---
 

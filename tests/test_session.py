@@ -100,6 +100,13 @@ class FakeReader:
         self._closed.append(self._label)
 
 
+@pytest.fixture(autouse=True)
+def no_face_models(monkeypatch):
+    """Every session follows faces; no test here loads the face models to do so."""
+    monkeypatch.setattr(session.presence, "PresenceTracker",
+                        lambda source, cast, **kwargs: FakeReader(source, [], "tracker"))
+
+
 @pytest.fixture
 def readers(monkeypatch, room):
     """Publisher and tracker fakes that share the room's close log."""
@@ -190,7 +197,7 @@ def test_closing_twice_is_harmless(room):
 def test_a_run_streams_without_writing_anything(monkeypatch, tmp_path, room, sitrep):
     """The live SITREP is streamed and not retained."""
     video, audio, _, _, _ = room
-    monkeypatch.setattr(session.report, "sitreps", lambda windows, model=None: iter([sitrep]))
+    monkeypatch.setattr(session.report, "sitreps", lambda windows, **kwargs: iter([sitrep]))
     monkeypatch.chdir(tmp_path)
 
     with session.Session(video, audio) as live:
@@ -204,7 +211,7 @@ def test_every_report_is_announced_over_osc(monkeypatch, room, sitrep):
     video, audio, _, _, _ = room
     monkeypatch.setattr(session.td, "Sender", RecordingSender)
     monkeypatch.setattr(session.report, "sitreps",
-                        lambda windows, model=None: iter([sitrep, sitrep]))
+                        lambda windows, **kwargs: iter([sitrep, sitrep]))
 
     with session.Session(video, audio, session.Options(send_td=True)) as live:
         list(live.reports())
@@ -216,22 +223,77 @@ def test_every_report_is_announced_over_osc(monkeypatch, room, sitrep):
 
 def test_a_run_without_send_td_announces_nothing(monkeypatch, room, sitrep):
     video, audio, _, _, _ = room
-    monkeypatch.setattr(session.report, "sitreps", lambda windows, model=None: iter([sitrep]))
+    monkeypatch.setattr(session.report, "sitreps", lambda windows, **kwargs: iter([sitrep]))
     with session.Session(video, audio) as live:
         list(live.reports())
         assert live.sender is None
 
 
-def test_the_roster_is_sent_only_when_someone_is_tracking(monkeypatch, room, readers,
-                                                          tmp_path):
+def test_faces_are_followed_with_or_without_a_cast(room, readers, tmp_path):
+    """Every person in a report carries a name, so the tracker runs on every
+    run; a cast only turns guesses into recognitions."""
+    video, audio, _, _, _ = room
+    with session.Session(video, audio) as live:
+        assert live.tracker is readers["tracker"]
+        assert live.tracker.cast is None
+
+    with session.Session(video, audio, session.Options(cast=tmp_path)) as live:
+        assert isinstance(live.tracker.cast, FakeGallery)
+
+
+def test_each_report_is_given_the_trackers_roster(monkeypatch, room, readers, sitrep):
+    video, audio, _, _, _ = room
+    given = {}
+
+    def sitreps(windows, model=None, roster=None):
+        given["roster"] = roster
+        return iter([sitrep])
+
+    monkeypatch.setattr(session.report, "sitreps", sitreps)
+    with session.Session(video, audio) as live:
+        list(live.reports())
+        assert given["roster"] == live.tracker.roster
+
+
+def test_the_models_frames_are_marked_with_the_trackers_names(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    named = [(np.array([0, 0, 10, 10]), "klara")]
+    drawn = {}
+
+    def draw(frame, faces):
+        drawn["faces"] = faces
+        return frame
+
+    monkeypatch.setattr(session.annotate, "draw_names", draw)
+    with session.Session(video, audio) as live:
+        live.tracker.name_faces = lambda frame: named
+        live._name_faces(np.zeros((4, 4, 3), dtype=np.uint8))
+
+    assert drawn["faces"] is named
+
+
+def test_a_failed_naming_pass_sends_the_frame_unmarked(room, readers):
+    """The pass runs inside the sampling loop; an error there must not end
+    the session."""
+    video, audio, _, _, _ = room
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    def fail(frame):
+        raise RuntimeError("out of memory")
+
+    with session.Session(video, audio) as live:
+        live.tracker.name_faces = fail
+        assert live._name_faces(frame) is frame
+
+
+def test_the_roster_is_sent_whenever_reports_are(monkeypatch, room, readers):
     video, audio, _, _, _ = room
     monkeypatch.setattr(session.td, "Sender", RecordingSender)
 
-    with session.Session(video, audio, session.Options(send_td=True)) as live:
+    with session.Session(video, audio) as live:
         assert live.roster is None
 
-    options = session.Options(send_td=True, cast=tmp_path)
-    with session.Session(video, audio, options) as live:
+    with session.Session(video, audio, session.Options(send_td=True)) as live:
         assert live.roster is not None
 
 
@@ -274,6 +336,12 @@ def test_the_startup_lines_name_every_open_channel(room, readers, tmp_path, monk
     assert "Orest Test" in described
     assert "127.0.0.1:10000" in described
     assert "klara" in described
+
+
+def test_the_startup_lines_say_when_every_name_will_be_a_guess(room, readers):
+    video, audio, _, _, _ = room
+    with session.Session(video, audio) as live:
+        assert "every name is a guess" in live.describe()
 
 
 def test_enrolment_images_without_a_face_are_reported(room, readers, tmp_path):

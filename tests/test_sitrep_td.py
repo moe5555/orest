@@ -39,20 +39,52 @@ def test_begin_carries_the_window_its_material_and_the_row_counts(sitrep):
     assert arguments[4] == sitrep.zeitfenster.dauer_s
     assert arguments[5] == sitrep.quelle.bilder
     assert arguments[8] == len(sitrep.bericht.personen)
-    assert arguments[9] == len(sitrep.bericht.ereignisse)
+    assert arguments[9] == len(sitrep.bericht.prognose)
 
 
-def test_every_person_and_every_event_becomes_one_row(sitrep):
+def test_every_person_and_every_forecast_becomes_one_row(sitrep):
     built = sitrep_td.messages(sitrep, 1)
     assert len(only(built, sitrep_td.SITREP_PERSON)) == len(sitrep.bericht.personen)
-    assert len(only(built, sitrep_td.SITREP_EREIGNIS)) == len(sitrep.bericht.ereignisse)
+    assert len(only(built, sitrep_td.SITREP_PROGNOSE)) == len(sitrep.bericht.prognose)
 
 
 def test_rows_are_numbered_from_one_in_document_order(sitrep):
     built = sitrep_td.messages(sitrep, 1)
     assert [arguments[1] for arguments in only(built, sitrep_td.SITREP_PERSON)] == [1, 2]
     assert [arguments[2] for arguments in only(built, sitrep_td.SITREP_PERSON)] == [
-        person.kennung for person in sitrep.bericht.personen]
+        person.name for person in sitrep.bericht.personen]
+
+
+def test_a_person_row_marks_a_guessed_name(sitrep):
+    """A guess is not a recognition, as on the roster."""
+    rows = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_PERSON)
+    assert [row[3] for row in rows] == [0, 1]
+
+
+def test_forecasts_are_ranked_most_likely_first(sitrep):
+    rows = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_PROGNOSE)
+    assert [row[1] for row in rows] == [1, 2, 3]
+    assert [row[2] for row in rows] == [60, 20, 15]
+    assert rows[0][3] == "Fortsetzung der Szene."
+
+
+def test_the_recommendation_is_one_row_with_a_flag(sitrep, eskaliert):
+    rows = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_EMPFEHLUNG)
+    assert rows == [[rows[0][0], 0, ""]]
+
+    intervening = sitrep.model_copy(update={"bericht": eskaliert})
+    row = only(sitrep_td.messages(intervening, 1), sitrep_td.SITREP_EMPFEHLUNG)[0]
+    assert row[1:] == [1, "Probe unterbrechen."]
+
+
+def test_the_scene_ratings_are_one_row(sitrep):
+    row = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_SZENE)[0]
+    assert row[1:] == [6, 3, 2]
+
+
+def test_the_description_is_sent_on_its_own(sitrep):
+    row = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_BESCHREIBUNG)[0]
+    assert row[1] == sitrep.bericht.beschreibung
 
 
 def test_a_person_row_carries_the_ratings_in_the_order_bewertungen_names(sitrep):
@@ -185,7 +217,7 @@ def test_a_person_row_arrives_over_udp_as_sent(receiver, sitrep):
 
     address, arguments = received[0]
     assert address == sitrep_td.SITREP_PERSON
-    assert arguments[2] == sitrep.bericht.personen[0].kennung
+    assert arguments[2] == sitrep.bericht.personen[0].name
     assert arguments[-len(report.BEWERTUNGEN):] == message[-len(report.BEWERTUNGEN):]
 
 
@@ -193,6 +225,6 @@ def test_german_text_survives_the_round_trip(receiver):
     """The report is written in German; umlauts must reach TouchDesigner intact."""
     port, received, thread = receiver
     sitrep_td.Sender("127.0.0.1", port).send(
-        (sitrep_td.SITREP_EREIGNIS, ["q1", 1, "Persönliche Übergabe, dreißig Sekunden"]))
+        (sitrep_td.SITREP_BESCHREIBUNG, ["q1","Persönliche Übergabe, dreißig Sekunden"]))
     thread.join(timeout=5)
-    assert received[0][1][2] == "Persönliche Übergabe, dreißig Sekunden"
+    assert received[0][1][1] == "Persönliche Übergabe, dreißig Sekunden"

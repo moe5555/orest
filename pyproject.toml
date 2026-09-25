@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "cyndilib>=0.1.1",
+    "fastapi>=0.141.1",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
     "numpy>=2.5.3",
@@ -11,6 +12,7 @@ dependencies = [
     "ollama>=0.6.2",
     "opencv-python>=5.0.0.93",
     "orest-pose",
+    "pillow>=12.3.0",
     "pydantic>=2.13.5",
     "pygrabber>=0.2",
     "python-osc>=1.10.2",
@@ -19,11 +21,13 @@ dependencies = [
     # conda environment cannot re-resolve that environment's pinned stack.
     "rtmlib>=0.0.16",
     "sounddevice>=0.5.6",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
 orest-sitrep = "sitrep.main:main"
 orest-search = "smartsearch.main:main"
+orest-ui = "interface.main:main"
 
 [dependency-groups]
 dev = [
@@ -35,7 +39,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sitrep", "src/smartsearch", "src/face", "src/osc"]
+packages = ["src/sitrep", "src/smartsearch", "src/face", "src/osc", "src/interface"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

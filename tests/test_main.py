@@ -2,7 +2,7 @@
 
 import re
 
-from sitrep import main
+from sitrep import main, report
 
 ANSI_PATTERN = re.compile(r"\033\[[0-9;]*m")
 
@@ -40,7 +40,7 @@ def test_block_shows_the_window_as_clock_times(sitrep):
 
 def test_block_labels_every_populated_field(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
-    for label in ("LAGE", "PERSONEN", "EREIGNIS", "GESAGT", "PROGNOSE", "EMPFEHLUNG"):
+    for label in ("BESCHREIBUNG", "PERSONEN", "GESAGT", "PROGNOSE", "EMPFEHLUNG"):
         assert label in block
 
 
@@ -51,16 +51,52 @@ def test_block_omits_the_transcript_when_nothing_was_said(sitrep):
 
 def test_block_lists_every_person_with_every_rating(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
-    assert "P-01" in block and "P-02" in block
-    for name in ("verantwortungsvoll", "menschlich", "gefahr", "kollaborativ"):
+    assert "Klara" in block and "Vielleicht: Jakob" in block
+    for name in ("kollaborativ", "relevanz", "verantwortungsvoll", "menschlich", "gefahr"):
         assert name in block
 
 
-def test_block_omits_merkmale_that_the_model_left_empty(sitrep):
+def test_block_marks_a_guessed_name_and_not_a_recognised_one(sitrep):
+    lines = main.format_sitrep(sitrep, use_colour=False).splitlines()
+    assert any(line.rstrip().endswith("Vielleicht: Jakob (vermutet)") for line in lines)
+    assert not any("Klara (vermutet)" in line for line in lines)
+
+
+def test_block_does_not_call_an_unknown_person_a_guess(sitrep):
+    bericht = sitrep.bericht.model_copy(update={"personen": [
+        sitrep.bericht.personen[0].model_copy(update={"name": report.UNBEKANNT})]})
+    block = main.format_sitrep(sitrep.model_copy(update={"bericht": bericht}),
+                               use_colour=False)
+    assert "Unbekannt" in block
+    assert "(vermutet)" not in block
+
+
+def test_block_shows_the_forecasts_most_likely_first_with_percentages(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
-    assert "Dunkles Hemd, kurze Haare" in block
-    # P-02 has no merkmale; its rating line must still follow its activity.
-    assert "Sitzt am Tisch, notiert" in block
+    assert block.index(" 60 % Fortsetzung") < block.index(" 20 % Unterbrechung")
+    assert block.index(" 20 % Unterbrechung") < block.index(" 15 % Wechsel")
+
+
+def test_block_says_so_when_no_intervention_is_recommended(sitrep):
+    assert "Kein Einschreiten" in main.format_sitrep(sitrep, use_colour=False)
+
+
+def test_block_shows_the_measure_when_intervention_is_recommended(sitrep, eskaliert):
+    block = main.format_sitrep(sitrep.model_copy(update={"bericht": eskaliert}),
+                               use_colour=False)
+    assert "EINSCHREITEN" in block
+    assert "Probe unterbrechen." in block
+
+
+def test_block_shows_the_scene_ratings(sitrep):
+    block = main.format_sitrep(sitrep, use_colour=False)
+    assert "relevanz 6 · eskalation 3 · gefahr 2" in block
+
+
+def test_a_scene_rating_above_the_threshold_is_red():
+    assert main._szene_colour(report.SCHWELLE + 1) == "red"
+    assert main._szene_colour(report.SCHWELLE) == "amber"
+    assert main._szene_colour(0) == "dim"
 
 
 def test_footer_reports_the_source_and_the_latency(sitrep):
@@ -68,7 +104,6 @@ def test_footer_reports_the_source_and_the_latency(sitrep):
     assert "3 Bilder" in block
     assert "30.0s Ton" in block
     assert "Latenz 5.8s" in block
-    assert "Vertrauen 3/5" in block
 
 
 def test_block_stays_within_the_requested_width(sitrep):

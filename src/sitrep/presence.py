@@ -106,6 +106,8 @@ class Track:
     similarity: float = 0.0
     vectors: list[np.ndarray] = field(default_factory=list)
     sizes: list[float] = field(default_factory=list)
+    # Face box of the latest sighting, x1 y1 x2 y2 in source-frame pixels.
+    box: np.ndarray | None = None
 
     @property
     def label(self) -> str:
@@ -175,6 +177,12 @@ class PresenceTracker:
 
         self._tracks: list[Track] = []
         self._lock = threading.Lock()
+        # Serialises whole passes. The tracker's own thread and a caller naming
+        # a frame both run passes; interleaved, each could see a new face as
+        # unknown and start a track for it, leaving one person on the roster
+        # twice under two guessed names. Re-entrant, since name_faces holds it
+        # across the pass it runs.
+        self._pass = threading.RLock()
         self._stop = threading.Event()
         self._thread = None
         self.passes = 0
@@ -210,20 +218,33 @@ class PresenceTracker:
         Public so the tracker can be driven frame by frame over a recording or
         in a test, rather than only by its own thread.
         """
-        at = at or datetime.now()
-        faces = [face for face in detect.detect(frame, size=self._detector_size)
-                 if face.size >= self._min_face]
-        vectors = embed.embed(frame, faces)
-        matches = (self.cast.match(vectors, threshold=self._threshold)
-                   if self.cast is not None and len(vectors) else [])
+        with self._pass:
+            at = at or datetime.now()
+            faces = [face for face in detect.detect(frame, size=self._detector_size)
+                     if face.size >= self._min_face]
+            vectors = embed.embed(frame, faces)
+            matches = (self.cast.match(vectors, threshold=self._threshold)
+                       if self.cast is not None and len(vectors) else [])
 
-        with self._lock:
-            self._forget(at)
-            touched = self._link(faces, vectors, matches, at)
-            self._adopt(touched, matches)
-            self._merge_by_name()
-            self.passes += 1
-            return touched
+            with self._lock:
+                self._forget(at)
+                touched = self._link(faces, vectors, matches, at)
+                self._adopt(touched, matches)
+                self._merge_by_name()
+                self.passes += 1
+                return touched
+
+    def name_faces(self, frame) -> list[tuple[np.ndarray, str]]:
+        """Each face in a frame with the name its track carries.
+
+        Runs a full pass over this exact frame rather than reusing the boxes of
+        the tracker's last pass, so every box lies on the face it names even
+        when people have moved since. The pass also counts as a sighting.
+        """
+        with self._pass:
+            touched = self.observe(frame)
+            with self._lock:
+                return [(track.box, track.label) for track in touched]
 
     def _forget(self, at: datetime):
         cutoff = at - timedelta(seconds=FORGET)
@@ -276,6 +297,7 @@ class PresenceTracker:
                 self._tracks.append(track)
             else:
                 track.observe(vector, face.size, at)
+            track.box = face.bbox
             touched.append(track)
         return touched
 

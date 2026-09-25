@@ -16,12 +16,13 @@ Nothing is written to disk. The real-time path retains nothing
 """
 
 import pathlib
+import sys
 from collections.abc import Iterator
 
 from face import gallery
 from pydantic import BaseModel
 
-from . import capture, cli, devices, feed, presence, report, td
+from . import annotate, capture, cli, devices, feed, presence, report, td
 
 
 class Options(BaseModel):
@@ -38,7 +39,9 @@ class Options(BaseModel):
     height: int | None = None
     model: str = report.MODEL
 
-    # Enrolment folder. Given one, the session follows faces and can name them.
+    # Enrolment folder. Faces are followed on every run, so every person in the
+    # report carries a name; given a cast, enrolled people are recognised
+    # rather than guessed at.
     cast: pathlib.Path | None = None
 
     # Publish the camera to TouchDesigner under this NDI source name.
@@ -97,14 +100,14 @@ class Session:
             self.publisher = feed.Publisher(
                 self.stream, name=self.options.ndi, fps=self.options.ndi_fps).start()
 
+        cast = None
         if self.options.cast:
             cast, self.missing_enrolment = gallery.enrol(self.options.cast)
-            self.tracker = presence.PresenceTracker(self.stream, cast).start()
+        self.tracker = presence.PresenceTracker(self.stream, cast).start()
 
         if self.options.send_td:
             self.sender = td.Sender()
-            if self.tracker:
-                self.roster = td.RosterStream(self.sender, self.tracker).start()
+            self.roster = td.RosterStream(self.sender, self.tracker).start()
 
     def reports(self) -> Iterator[report.Sitrep]:
         """Yield one SITREP per window, announcing each over OSC when asked to.
@@ -115,15 +118,32 @@ class Session:
         """
         windows = capture.windows(self.stream, self.audio,
                                   interval=self.options.interval,
-                                  window=self.options.window)
+                                  window=self.options.window,
+                                  annotate=self._name_faces)
         try:
             for number, document in enumerate(
-                    report.sitreps(windows, model=self.options.model), start=1):
+                    report.sitreps(windows, model=self.options.model,
+                                   roster=self.tracker.roster), start=1):
                 if self.sender:
                     self.sender.send_all(td.messages(document, number))
                 yield document
         finally:
             windows.close()
+
+    def _name_faces(self, frame):
+        """The model's copy of a frame, with the tracker's name on each face.
+
+        A failed naming pass yields the frame unmarked, and the report names
+        the people in it "Unbekannt". This runs inside the sampling loop, so
+        letting the error through would end the session, where report.sitreps
+        loses one window at most.
+        """
+        try:
+            named = self.tracker.name_faces(frame)
+        except Exception as error:
+            print(f"naming pass failed, frame sent unmarked: {error!r}", file=sys.stderr)
+            return frame
+        return annotate.draw_names(frame, named)
 
     def close(self):
         """Stop every reader, then release the camera.
@@ -146,9 +166,10 @@ class Session:
             lines.append(f"ndi:    {self.options.ndi} @ {self.options.ndi_fps:g} fps")
         if self.sender:
             lines.append(f"osc:    {self.sender.host}:{self.sender.port}")
-        if self.tracker:
-            names = ", ".join(self.tracker.cast.names)
-            lines.append(f"cast:   {names}")
+        if self.tracker.cast:
+            lines.append(f"cast:   {', '.join(self.tracker.cast.names)}")
+        else:
+            lines.append("cast:   none, every name is a guess")
         return "\n".join(lines)
 
     def __enter__(self) -> "Session":

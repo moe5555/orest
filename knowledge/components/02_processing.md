@@ -13,8 +13,9 @@ Overview: components/pipeline.md
   - who is in the scene (provide the system with images of each team member, perhaps their bio?)
   - what they are doing 
   - time frame covered
-  - categories per person: verantwortungsvoll, menschlich, gefahr, kollaborativ
-  - suggested action maybe, or prediction of what might happen next. 
+  - categories per person: verantwortungsvoll, menschlich, gefahr, kollaborativ, relevanz
+  - prediction of what might happen next. 
+  - whether to interfere, if so, what to do. 
 - prioritises low latency over accuracy 
 
 Implementation Steps: 
@@ -25,6 +26,12 @@ Implementation Steps:
 5. Write SITREP report JSON format.
 6. Every x seconds, prompt a SITREP report. X is dependent on latency - do a p95, p99 test and make sure that the system only processes as many seconds as it can keep up with. e.g. if it takes 40 seconds to process a range of 30 seconds, that will cause increasing delay. 
 7. Output: video output (for testing, eventually this will be handled perhaps via TouchDesigner) and SITREP text beneath it. 
+
+#### Calculating Values
+How do we calculate the values the system comes up with? 
+
+- *Sentiment Analysis*: feed the transcript into Gemma and ask it to score the person's values (gefahr, kollaborativ, etc.) - to do this, we need to implement speaker diarisation. 
+- *Pose*: 
 
 ### Smart Search 
 **data_in**: rehearsal corpus <br>

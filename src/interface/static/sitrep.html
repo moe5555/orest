@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live SITREP · Orest</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">OREST <span>/</span> LIVE SITREP</div>
+    <div class="status" id="status" data-status="idle">Bereit</div>
+    <div class="meta" id="meta"></div>
+    <button id="toggle" type="button">Stoppen</button>
+  </header>
+
+  <main class="wrap">
+    <section class="feed" aria-label="Kamerabild">
+      <img id="video" alt="Live-Kamerabild">
+      <div class="feed-empty" id="feed-empty">Kamera wird geöffnet …</div>
+      <div class="feed-tag" id="feed-tag" hidden><span class="dot"></span><span id="clock" class="num"></span></div>
+    </section>
+
+    <section class="panel" id="error" hidden>
+      <span class="label">Fehler</span>
+      <p class="error-text" id="error-text"></p>
+    </section>
+
+    <div class="waiting" id="waiting">Warte auf den ersten Bericht …</div>
+
+    <section class="stack" id="report" hidden>
+        <div class="report-head" id="report-head"></div>
+
+        <article class="panel empfehlung" id="empfehlung">
+          <span class="verdict" id="verdict"></span>
+          <span class="massnahme" id="massnahme"></span>
+          <span class="grund" id="grund"></span>
+        </article>
+
+        <div class="grid">
+          <article class="panel">
+            <span class="label">Beschreibung</span>
+            <p class="beschreibung" id="beschreibung"></p>
+            <blockquote class="gesagt" id="gesagt"></blockquote>
+          </article>
+          <article class="panel">
+            <span class="label">Szene · 0–10</span>
+            <div id="szene"></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <span class="label">Personen</span>
+          <div class="people" id="personen"></div>
+        </article>
+
+        <article class="panel">
+          <span class="label">Prognose</span>
+          <div class="prognose" id="prognose"></div>
+        </article>
+    </section>
+  </main>
+
+  <script src="/static/sitrep.js"></script>
+</body>
+</html>

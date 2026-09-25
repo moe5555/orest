@@ -10,26 +10,37 @@ from sitrep import report
 @pytest.fixture
 def bericht() -> report.Lagebericht:
     return report.Lagebericht(
-        lage="Zwei Personen im Raum, Probenarbeit an einer Szene.",
+        beschreibung="Klara tritt an den Tisch und spricht Jakob an; Probenarbeit an einer Szene.",
         personen=[
             report.Person(
-                kennung="P-01",
-                merkmale="Dunkles Hemd, kurze Haare",
-                taetigkeit="Steht mittig, spricht in Richtung P-02",
-                verantwortungsvoll=3, menschlich=4, gefahr=0, kollaborativ=4,
+                name="Klara",
+                beschreibung="Dunkles Hemd, kurze Haare, steht mittig, zugewandt",
+                kollaborativ=4, relevanz=5, verantwortungsvoll=3, menschlich=4, gefahr=0,
             ),
             report.Person(
-                kennung="P-02",
-                merkmale="",
-                taetigkeit="Sitzt am Tisch, notiert",
-                verantwortungsvoll=2, menschlich=3, gefahr=5, kollaborativ=1,
+                name="Vielleicht: Jakob",
+                beschreibung="Sitzt am Tisch, notiert",
+                kollaborativ=1, relevanz=2, verantwortungsvoll=2, menschlich=3, gefahr=5,
             ),
         ],
-        ereignisse=["P-01 tritt an den Tisch", "Kurze Unterbrechung"],
-        prognose="Fortsetzung der Probe.",
-        empfehlung="Keine Massnahme.",
-        vertrauen=3,
+        szene=report.Szene(relevanz=6, eskalation=3, gefahr=2),
+        prognose=[
+            report.Verlauf(verlauf="Unterbrechung der Probe.", wahrscheinlichkeit=20),
+            report.Verlauf(verlauf="Fortsetzung der Szene.", wahrscheinlichkeit=60),
+            report.Verlauf(verlauf="Wechsel an den Tisch.", wahrscheinlichkeit=15),
+        ],
+        empfehlung="",
     )
+
+
+@pytest.fixture
+def eskaliert(bericht) -> report.Lagebericht:
+    """The same report, with a scene past the intervention threshold."""
+    return report.Lagebericht.model_validate({
+        **bericht.model_dump(exclude={"einschreiten"}),
+        "szene": {"relevanz": 8, "eskalation": 7, "gefahr": 4},
+        "empfehlung": "Probe unterbrechen.",
+    })
 
 
 @pytest.fixture
@@ -42,6 +53,10 @@ def sitrep(bericht) -> report.Sitrep:
         ),
         quelle=report.Quelle(bilder=3, ton_s=30.0),
         gesagt="Noch einmal von vorne, bitte.",
+        anwesend=[
+            report.Anwesend(name="Klara", erkannt=True),
+            report.Anwesend(name="Vielleicht: Jakob", erkannt=False),
+        ],
         latenz_s=5.8,
         bericht=bericht,
     )

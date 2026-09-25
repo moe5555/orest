@@ -26,10 +26,11 @@ def unit(*values) -> np.ndarray:
 
 
 class Face:
-    """Stands in for a detection, which the tracker only asks for its size."""
+    """Stands in for a detection, which the tracker asks for its size and box."""
 
-    def __init__(self, size=80.0):
+    def __init__(self, size=80.0, bbox=(10.0, 20.0, 90.0, 100.0)):
         self.size = size
+        self.bbox = np.array(bbox, dtype=np.float32)
 
 
 def tracker(cast=None) -> presence.PresenceTracker:
@@ -52,6 +53,33 @@ def pass_of(subject, vectors, faces=None, at=START):
         subject._adopt(touched, matches)
         subject._merge_by_name()
     return touched
+
+
+def test_a_track_keeps_the_box_of_its_latest_sighting():
+    """The box is where the name is drawn, so it must follow the person."""
+    subject = tracker()
+    face = unit((0, 1.0))
+    pass_of(subject, [face], faces=[Face(bbox=(0, 0, 50, 50))])
+    touched = pass_of(subject, [face], faces=[Face(bbox=(100, 0, 150, 50))],
+                      at=START + timedelta(seconds=1))
+    assert touched[0].box.tolist() == [100, 0, 150, 50]
+
+
+def test_naming_a_frame_pairs_each_face_with_its_track_label(monkeypatch):
+    """name_faces is what annotate.py draws, so each box must carry the name
+    of the track its face joined, in detection order."""
+    subject = tracker(cast_of("klara"))
+    faces = [Face(bbox=(0, 0, 50, 50)), Face(bbox=(100, 0, 150, 50))]
+    monkeypatch.setattr(presence.detect, "detect", lambda frame, size: faces)
+    monkeypatch.setattr(presence.embed, "embed",
+                        lambda frame, found: np.stack([unit((0, 1.0)), unit((5, 1.0))]))
+
+    named = subject.name_faces(np.zeros((200, 200, 3), dtype=np.uint8))
+
+    assert [box.tolist() for box, _ in named] == [[0, 0, 50, 50], [100, 0, 150, 50]]
+    assert named[0][1] == "klara"
+    assert named[1][1].startswith(presence.UNSURE)
+    assert subject.passes == 1
 
 
 def test_each_new_face_starts_its_own_track():

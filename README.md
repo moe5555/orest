@@ -67,6 +67,44 @@ Ollama must be running with the model given by `--model` (default
 `gemma4:e4b`) pulled. The live SITREP records nothing: reports are streamed to
 the console and not retained, and no frame or audio clip is written to disk.
 
+Each report carries a **Beschreibung** (what happened, who did what), the
+**Personen** in the window, each with a short description and five 0–5
+ratings (kollaborativ, relevanz, verantwortungsvoll, menschlich, gefahr), the
+**Szene** rated 0–10 for relevanz, eskalation and gefahr, a **Prognose** of the
+three most likely developments with a percentage each, most likely first, and
+an **Empfehlung**. The Empfehlung is written only when the scene's eskalation
+or gefahr is above 6 (`report.SCHWELLE`). Orest applies that rule itself, not
+the model.
+
+Faces are tracked on every run, and person names come from that tracking. With
+`--cast data/cast`, enrolled people are recognised by name; everyone else gets
+a guessed name such as `Vielleicht: Jakob`. Each name is drawn above its face
+in the frames the model sees, and the model may only use those names, or
+`Unbekannt`. The NDI picture sent to TouchDesigner stays unmarked.
+
+### The operator page
+
+`src/interface/` serves the operator page on the loopback interface:
+
+    uv run orest-ui
+    uv run orest-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
+
+Open http://127.0.0.1:9680/. **Start live SITREP** opens a new tab, starts the
+run and shows the camera with the current report beneath it. The tab's
+**Stoppen** button releases the camera. Closing the tab does not stop the run.
+Reopening the page rejoins it.
+
+`orest-ui` takes the same camera, microphone, window, `--cast`, `--send-td`
+and `--send-ndi` options as `orest-sitrep`, and applies them to every run
+started from the page. Devices are resolved when a run starts, so a device
+error appears on the page. Only one run can hold the camera at a time.
+Overrides: `OREST_UI_HOST`, `OREST_UI_PORT`.
+
+Without a physical camera, OBS's virtual camera works as a source: a Media
+Source playing a recording, then **Start Virtual Camera**, then
+`--video "OBS Virtual Camera"`. OBS sends no audio this way, so `gesagt` stays
+empty.
+
 ### Sending the live SITREP to TouchDesigner
 
 Two channels, turned on separately — pixels and messages travel differently
@@ -81,27 +119,35 @@ In TouchDesigner, an **NDI In TOP** receives the picture — the source is named
 10000** receives the text, on the same port search results already use; the
 addresses are namespaced so one DAT can route both:
 
-    /orest/sitrep/begin  <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
-                         <ton_s> <latenz_s> <personen> <ereignisse>
-    /orest/sitrep/lage   <id> <lage> <prognose> <empfehlung> <vertrauen>
-    /orest/sitrep/gesagt <id> <gesagt>
-    /orest/sitrep/person <id> <zeile> <kennung> <merkmale> <taetigkeit>
-                         <verantwortungsvoll> <menschlich> <gefahr> <kollaborativ>
-    /orest/sitrep/ereignis <id> <zeile> <text>
-    /orest/sitrep/end    <id>
+    /orest/sitrep/begin         <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
+                                <ton_s> <latenz_s> <personen> <prognosen>
+    /orest/sitrep/beschreibung  <id> <beschreibung>
+    /orest/sitrep/gesagt        <id> <gesagt>
+    /orest/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
+                                <kollaborativ> <relevanz> <verantwortungsvoll>
+                                <menschlich> <gefahr>
+    /orest/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
+    /orest/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
+    /orest/sitrep/empfehlung    <id> <einschreiten> <massnahme>
+    /orest/sitrep/end           <id>
 
-With `--cast`, a second and faster stream reports who is in the room, about
-twice a second, framed by a rising `tick`:
+A second and faster stream reports who is in the room, about twice a second,
+framed by a rising `tick`:
 
     /orest/presence/begin  <tick> <zeit> <anwesend>
     /orest/presence/person <tick> <zeile> <label> <name> <vermutet>
                            <aehnlichkeit> <sichtungen> <seit> <dauer_s>
     /orest/presence/end    <tick>
 
-`name` is empty and `vermutet` is 1 when the cast gallery did not recognise the
-person, so a guess can be set apart from a recognition. The roster and the
-report are two separate readings of the room: a roster `label` does not
-correspond to a report `kennung`, and the two tables must not be joined.
+In the roster, `name` is empty and `vermutet` is 1 when the cast gallery did
+not recognise the person, so a guess can be set apart from a recognition. In a
+report, `vermutet` is 1 for a guessed name and for `Unbekannt`. A report `name`
+is always a roster `label` from the report's window, or `Unbekannt`.
+Forecasts arrive most likely first. `einschreiten` is 1 when the scene's
+`eskalation` or `gefahr` is above 6; `massnahme` is empty otherwise.
+
+The TouchDesigner side is described in
+`TouchDesigner/2026-09-25_touchdesigner_setup.md`.
 
 Host and port come from `OREST_TD_HOST` and `OREST_TD_PORT`, shared with
 `orest-search`. Only one process can hold port 10000, so a second TouchDesigner

@@ -39,6 +39,7 @@ import threading
 import time
 import wave
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -184,13 +185,17 @@ def encode_wav(samples, samplerate: int) -> bytes:
 
 
 def windows(stream: VideoStream, audio: devices.AudioDevice, *,
-            interval: float, window: float):
+            interval: float, window: float,
+            annotate: Callable[[np.ndarray], np.ndarray] | None = None):
     """Sample an open camera and the microphone, one Window per interval.
 
     The stream is read, never opened or closed: its owner does that. This is
     what lets the presence tracker and the TouchDesigner feed read the same
     camera as the SITREP, which DirectShow would otherwise forbid by refusing
     a second process the device.
+
+    `annotate` marks each sampled frame before it is encoded, which is how the
+    names of the people in it reach the model (annotate.py).
 
     Yields indefinitely; the caller decides how long a session runs.
     """
@@ -214,7 +219,8 @@ def windows(stream: VideoStream, audio: devices.AudioDevice, *,
             if now >= deadline:
                 break
             if now >= next_sample:
-                frames.append(encode_jpeg(stream.latest()))
+                frame = stream.latest()
+                frames.append(encode_jpeg(annotate(frame) if annotate else frame))
                 next_sample += interval
                 continue
             time.sleep(min(next_sample, deadline) - now)

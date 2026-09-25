@@ -22,7 +22,7 @@ import textwrap
 from . import cli, devices, report, session
 
 # Label column width, sized to the longest field name.
-_LABEL = 10
+_LABEL = 12
 
 _RULE = "─"
 
@@ -91,6 +91,15 @@ def _gefahr_colour(level: int) -> str:
     return "dim"
 
 
+def _szene_colour(level: int) -> str:
+    """Red once a scene rating calls for intervention, amber on the way there."""
+    if level > report.SCHWELLE:
+        return "red"
+    if level >= report.SCHWELLE - 2:
+        return "amber"
+    return "dim"
+
+
 def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
     """Render a SITREP as a console block."""
     value_width = width - _LABEL - 2
@@ -107,33 +116,44 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
         _paint(_RULE * width, "dim", use_colour),
     ]
 
-    lines += _field("LAGE", _wrap(bericht.lage, value_width))
+    lines += _field("BESCHREIBUNG", _wrap(bericht.beschreibung, value_width))
 
     personen = []
     for person in bericht.personen:
-        personen.append(_paint(person.kennung, "bold", use_colour))
-        personen += [f"  {line}" for line in _wrap(person.taetigkeit, value_width - 2)]
-        if person.merkmale:
-            personen += [_paint(f"  {line}", "dim", use_colour)
-                         for line in _wrap(person.merkmale, value_width - 2)]
+        # A recognised name stands alone; a guessed one is marked as such.
+        name = _paint(person.name, "bold", use_colour)
+        if person.name != report.UNBEKANNT and not document.erkannt(person.name):
+            name += _paint(" (vermutet)", "dim", use_colour)
+        personen.append(name)
+        personen += [f"  {line}" for line in _wrap(person.beschreibung, value_width - 2)]
         personen += [f"  {line}" for line in _bewertungen(person, value_width - 2, use_colour)]
     lines += _field("PERSONEN", personen)
 
-    ereignisse = []
-    for ereignis in bericht.ereignisse:
-        wrapped = _wrap(ereignis, value_width - 2)
-        ereignisse.append(f"· {wrapped[0]}")
-        ereignisse += [f"  {line}" for line in wrapped[1:]]
-    lines += _field("EREIGNIS", ereignisse)
+    szene = bericht.szene
+    lines += _field("SZENE", [" · ".join([
+        _paint(f"relevanz {szene.relevanz}", "dim", use_colour),
+        _paint(f"eskalation {szene.eskalation}", _szene_colour(szene.eskalation), use_colour),
+        _paint(f"gefahr {szene.gefahr}", _szene_colour(szene.gefahr), use_colour),
+    ])])
 
     if document.gesagt:
         lines += _field("GESAGT", _wrap(f"“{document.gesagt}”", value_width))
-    lines += _field("PROGNOSE", _wrap(bericht.prognose, value_width))
-    lines += _field("EMPFEHLUNG", _wrap(bericht.empfehlung, value_width))
+
+    prognose = []
+    for verlauf in bericht.prognose:
+        wrapped = _wrap(verlauf.verlauf, value_width - 6)
+        prognose.append(f"{verlauf.wahrscheinlichkeit:>3} % {wrapped[0] if wrapped else ''}")
+        prognose += [f"      {line}" for line in wrapped[1:]]
+    lines += _field("PROGNOSE", prognose)
+
+    if bericht.einschreiten:
+        lines += _field("EMPFEHLUNG", [_paint("EINSCHREITEN", "red", use_colour)]
+                        + _wrap(bericht.empfehlung, value_width))
+    else:
+        lines += _field("EMPFEHLUNG", [_paint("Kein Einschreiten", "dim", use_colour)])
 
     footer = (f" {quelle.bilder} Bilder · {quelle.ton_s}s Ton · "
-              f"Latenz {document.latenz_s}s · "
-              f"Vertrauen {bericht.vertrauen}/5")
+              f"Latenz {document.latenz_s}s")
     lines.append(_paint(_RULE * width, "dim", use_colour))
     lines.append(_paint(footer, "dim", use_colour))
     return "\n".join(lines)
@@ -146,7 +166,8 @@ def main(argv=None) -> int:
     )
     parser.add_argument("--model", default=report.MODEL)
     parser.add_argument("--cast", type=pathlib.Path,
-                        help="folder of enrolment images; names the people on stage")
+                        help="folder of enrolment images; recognises the cast by "
+                             "name, everyone else is given a guessed name")
     parser.add_argument("--json", action="store_true",
                         help="print raw report JSON instead of the console block")
     parser.add_argument("--no-colour", action="store_true", help="plain output")

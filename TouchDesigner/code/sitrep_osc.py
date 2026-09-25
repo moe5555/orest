@@ -10,26 +10,32 @@ table never shows half of one report and half of the previous. The report id
 and the roster tick tell one reading's rows from the next.
 
 Tables written (sibling DATs of this module):
-	sitrep_meta        one row: time frame, source, latency, situation, transcript
+	sitrep_meta        one row: time frame, source, latency, description,
+	                   transcript, scene ratings, recommendation
 	sitrep_personen    one row per person in the report
-	sitrep_ereignisse  one row per observed event
+	sitrep_prognose    the three forecasts, most likely first
 	sitrep_text        the report as plain text, for a Text TOP
 	presence_meta      one row: tick, time, number present
 	presence           one row per person the tracker sees
 
-Roster labels and report kennungen are independent readings of the room and
-do not correspond to one another; the two tables are not joined.
+Report names are drawn from the presence roster of the report's window, so a
+name in sitrep_personen is a label in presence. The model reads which person
+carries which name from tags drawn over the faces in its frames.
 """
 
 META_HEADER = ['id', 'nummer', 'beginn', 'ende', 'dauer_s', 'bilder', 'ton_s',
-			   'latenz_s', 'personen', 'ereignisse',
-			   'lage', 'prognose', 'empfehlung', 'vertrauen', 'gesagt']
+			   'latenz_s', 'personen', 'prognosen',
+			   'beschreibung', 'gesagt', 'relevanz', 'eskalation', 'gefahr',
+			   'einschreiten', 'massnahme']
 
 # Rating columns follow report.BEWERTUNGEN in Orest, in the same order.
-PERSON_HEADER = ['zeile', 'kennung', 'merkmale', 'taetigkeit',
-				 'verantwortungsvoll', 'menschlich', 'gefahr', 'kollaborativ']
+PERSON_HEADER = ['zeile', 'name', 'vermutet', 'beschreibung',
+				 'kollaborativ', 'relevanz', 'verantwortungsvoll', 'menschlich', 'gefahr']
 
-EREIGNIS_HEADER = ['zeile', 'text']
+PROGNOSE_HEADER = ['rang', 'wahrscheinlichkeit', 'verlauf']
+
+# Name Orest gives a person in frame whom face tracking did not follow.
+UNBEKANNT = 'Unbekannt'
 
 PRESENCE_META_HEADER = ['tick', 'zeit', 'anwesend']
 
@@ -63,8 +69,9 @@ def _sitrep(kind, args):
 		# Only the newest report is of interest; anything older still pending
 		# lost its end message and is dropped.
 		_reports.clear()
-		_reports[args[0]] = {'begin': args[1:], 'lage': ['', '', '', ''],
-							 'gesagt': '', 'personen': [], 'ereignisse': []}
+		_reports[args[0]] = {'begin': args[1:], 'beschreibung': '', 'gesagt': '',
+							 'personen': [], 'szene': [0, 0, 0], 'prognose': [],
+							 'empfehlung': [0, '']}
 		return
 
 	report = _reports.get(args[0])
@@ -73,23 +80,28 @@ def _sitrep(kind, args):
 		# mid-report. The next report arrives within one window.
 		return
 
-	if kind == 'lage':
-		report['lage'] = args[1:]
+	if kind == 'beschreibung':
+		report['beschreibung'] = args[1]
 	elif kind == 'gesagt':
 		report['gesagt'] = args[1]
 	elif kind == 'person':
 		report['personen'].append(args[1:])
-	elif kind == 'ereignis':
-		report['ereignisse'].append(args[1:])
+	elif kind == 'szene':
+		report['szene'] = args[1:]
+	elif kind == 'prognose':
+		report['prognose'].append(args[1:])
+	elif kind == 'empfehlung':
+		report['empfehlung'] = args[1:]
 	elif kind == 'end':
 		_write_report(args[0], _reports.pop(args[0]))
 
 
 def _write_report(report_id, report):
-	meta = [report_id, *report['begin'], *report['lage'], report['gesagt']]
+	meta = [report_id, *report['begin'], report['beschreibung'], report['gesagt'],
+			*report['szene'], *report['empfehlung']]
 	_fill('sitrep_meta', META_HEADER, [meta])
 	_fill('sitrep_personen', PERSON_HEADER, report['personen'])
-	_fill('sitrep_ereignisse', EREIGNIS_HEADER, report['ereignisse'])
+	_fill('sitrep_prognose', PROGNOSE_HEADER, report['prognose'])
 
 	text = op('sitrep_text')
 	if text is not None:
@@ -100,22 +112,26 @@ def _as_text(report):
 	"""The report laid out for reading beneath the video."""
 	nummer, beginn, ende = report['begin'][0], report['begin'][1], report['begin'][2]
 	latenz = report['begin'][6]
-	lage, prognose, empfehlung, vertrauen = report['lage']
 
-	lines = ['SITREP {}   {} - {}   Latenz {:.1f} s   Vertrauen {}/5'.format(
-				 nummer, beginn[-8:], ende[-8:], float(latenz), vertrauen),
+	lines = ['SITREP {}   {} - {}   Latenz {:.1f} s'.format(
+				 nummer, beginn[-8:], ende[-8:], float(latenz)),
 			 '',
-			 'LAGE        {}'.format(lage)]
-	for person in report['personen']:
-		zeile, kennung, merkmale, taetigkeit, *ratings = person
-		lines.append('{:<11} {} - {}   [{}]'.format(
-			kennung, merkmale, taetigkeit, ' '.join(str(r) for r in ratings)))
-	for zeile, ereignis in report['ereignisse']:
-		lines.append('EREIGNIS    {}'.format(ereignis))
+			 'BESCHREIBUNG  {}'.format(report['beschreibung'])]
+	for zeile, name, vermutet, beschreibung, *ratings in report['personen']:
+		if int(vermutet) and name != UNBEKANNT:
+			name = '{} (vermutet)'.format(name)
+		lines.append('PERSON        {} - {}   [{}]'.format(
+			name, beschreibung, ' '.join(str(r) for r in ratings)))
+	relevanz, eskalation, gefahr = report['szene']
+	lines.append('SZENE         relevanz {} . eskalation {} . gefahr {}'.format(
+		relevanz, eskalation, gefahr))
 	if report['gesagt']:
-		lines.append('GESAGT      {}'.format(report['gesagt']))
-	lines += ['PROGNOSE    {}'.format(prognose),
-			  'EMPFEHLUNG  {}'.format(empfehlung)]
+		lines.append('GESAGT        {}'.format(report['gesagt']))
+	for rang, wahrscheinlichkeit, verlauf in report['prognose']:
+		lines.append('PROGNOSE {:>3} % {}'.format(wahrscheinlichkeit, verlauf))
+	einschreiten, massnahme = report['empfehlung']
+	lines.append('EMPFEHLUNG    {}'.format(
+		'EINSCHREITEN: {}'.format(massnahme) if int(einschreiten) else 'Kein Einschreiten'))
 	return '\n'.join(lines)
 
 

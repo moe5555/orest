@@ -8,18 +8,24 @@ In DAT receives both and routes on the prefix.
 A report is framed by a begin and an end, with one message per table row
 between them:
 
-    /orest/sitrep/begin     <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
-                            <ton_s> <latenz_s> <personen> <ereignisse>
-    /orest/sitrep/lage      <id> <lage> <prognose> <empfehlung> <vertrauen>
-    /orest/sitrep/gesagt    <id> <gesagt>
-    /orest/sitrep/person    <id> <zeile> <kennung> <merkmale> <taetigkeit>
-                            <verantwortungsvoll> <menschlich> <gefahr> <kollaborativ>
-    /orest/sitrep/ereignis  <id> <zeile> <text>
-    /orest/sitrep/end       <id>
+    /orest/sitrep/begin         <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
+                                <ton_s> <latenz_s> <personen> <prognosen>
+    /orest/sitrep/beschreibung  <id> <beschreibung>
+    /orest/sitrep/gesagt        <id> <gesagt>
+    /orest/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
+                                <kollaborativ> <relevanz> <verantwortungsvoll>
+                                <menschlich> <gefahr>
+    /orest/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
+    /orest/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
+    /orest/sitrep/empfehlung    <id> <einschreiten> <massnahme>
+    /orest/sitrep/end           <id>
 
 `begin` carries the row counts so TouchDesigner can size its tables before the
 rows arrive, as `/orest/results/begin` does for a search. The report id tells
-one report's rows from the previous report's.
+one report's rows from the previous report's. Forecasts arrive most likely
+first, `rang` 1 being the most likely. `vermutet` and `einschreiten` are 0 or
+1; `einschreiten` is 1 when the scene's `eskalation` or `gefahr` exceeds
+report.SCHWELLE, and `massnahme` is empty otherwise.
 
 The roster is a second, faster stream. It is not folded into the report
 because the two move at very different rates: a report arrives once a window,
@@ -47,10 +53,12 @@ from osc import Message, Sender  # noqa: F401  (Sender is re-exported)
 from . import presence, report
 
 SITREP_BEGIN = "/orest/sitrep/begin"
-SITREP_LAGE = "/orest/sitrep/lage"
+SITREP_BESCHREIBUNG = "/orest/sitrep/beschreibung"
 SITREP_GESAGT = "/orest/sitrep/gesagt"
 SITREP_PERSON = "/orest/sitrep/person"
-SITREP_EREIGNIS = "/orest/sitrep/ereignis"
+SITREP_SZENE = "/orest/sitrep/szene"
+SITREP_PROGNOSE = "/orest/sitrep/prognose"
+SITREP_EMPFEHLUNG = "/orest/sitrep/empfehlung"
 SITREP_END = "/orest/sitrep/end"
 
 PRESENCE_BEGIN = "/orest/presence/begin"
@@ -81,9 +89,8 @@ def messages(document: report.Sitrep, nummer: int,
     built = [
         (SITREP_BEGIN, [sitrep_id, nummer, _clock(zeit.beginn), _clock(zeit.ende),
                         zeit.dauer_s, quelle.bilder, quelle.ton_s, document.latenz_s,
-                        len(bericht.personen), len(bericht.ereignisse)]),
-        (SITREP_LAGE, [sitrep_id, bericht.lage, bericht.prognose,
-                       bericht.empfehlung, bericht.vertrauen]),
+                        len(bericht.personen), len(bericht.prognose)]),
+        (SITREP_BESCHREIBUNG, [sitrep_id, bericht.beschreibung]),
         # Sent even when nothing was said, so the table keeps its shape.
         (SITREP_GESAGT, [sitrep_id, document.gesagt]),
     ]
@@ -93,12 +100,20 @@ def messages(document: report.Sitrep, nummer: int,
         # a category cannot leave TouchDesigner reading a column that no longer
         # exists -- the reason report.py derives them in the first place.
         ratings = [getattr(person, name) for name in report.BEWERTUNGEN]
-        built.append((SITREP_PERSON, [sitrep_id, zeile, person.kennung,
-                                      person.merkmale, person.taetigkeit, *ratings]))
+        built.append((SITREP_PERSON, [sitrep_id, zeile, person.name,
+                                      int(not document.erkannt(person.name)),
+                                      person.beschreibung, *ratings]))
 
-    for zeile, ereignis in enumerate(bericht.ereignisse, start=1):
-        built.append((SITREP_EREIGNIS, [sitrep_id, zeile, ereignis]))
+    szene = bericht.szene
+    built.append((SITREP_SZENE, [sitrep_id, szene.relevanz, szene.eskalation,
+                                 szene.gefahr]))
 
+    for rang, verlauf in enumerate(bericht.prognose, start=1):
+        built.append((SITREP_PROGNOSE, [sitrep_id, rang, verlauf.wahrscheinlichkeit,
+                                        verlauf.verlauf]))
+
+    built.append((SITREP_EMPFEHLUNG, [sitrep_id, int(bericht.einschreiten),
+                                      bericht.empfehlung]))
     built.append((SITREP_END, [sitrep_id]))
     return built
 

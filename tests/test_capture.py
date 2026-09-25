@@ -4,6 +4,7 @@ import io
 import time
 import wave
 
+import cv2
 import numpy as np
 import pytest
 
@@ -80,6 +81,29 @@ def test_sampling_loop_yields_the_predicted_frame_count(sources):
     assert len(first.frames) == capture.frames_per_window(1.0, 0.3) == 4
     assert first.seconds == pytest.approx(1.0, abs=0.2)
     assert first.index == 0
+
+
+def test_every_sampled_frame_is_annotated_before_encoding(sources):
+    """The model's frames carry the names; an unmarked frame would leave it
+    guessing who is who."""
+    video, audio = sources
+    marked = []
+
+    def annotate(frame):
+        marked.append(frame.shape)
+        return np.full_like(frame, 255)
+
+    stream = capture.VideoStream(video)
+    windows = capture.windows(stream, audio, interval=0.3, window=1.0, annotate=annotate)
+    try:
+        first = next(windows)
+    finally:
+        windows.close()
+        stream.close()
+
+    assert len(marked) == len(first.frames)
+    decoded = cv2.imdecode(np.frombuffer(first.frames[0], np.uint8), cv2.IMREAD_COLOR)
+    assert decoded.mean() > 250
 
 
 def test_windows_are_numbered_in_order(sources):

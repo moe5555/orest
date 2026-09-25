@@ -6,6 +6,238 @@ referenced below.
 
 ---
 
+## 2026-09-25 — Review of the name-tagging change; a failed naming pass no longer ends the session
+
+Review of the entry below. Python, the OSC wire format, `sitrep_osc.py`, the
+README and the TouchDesigner setup note agree. The grammar schema leaves out
+the computed `einschreiten`. `uv.lock` matches `pyproject.toml`.
+
+**One change.** The naming pass now runs inside the SITREP sampling loop
+(`capture.windows` → `Session._name_faces`), so an error in the face models,
+e.g. a CUDA out-of-memory error with Ollama holding the GPU, would have ended
+the session. `Session._name_faces` now sends that frame unmarked and prints the
+error to stderr. This follows `report.sitreps`, which skips a bad window
+rather than ending the run. The Realtime-SITREP puts low latency ahead of
+accuracy (`knowledge/components/02_processing.md`). 272 tests pass.
+
+**Open, for Moe. Not changed, since each one changes how the tracker behaves:**
+- **A tag can show a name the grammar doesn't allow.** Frames are tagged when
+  they are sampled, but the name list comes from the roster when the window
+  ends. If a track is recognised partway through the window (`Vielleicht:
+  Jakob` becomes `Anna`), or `_adopt` gives it a stronger name, earlier frames
+  show a label that isn't in the enum.
+- **Two faces in one frame can both be tagged with one cast name.**
+  `gallery.match` isn't one-to-one. If two faces both pass the threshold for
+  Anna, both tracks take the name, `_merge_by_name` merges them into one
+  track, and the model sees "Anna" on two people.
+- **An error in the tracker's own thread stops it with no message.** This was
+  already true. It matters more now that the tracker runs on every session:
+  the roster sent to TouchDesigner would stop updating, and nothing would say
+  why.
+
+---
+
+## 2026-09-25 — Operator page: the live SITREP in the browser (VSH-ARLT-5090)
+
+The live SITREP is displayed in a browser instead of TouchDesigner. Laid out
+with a Text TOP, the report was unreadable as a display. Moe decided that
+TouchDesigner keeps receiving the report as OSC data, but no longer lays it
+out. This completes step 7 of the Realtime-SITREP in
+`knowledge/components/02_processing.md` ("video output ... and SITREP text
+beneath it"). It also starts the localhost interface of the same file, as
+planned in `progress_tracker.md` (Smart Search, phase 5: "FastAPI plus plain
+HTML").
+
+    uv run orest-ui --video "OBS Virtual Camera" --model gemma4:26b
+
+- **Operator page (`/`)**: a single button, **Start live SITREP**, which opens
+  `/sitrep` in a new tab.
+- **SITREP page (`/sitrep`)**: starts the run on opening and shows the camera
+  feed with the report beneath it. The report shows the Empfehlung as a banner
+  that turns red above the threshold, the Beschreibung and transcript, the
+  three scene ratings as bars with the threshold marked, a card per person
+  (guessed names marked) and the three forecasts with probability bars. The
+  last report stays on screen after a stop. Model text is set with
+  `textContent` only, so a reply cannot inject markup.
+- **Transport**: the camera goes to the browser as MJPEG, which an `<img>`
+  plays with no script. Reports arrive as server-sent events, which reconnect
+  on their own.
+- **`interface.live.LiveSitrep`** holds the single run on its own thread. It
+  opens the session on request, so device errors show on the page rather than
+  in the terminal.
+- **Binding**: `orest-ui` binds 127.0.0.1:9680, for the same reason as the
+  WISE server: the page shows footage of identifiable people.
+- **New dependencies**: `fastapi` 0.141.1 and `uvicorn` 0.54.0.
+
+**A COM fix was needed.** Resolving the camera from the run's thread failed
+with `CoInitialize has not been called`. `pygrabber` enumerates cameras through
+DirectShow, a COM API, and `comtypes` initialises COM only on the main thread.
+`devices.list_video_devices()` now initialises and releases COM around the
+enumeration, which works on any thread.
+
+**Verified end to end** with OBS Virtual Camera playing a test recording and
+`gemma4:26b`:
+- A run started through the API and reached `running`. The tracker named two
+  people, and the report arrived with every field.
+- The video endpoint delivered 44 JPEG parts in 3 s (about 15 fps).
+- Headless Edge rendered both pages. It doesn't paint MJPEG streams, so the
+  video area was black in its screenshot only.
+- 284 tests pass. The feed generator is tested directly, because Starlette's
+  test client buffers whole responses and never returns from an open-ended
+  stream.
+
+**Open:**
+- **Closing the tab doesn't stop the run.** A second viewer, or a later
+  TouchDesigner Web Render TOP, would otherwise stop it for everyone. The
+  camera stays held until Stoppen or until the server exits.
+- **Stopping takes up to one window.** The camera is released at once, but
+  the run's thread finishes the generation it is in before another run can
+  start.
+- **OBS's virtual camera delivers 640×480** unless its output resolution is
+  raised. At that size the faces in a stage wide shot are small for
+  recognition.
+- **The alarm state is untested with the real model.** No test scene has
+  crossed the threshold.
+
+---
+
+## 2026-09-25 — Names drawn onto the model's frames; scene ratings decide intervention (VSH-ARLT-5090)
+
+Two changes asked for by Moe, following the entry below.
+
+**The model reads who is who.** The previous entry left the model with a
+list of names and no positions, so with several people in frame a name, and
+that person's `gefahr`, could land on the wrong person. Each frame sampled for
+the model now carries a tag with the tracker's name above every face:
+
+- `PresenceTracker.name_faces(frame)` runs a pass over that exact frame and
+  returns each face's box with its track's label. Running the pass on the
+  sampled frame, rather than reusing the tracker's last boxes, keeps every
+  tag on its face even when people have moved. Tracks now keep the box of
+  their latest sighting.
+- Passes are serialised by a lock. The tracker's own thread and the sampling
+  loop both run them, and two interleaved passes could each start a track for
+  the same new face, putting one person on the roster twice.
+- `src/sitrep/annotate.py` draws a yellow box and a white-on-black name tag,
+  using Pillow (12.3.0, new dependency). OpenCV's fonts cover ASCII only, and
+  a cast name with an umlaut has to appear on the frame exactly as in the
+  name list the grammar enforces. Only the model's copy is marked; the NDI
+  feed stays clean.
+- `capture.windows()` takes an `annotate` hook, applied to each frame before
+  encoding. The session passes the tracker's names through it.
+
+Verified on three frames of stage footage with the real tracker and
+`gemma4:26b`. Three faces were tagged (`Vielleicht: Sophie`,
+`Vielleicht: Matthias`, `Vielleicht: Hedda`), and the report put each name on
+the right person: Sophie standing with the glass, Matthias seated and
+gesturing, Hedda in the background. A naming pass costs ~150 ms per sampled
+frame; the first costs ~10 s, loading the face models. Generation took 5.2 s.
+
+**Scene ratings decide intervention.** The report has a new `szene` with
+`relevanz`, `eskalation` and `gefahr`, 0–10 from low to high. It is separate
+from the 0–5 ratings per person. The Empfehlung is written only when
+`eskalation` or `gefahr` is above 6 (`report.SCHWELLE`):
+
+- `einschreiten` is a computed field of `Lagebericht`, derived from the scene
+  ratings. It is absent from the schema the model is given, so the model has
+  no field in which to decide it.
+- The model is told to write a measure only above the threshold. Any measure
+  it writes below the threshold is discarded.
+- `empfehlung` is now the measure as a string. The `Empfehlung` model is gone.
+
+OSC: a new `/orest/sitrep/szene <id> <relevanz> <eskalation> <gefahr>`.
+`/orest/sitrep/empfehlung` keeps its shape, with `einschreiten` now derived.
+`sitrep_meta` in TouchDesigner gains the three scene columns. 271 tests pass.
+
+**Open:**
+- **The threshold path is untested live.** The test scene rated eskalation 1
+  and gefahr 0. Whether the model writes a usable measure when a scene does
+  cross 6 has only been checked in unit tests, which don't run the model.
+- **An empty measure above the threshold is possible.** The grammar can't make
+  a field required only above 6. If the model leaves it empty, the report
+  shows EINSCHREITEN with no action.
+- **`menschlich` came back 0 for all three people** in the test run. It may
+  be misread as "is not human-like". The category may need a description in
+  the prompt, as `relevanz` has.
+
+---
+
+## 2026-09-25 — SITREP fields redefined; the roster names the people in the report (VSH-ARLT-5090)
+
+**Machine:** `VSH-ARLT-5090`, the production workstation: RTX 5090 (32 GB),
+i9-14900KF, 128 GB RAM (`hardware_issues.md`, reference machines).
+
+The report's fields were set by Moe. They refine "write SITREP report" in
+`knowledge/components/02_processing.md` (Realtime-SITREP) and replace the
+`Lagebericht` of 2026-09-09:
+
+| Field | Content |
+|---|---|
+| `beschreibung` | what happened, who did what, briefly |
+| `personen` | `name`, `beschreibung` (how the person comes across), and 0–5 ratings `kollaborativ relevanz verantwortungsvoll menschlich gefahr` |
+| `prognose` | exactly three developments, each with a probability in percent, most likely first |
+| `empfehlung` | `einschreiten` (bool) and `massnahme`; intervening is instructed to be the exception |
+
+`lage`, `ereignisse`, `vertrauen`, `kennung`, `merkmale` and `taetigkeit` are
+gone. `relevanz` is new. `vertrauen` never tracked accuracy
+(`claude_concerns.md`, smaller items).
+
+**Names come from the presence roster.** This is the first open increment under
+"Cast recognition" in `progress_tracker.md`. `Sitrep` carries the tracker's
+roster for its window as a measured field, `anwesend`. The prompt lists it,
+and the schema sent to Ollama holds `Person.name` to that list plus
+`Unbekannt`. The model therefore picks names it was given and cannot invent
+one. So that every person carries a name, **the presence tracker now runs on
+every session**, not only with `--cast`: without a cast, every name is a
+guess (`Vielleicht: Jakob`).
+
+**The grammar enforces both constraints.** Checked against `gemma4:26b`: asked
+to name two people "Anna and Bert", it used only the enumerated names; asked
+for one forecast, it returned exactly three. The three forecasts are sorted by
+probability in `report.py`, so renderers can take the first one as the most
+likely without relying on the model's order. A declined intervention clears
+`massnahme`, since models phrase "no action" as an action.
+
+**OSC wire format changed** (`src/sitrep/td.py`): `/orest/sitrep/lage` and
+`/ereignis` are replaced by `/beschreibung`, `/prognose <rang>
+<wahrscheinlichkeit> <verlauf>` and `/empfehlung <einschreiten> <massnahme>`.
+The person row is `<zeile> <name> <vermutet> <beschreibung>` plus the five
+ratings. `TouchDesigner/code/sitrep_osc.py` and
+`TouchDesigner/2026-09-25_touchdesigner_setup.md` follow: `sitrep_prognose`
+replaces `sitrep_ereignisse`. The note of 2026-09-24 that the report and roster
+tables must not be joined no longer applies: a report name is a roster label.
+
+**First generation on the production machine.** `gemma4:26b` on three frames
+of stage footage with five people in shot, with the new schema: 3.7 s and
+4.2 s warm (14.3 s including the model load). The description matched the
+frame, including clothing, a glass held and a bearded man with glasses
+gesturing. That is the kind of detail e4b invented on the laptop. Three runs,
+not a benchmark (`hardware_issues.md`, H-1).
+
+`NUM_PREDICT` rose from 700 to 1000 for the three forecasts. 251 tests pass,
+none needing a camera, a model or TouchDesigner.
+
+**Open:**
+- **Names are assigned by the model, not measured.** It receives the roster
+  without positions, so with several people in frame a name, and that
+  person's `gefahr`, can land on the wrong person. In the test run it placed
+  the one recognised name on the right man, but it had no way to know.
+  *Resolved in the entry above: names are drawn onto the frames.*
+- **The intervention threshold is a placeholder.** The prompt says to
+  intervene only "wenn die Lage ohne Eingriff eskaliert". What counts as a
+  reason to intervene is a dramaturgical decision for Moe. *Resolved in the
+  entry above: scene ratings above 6.*
+- **Audience members are reported as people.** Background spectators appear
+  in `personen` with ratings. Whether they belong in the report is undecided.
+- **Probabilities are not required to sum to 100.** The prompt asks for at
+  most 100 in total, and nothing checks it.
+- The camera on this machine delivered a completely black frame
+  (`NDI Webcam Video 1`, no NDI source feeding it), which produced empty
+  reports at 0/5 confidence. It is not a fault in Orest, but it is
+  indistinguishable from an empty stage in the report.
+
+---
+
 ## 2026-09-24 — The live SITREP reaches TouchDesigner: NDI and OSC (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, TouchDesigner
