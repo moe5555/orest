@@ -180,10 +180,15 @@ def resolve(video_spec=None, audio_spec=None, hostapi=None) -> tuple[VideoDevice
     return resolve_video_device(video_spec), resolve_audio_device(audio_spec, hostapi)
 
 
-def describe(video: VideoDevice, audio: AudioDevice) -> str:
-    """One line per selected source, for an entry point to print at startup."""
-    return (f"video:  [{video.index}] {video.name}\n"
-            f"audio:  [{audio.index}] {audio.name} ({audio.hostapi})")
+def describe(video: VideoDevice, audio) -> str:
+    """One line per selected source, for an entry point to print at startup.
+
+    `audio` is an AudioDevice, or another sound source, such as an NDI stream,
+    that names itself.
+    """
+    heard = (f"[{audio.index}] {audio.name} ({audio.hostapi})"
+             if isinstance(audio, AudioDevice) else audio.name)
+    return f"video:  [{video.index}] {video.name}\naudio:  {heard}"
 
 
 def open_video(device: VideoDevice, width=None, height=None) -> cv2.VideoCapture:

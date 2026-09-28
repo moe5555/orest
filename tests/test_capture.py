@@ -101,9 +101,11 @@ def test_every_sampled_frame_is_annotated_before_encoding(sources):
         windows.close()
         stream.close()
 
-    assert len(marked) == len(first.frames)
-    decoded = cv2.imdecode(np.frombuffer(first.frames[0], np.uint8), cv2.IMREAD_COLOR)
-    assert decoded.mean() > 250
+    # Recording goes on after the first window, so more frames may be marked.
+    assert len(marked) >= len(first.frames)
+    for still in first.frames:
+        decoded = cv2.imdecode(np.frombuffer(still, np.uint8), cv2.IMREAD_COLOR)
+        assert decoded.mean() > 250
 
 
 def test_windows_are_numbered_in_order(sources):
@@ -165,26 +167,74 @@ def test_the_sampling_loop_is_the_same_whoever_owns_the_camera(sources):
     assert by_windows.index == by_run.index == 0
 
 
-def test_audio_ring_keeps_the_most_recent_samples():
-    ring = capture.AudioRing(samplerate=10, seconds=1.0)
-    for start in (0, 6, 12):
-        ring.add(np.arange(start, start + 6, dtype=np.float32))
-
-    data = ring.read()
-    assert len(data) == 10
-    assert data[-1] == 17
-    assert data[0] == 8
+def test_the_audio_buffer_hands_over_everything_since_the_last_take():
+    buffer = capture.AudioBuffer()
+    for start in (0, 6):
+        buffer.add(np.arange(start, start + 6, dtype=np.float32))
+    assert buffer.take().tolist() == list(range(12))
+    assert len(buffer.take()) == 0
 
 
-def test_audio_ring_is_empty_before_any_input():
-    ring = capture.AudioRing(samplerate=10, seconds=1.0)
-    assert len(ring.read()) == 0
+def test_windows_that_waited_are_merged_whole_with_the_usual_frame_count():
+    at = capture.datetime(2026, 9, 28, 20, 0, 0)
+    waiting = [capture.Window(index, at + capture.timedelta(seconds=5 * index),
+                              at + capture.timedelta(seconds=5 * index + 5),
+                              [bytes([index, still]) for still in range(3)],
+                              capture.encode_wav(np.full(5 * 100, 0.1 * index), 100), 5.0)
+               for index in range(3)]
+    merged = capture.merge(waiting, frames=3)
+    assert merged.audio_seconds == pytest.approx(15.0)
+    assert merged.index == 2 and merged.started == waiting[0].started
+    assert merged.frames == [bytes([0, 0]), bytes([1, 1]), bytes([2, 2])]
 
 
-def test_audio_ring_holds_short_input_whole():
-    ring = capture.AudioRing(samplerate=10, seconds=1.0)
-    ring.add(np.arange(4, dtype=np.float32))
-    assert len(ring.read()) == 4
+def test_a_backlog_beyond_its_limit_drops_the_oldest_sound():
+    at = capture.datetime(2026, 9, 28, 20, 0, 0)
+    waiting = [capture.Window(index, at, at + capture.timedelta(seconds=10),
+                              [], capture.encode_wav(np.zeros(1000), 100), 10.0)
+               for index in range(3)]
+    assert capture.merge(waiting, frames=3, max_seconds=15).audio_seconds == pytest.approx(15.0)
+
+
+def test_earlier_sound_is_put_in_front_and_the_window_keeps_its_end():
+    at = capture.datetime(2026, 9, 28, 20, 0, 0)
+    window = capture.Window(0, at, at + capture.timedelta(seconds=1), [],
+                            capture.encode_wav(np.full(100, 0.5), 100), 1.0)
+    joined = capture.prepend(np.full(50, -0.5, dtype=np.float32), window)
+    samples, _ = capture.decode_wav(joined.audio)
+    assert joined.audio_seconds == pytest.approx(1.5) and joined.ended == window.ended
+    assert samples[0] < 0 < samples[-1]
+
+
+def test_recording_does_not_pause_while_a_window_is_being_reported(sources):
+    """A slow consumer gets the windows it missed, merged, rather than gaps."""
+    video, audio = sources
+    stream = capture.VideoStream(video)
+    recorder = capture.Recorder(stream, audio, interval=0.1, window=0.3).start()
+    try:
+        first = recorder.next()
+        time.sleep(1.0)                     # a report being made
+        caught_up = recorder.next()
+    finally:
+        recorder.close()
+        stream.close()
+    assert first.index == 0
+    assert caught_up.index >= 3
+    assert caught_up.seconds >= 0.9
+
+
+def test_closing_drops_everything_not_yet_handed_out(sources):
+    video, audio = sources
+    stream = capture.VideoStream(video)
+    recorder = capture.Recorder(stream, audio, interval=0.1, window=0.2).start()
+    try:
+        time.sleep(0.7)
+        recorder._buffer.add(np.zeros(10, dtype=np.float32))
+        recorder.close()
+        assert recorder.held == (0, 0)
+        assert list(recorder) == []
+    finally:
+        stream.close()
 
 
 def test_encode_wav_produces_a_readable_mono_clip():
@@ -215,3 +265,35 @@ def test_encode_jpeg_returns_jpeg_bytes():
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
     payload = capture.encode_jpeg(frame)
     assert payload[:2] == b"\xff\xd8"
+
+
+def test_a_window_can_take_its_sound_from_an_ndi_source(sources, monkeypatch):
+    """The NDI receiver fills the same buffer a microphone does."""
+    video, _ = sources
+    opened = []
+
+    class FakeReceiving:
+        def __init__(self, audio, add):
+            opened.append(audio)
+            self._add = add
+
+        def __enter__(self):
+            self._add(np.full(48000, 0.25, dtype=np.float32))
+            return self
+
+        def __exit__(self, *exception):
+            return False
+
+    monkeypatch.setattr(capture.ndi_audio, "Receiving", FakeReceiving)
+    audio = capture.ndi_audio.NdiAudio("HOST (OBS PGM)")
+    windows = capture.run(video, audio, interval=0.2, window=0.4)
+    try:
+        first = next(windows)
+    finally:
+        windows.close()
+
+    assert opened == [audio]
+    # All the sound the source delivered, at NDI's rate.
+    assert first.audio_seconds == pytest.approx(1.0)
+    with wave.open(io.BytesIO(first.audio)) as recorded:
+        assert recorded.getframerate() == 48000
