@@ -13,12 +13,15 @@ between them:
     /orest/sitrep/beschreibung  <id> <beschreibung>
     /orest/sitrep/gesagt        <id> <gesagt>
     /orest/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
-                                <kollaborativ> <relevanz> <verantwortungsvoll>
-                                <menschlich> <gefahr>
+                                <risiko> <menschlichkeit> <auffaelligkeit>
     /orest/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
     /orest/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
     /orest/sitrep/empfehlung    <id> <einschreiten> <massnahme>
     /orest/sitrep/end           <id>
+
+A person's ratings follow report.BEWERTUNGEN. `risiko` and `menschlichkeit`
+are measured by the action recogniser and are -1 when it read nothing of the
+person; `auffaelligkeit` is the model's.
 
 `begin` carries the row counts so TouchDesigner can size its tables before the
 rows arrive, as `/orest/results/begin` does for a search. The report id tells
@@ -65,6 +68,9 @@ PRESENCE_BEGIN = "/orest/presence/begin"
 PRESENCE_PERSON = "/orest/presence/person"
 PRESENCE_END = "/orest/presence/end"
 
+# A person's rating that was not measured.
+NICHT_GEMESSEN = -1
+
 # Seconds between roster messages. Matches the tracker's own pass rate: sending
 # faster would repeat a roster that has not changed.
 ROSTER_INTERVAL = presence.INTERVAL
@@ -98,8 +104,10 @@ def messages(document: report.Sitrep, nummer: int,
     for zeile, person in enumerate(bericht.personen, start=1):
         # Ratings are read off BEWERTUNGEN rather than named here, so renaming
         # a category cannot leave TouchDesigner reading a column that no longer
-        # exists -- the reason report.py derives them in the first place.
-        ratings = [getattr(person, name) for name in report.BEWERTUNGEN]
+        # exists -- the reason report.py derives them in the first place. OSC
+        # has no null, so a rating that was not measured travels as -1.
+        ratings = [NICHT_GEMESSEN if value is None else value
+                   for value in document.bewertungen(person).values()]
         built.append((SITREP_PERSON, [sitrep_id, zeile, person.name,
                                       int(not document.erkannt(person.name)),
                                       person.beschreibung, *ratings]))

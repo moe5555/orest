@@ -52,8 +52,20 @@ def test_block_omits_the_transcript_when_nothing_was_said(sitrep):
 def test_block_lists_every_person_with_every_rating(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
     assert "Klara" in block and "Vielleicht: Jakob" in block
-    for name in ("kollaborativ", "relevanz", "verantwortungsvoll", "menschlich", "gefahr"):
+    for name in ("risiko", "menschlichkeit", "auffaelligkeit"):
         assert name in block
+
+
+def test_block_shows_an_unmeasured_rating_as_a_dash(sitrep):
+    block = main.format_sitrep(sitrep, use_colour=False)
+    assert "risiko – · menschlichkeit – · auffaelligkeit 4" in block
+
+
+def test_block_names_the_action_behind_a_measured_rating(sitrep):
+    block = main.format_sitrep(sitrep, use_colour=False)
+    assert "menschlichkeit: hugging other person 0.81" in block
+    # A rating of 0 has no cause to show.
+    assert "risiko:" not in block
 
 
 def test_block_marks_a_guessed_name_and_not_a_recognised_one(sitrep):
@@ -111,7 +123,41 @@ def test_block_stays_within_the_requested_width(sitrep):
         assert len(line) <= 78
 
 
-def test_high_gefahr_is_coloured_red():
-    assert main._gefahr_colour(5) == "red"
-    assert main._gefahr_colour(2) == "amber"
-    assert main._gefahr_colour(0) == "dim"
+def test_high_risiko_is_coloured_red():
+    assert main._risiko_colour(5) == "red"
+    assert main._risiko_colour(2) == "amber"
+    assert main._risiko_colour(0) == "dim"
+
+
+def test_block_lists_each_line_with_its_speaker(sitrep):
+    at = sitrep.zeitfenster.beginn
+    document = sitrep.model_copy(update={"aeusserungen": [
+        report.Aeusserung(name="Klara", text="Noch einmal.", beginn=at, ende=at),
+        report.Aeusserung(text="Von vorne.", beginn=at, ende=at)]})
+    block = main.format_sitrep(document, use_colour=False)
+    assert "Klara: “Noch einmal.”" in block
+    assert "(unklar): “Von vorne.”" in block
+
+
+def test_block_shows_a_lines_evidence(sitrep):
+    at = sitrep.zeitfenster.beginn
+    document = sitrep.model_copy(update={"aeusserungen": [
+        report.Aeusserung(name="Klara", text="Ich hasse dich.", beginn=at, ende=at,
+                          risiko=3, menschlichkeit=-3),
+        report.Aeusserung(name="Klara", text="Äh.", beginn=at, ende=at,
+                          risiko=0, menschlichkeit=0)]})
+    block = main.format_sitrep(document, use_colour=False)
+    assert "“Ich hasse dich.” [risiko +3, menschlichkeit -3]" in block
+    assert "“Äh.”\n" in block + "\n" and "“Äh.” [" not in block
+
+
+def test_block_shows_the_loudness_calibration_and_a_lines_gain(sitrep):
+    at = sitrep.zeitfenster.beginn
+    document = sitrep.model_copy(update={
+        "pegel": report.Pegel(kalibriert=True, endgueltig=True, gehoert_s=120.0,
+                              normal_db=-31.2, streuung_db=4.1),
+        "aeusserungen": [report.Aeusserung(name="Klara", text="Raus!", beginn=at, ende=at,
+                                           risiko=2, menschlichkeit=-1, verstaerkung=1.5)]})
+    block = main.format_sitrep(document, use_colour=False)
+    assert "Pegel normal -31 dBFS ±4" in block
+    assert "[risiko +2 ×1.5, menschlichkeit -1]" in block

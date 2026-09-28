@@ -19,7 +19,7 @@ import pathlib
 import sys
 import textwrap
 
-from . import cli, devices, report, session
+from . import cli, loudness, report, session, transcribe
 
 # Label column width, sized to the longest field name.
 _LABEL = 12
@@ -60,22 +60,21 @@ def _field(label: str, values: list[str]) -> list[str]:
             for index, value in enumerate(values)]
 
 
-def _bewertungen(person: report.Person, width: int, use_colour: bool) -> list[str]:
+def _bewertungen(ratings: dict[str, int | None], width: int, use_colour: bool) -> list[str]:
     """Pack the ratings into lines, never splitting a category from its score.
 
-    Length is measured on the unpainted text, since colour codes do not occupy
-    columns on screen.
+    A rating that was not measured shows as a dash. Length is measured on the
+    unpainted text, since colour codes do not occupy columns on screen.
     """
     lines, current, length = [], [], 0
-    for name in report.BEWERTUNGEN:
-        score = getattr(person, name)
-        text = f"{name} {score}"
+    for name, score in ratings.items():
+        text = f"{name} {'–' if score is None else score}"
         separator = 3 if current else 0
         if current and length + separator + len(text) > width:
             lines.append(" · ".join(current))
             current, length = [], 0
             separator = 0
-        colour = _gefahr_colour(score) if name == "gefahr" else "dim"
+        colour = _risiko_colour(score) if name == "risiko" and score is not None else "dim"
         current.append(_paint(text, colour, use_colour))
         length += separator + len(text)
     if current:
@@ -83,7 +82,33 @@ def _bewertungen(person: report.Person, width: int, use_colour: bool) -> list[st
     return lines
 
 
-def _gefahr_colour(level: int) -> str:
+def _gewertet(aeusserung: report.Aeusserung) -> str:
+    """A line's non-zero evidence, e.g. " [risiko +3 ×1.5, menschlichkeit -3]"."""
+    values = [f"{rating} {getattr(aeusserung, rating):+d}" for rating in report.GEMESSEN
+              if getattr(aeusserung, rating)]
+    if values and aeusserung.risiko and aeusserung.verstaerkung > 1.0:
+        values[0] += f" ×{aeusserung.verstaerkung:.1f}"
+    return f" [{', '.join(values)}]" if values else ""
+
+
+def _pegel(pegel: report.Pegel | None) -> str:
+    """The loudness calibration for the footer."""
+    if pegel is None:
+        return ""
+    if not pegel.kalibriert:
+        return f" · Pegel kalibriert {pegel.gehoert_s:.0f}/{loudness.PROVISIONAL:.0f}s"
+    learning = "" if pegel.endgueltig else f", lernt {pegel.gehoert_s:.0f}/{loudness.CALIBRATION:.0f}s"
+    return f" · Pegel normal {pegel.normal_db:.0f} dBFS ±{pegel.streuung_db:.0f}{learning}"
+
+
+def _anlass(document: report.Sitrep, name: str, width: int) -> list[str]:
+    """What set each measured rating above 0: an action, or a line."""
+    causes = [f"{rating}: {document.bewertung(name, rating)[1]}" for rating in report.GEMESSEN
+              if document.bewertung(name, rating)[1]]
+    return _wrap(" · ".join(causes), width) if causes else []
+
+
+def _risiko_colour(level: int) -> str:
     if level >= 4:
         return "red"
     if level >= 2:
@@ -126,7 +151,10 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
             name += _paint(" (vermutet)", "dim", use_colour)
         personen.append(name)
         personen += [f"  {line}" for line in _wrap(person.beschreibung, value_width - 2)]
-        personen += [f"  {line}" for line in _bewertungen(person, value_width - 2, use_colour)]
+        personen += [f"  {line}" for line in _bewertungen(
+            document.bewertungen(person), value_width - 2, use_colour)]
+        personen += [f"  {_paint(line, 'dim', use_colour)}"
+                     for line in _anlass(document, person.name, value_width - 2)]
     lines += _field("PERSONEN", personen)
 
     szene = bericht.szene
@@ -136,7 +164,13 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
         _paint(f"gefahr {szene.gefahr}", _szene_colour(szene.gefahr), use_colour),
     ])])
 
-    if document.gesagt:
+    if document.aeusserungen:
+        gesagt = []
+        for aeusserung in document.aeusserungen:
+            gesagt += _wrap(f"{aeusserung.name or report.UNKLAR}: “{aeusserung.text}”"
+                            f"{_gewertet(aeusserung)}", value_width)
+        lines += _field("GESAGT", gesagt)
+    elif document.gesagt:
         lines += _field("GESAGT", _wrap(f"“{document.gesagt}”", value_width))
 
     prognose = []
@@ -153,7 +187,7 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
         lines += _field("EMPFEHLUNG", [_paint("Kein Einschreiten", "dim", use_colour)])
 
     footer = (f" {quelle.bilder} Bilder · {quelle.ton_s}s Ton · "
-              f"Latenz {document.latenz_s}s")
+              f"Latenz {document.latenz_s}s{_pegel(document.pegel)}")
     lines.append(_paint(_RULE * width, "dim", use_colour))
     lines.append(_paint(footer, "dim", use_colour))
     return "\n".join(lines)
@@ -168,13 +202,22 @@ def main(argv=None) -> int:
     parser.add_argument("--cast", type=pathlib.Path,
                         help="folder of enrolment images; recognises the cast by "
                              "name, everyone else is given a guessed name")
+    parser.add_argument("--audio-ndi", metavar="SOURCE",
+                        help="take the sound from this NDI source instead of a "
+                             'microphone, e.g. "VSH-ARLT-5090 (OBS PGM)"')
+    parser.add_argument("--language", default=transcribe.LANGUAGE,
+                        help=f"language spoken, as a Whisper code, e.g. en for the "
+                             f"test corpus (default: {transcribe.LANGUAGE})")
+    parser.add_argument("--no-actions", action="store_true",
+                        help="don't run the action recogniser; risiko and "
+                             "menschlichkeit are then not measured")
     parser.add_argument("--json", action="store_true",
                         help="print raw report JSON instead of the console block")
     parser.add_argument("--no-colour", action="store_true", help="plain output")
     args = parser.parse_args(argv)
 
     try:
-        video, audio = devices.resolve(args.video, args.audio, args.audio_api)
+        video, audio = session.resolve_sources(args)
         live = session.Session(video, audio, session.Options.from_args(args))
     except (ValueError, RuntimeError) as error:
         print(error, file=sys.stderr)

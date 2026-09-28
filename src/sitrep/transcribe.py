@@ -16,6 +16,7 @@ non-speech before decoding and is required for usable output.
 import functools
 import io
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import nvidia.cublas
@@ -29,7 +30,9 @@ MODEL = "large-v3-turbo"
 COMPUTE_TYPE = "int8_float16"
 
 # The production is at Schauspiel Stuttgart (README.md). Fixing the language
-# skips detection, which is slower and unreliable on short or quiet clips.
+# skips detection, which is slower and unreliable on short or quiet clips. A
+# fixed language is also rendered into: English speech transcribed as "de"
+# comes out as rough German, so footage in another language needs its own.
 LANGUAGE = "de"
 
 # Greedy decoding. Beam search buys a small accuracy gain at a considerable
@@ -55,8 +58,32 @@ def _model() -> WhisperModel:
     return WhisperModel(MODEL, device="cuda", compute_type=COMPUTE_TYPE)
 
 
-def transcribe(wav: bytes) -> str:
+@dataclass(frozen=True)
+class Segment:
+    """One stretch of speech, in seconds from the start of the clip."""
+
+    start: float
+    end: float
+    text: str
+
+
+def segments(wav: bytes, language: str = LANGUAGE) -> list[Segment]:
+    """Transcribe a WAV clip into timed segments; empty when nothing is said.
+
+    `language` is a Whisper language code such as "de" or "en". The times are
+    what speaker attribution aligns with the picture (speakers.py).
+    """
+    found, _ = _model().transcribe(
+        io.BytesIO(wav), language=language, beam_size=BEAM_SIZE, vad_filter=True)
+    return [Segment(segment.start, segment.end, segment.text.strip())
+            for segment in found if segment.text.strip()]
+
+
+def join(found: list[Segment]) -> str:
+    """The segments as one transcript."""
+    return " ".join(segment.text for segment in found).strip()
+
+
+def transcribe(wav: bytes, language: str = LANGUAGE) -> str:
     """Transcribe a WAV clip; returns an empty string when nothing is said."""
-    segments, _ = _model().transcribe(
-        io.BytesIO(wav), language=LANGUAGE, beam_size=BEAM_SIZE, vad_filter=True)
-    return " ".join(segment.text.strip() for segment in segments).strip()
+    return join(segments(wav, language))

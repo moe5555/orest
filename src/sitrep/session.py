@@ -3,8 +3,9 @@
 DirectShow refuses a second process the camera (devices.open_video), so
 everything that watches the room during a rehearsal has to read one open
 stream. A session opens it once and hands it to the sampling loop that feeds
-the model, to the presence tracker that follows faces, and to the publisher
-that sends the picture to TouchDesigner. None of the three opens or closes it.
+the model, to the presence tracker that follows faces, to the action
+recogniser that rates what bodies do, and to the publisher that sends the
+picture to TouchDesigner. None of them opens or closes it.
 
 The session is also the shape the localhost interface of
 knowledge/components/02_processing.md needs: one object to start and one to
@@ -22,7 +23,16 @@ from collections.abc import Iterator
 from face import gallery
 from pydantic import BaseModel
 
-from . import annotate, capture, cli, devices, feed, presence, report, td
+from . import (actions, annotate, capture, cli, devices, feed, loudness, ndi_audio, presence,
+               report, speakers, speech, td, transcribe)
+
+
+def resolve_sources(args) -> tuple[devices.VideoDevice, devices.AudioDevice | ndi_audio.NdiAudio]:
+    """The camera, and the microphone or NDI source to take sound from."""
+    video = devices.resolve_video_device(args.video)
+    if args.audio_ndi:
+        return video, ndi_audio.NdiAudio(args.audio_ndi)
+    return video, devices.resolve_audio_device(args.audio, args.audio_api)
 
 
 class Options(BaseModel):
@@ -39,10 +49,18 @@ class Options(BaseModel):
     height: int | None = None
     model: str = report.MODEL
 
+    # Language of the speech in the room, as a Whisper code. The production
+    # speaks German; test footage in another language needs its own code.
+    language: str = transcribe.LANGUAGE
+
     # Enrolment folder. Faces are followed on every run, so every person in the
     # report carries a name; given a cast, enrolled people are recognised
     # rather than guessed at.
     cast: pathlib.Path | None = None
+
+    # Rate Risiko and Menschlichkeit from the action recogniser. Off, they are
+    # not measured and every person's are None.
+    actions: bool = True
 
     # Publish the camera to TouchDesigner under this NDI source name.
     ndi: str | None = None
@@ -60,7 +78,9 @@ class Options(BaseModel):
             width=args.width,
             height=args.height,
             model=args.model,
+            language=args.language,
             cast=args.cast,
+            actions=not args.no_actions,
             ndi=args.ndi_name if args.send_ndi else None,
             ndi_fps=args.ndi_fps,
             send_td=args.send_td,
@@ -74,13 +94,19 @@ class Session:
     reverse order, so no reader can sample a camera that has been released.
     """
 
-    def __init__(self, video: devices.VideoDevice, audio: devices.AudioDevice,
+    def __init__(self, video: devices.VideoDevice,
+                 audio: devices.AudioDevice | ndi_audio.NdiAudio,
                  options: Options | None = None):
         self.options = options or Options()
         self.audio = audio
         self.stream = capture.VideoStream(video, self.options.width, self.options.height)
         self.publisher = None
         self.tracker = None
+        self.actions = None
+        self.speakers = None
+        self.recorder = None
+        # Learns this run's normal speaking level from its first speech.
+        self.laut = loudness.Calibration()
         self.sender = None
         self.roster = None
         self.missing_enrolment: list[pathlib.Path] = []
@@ -105,6 +131,13 @@ class Session:
             cast, self.missing_enrolment = gallery.enrol(self.options.cast)
         self.tracker = presence.PresenceTracker(self.stream, cast).start()
 
+        if self.options.actions:
+            # Speakers are told apart by the lips of the people the action
+            # recogniser follows, on the frames it tracks.
+            self.speakers = speakers.Speakers().load()
+            self.actions = actions.ActionRatings(self.stream, self.tracker,
+                                                 on_frame=self.speakers.observe).start()
+
         if self.options.send_td:
             self.sender = td.Sender()
             self.roster = td.RosterStream(self.sender, self.tracker).start()
@@ -116,19 +149,46 @@ class Session:
         it counts reports within a run, which is a property of the session and
         not of what was observed.
         """
-        windows = capture.windows(self.stream, self.audio,
-                                  interval=self.options.interval,
-                                  window=self.options.window,
-                                  annotate=self._name_faces)
+        # Held by the session rather than the loop below, so that closing the
+        # session drops the waiting windows at once, even while a report is
+        # still being generated.
+        self.recorder = capture.Recorder(self.stream, self.audio,
+                                         interval=self.options.interval,
+                                         window=self.options.window,
+                                         annotate=self._name_faces).start()
         try:
             for number, document in enumerate(
-                    report.sitreps(windows, model=self.options.model,
-                                   roster=self.tracker.roster), start=1):
+                    report.sitreps(self.recorder, model=self.options.model,
+                                   roster=self.tracker.roster,
+                                   handlungen=self.actions.take if self.actions else None,
+                                   sprecher=self._sprecher if self.speakers else None,
+                                   einschaetzen=self._einschaetzen,
+                                   laut=self.laut,
+                                   language=self.options.language),
+                    start=1):
                 if self.sender:
                     self.sender.send_all(td.messages(document, number))
                 yield document
         finally:
-            windows.close()
+            self.recorder.close()
+
+    def _einschaetzen(self, aeusserungen):
+        """The lines rated by the run's model."""
+        return speech.rate(aeusserungen, model=self.options.model)
+
+    def _sprecher(self, segmente, audio_start):
+        """Who said each segment, with the names the bodies carry now."""
+        return self.speakers.attribute(segmente, audio_start, self.actions.names())
+
+    def overlay(self, frame):
+        """A copy of a frame with the tracked people boxed and named.
+
+        For the operator's view only: the model's frames carry face tags
+        (annotate.py), and the NDI feed stays unmarked.
+        """
+        if not self.actions:
+            return frame
+        return annotate.draw_names(frame, self.actions.visible())
 
     def _name_faces(self, frame):
         """The model's copy of a frame, with the tracker's name on each face.
@@ -146,7 +206,13 @@ class Session:
         return annotate.draw_names(frame, named)
 
     def close(self):
-        """Stop every reader, then release the camera.
+        """Stop every reader, delete what they hold, then release the camera.
+
+        Recording stops first and drops the windows waiting for a report. What
+        the readers keep about the people in the room, such as faces, poses,
+        mouth measurements and unreported readings, is deleted here rather than
+        left for the memory to be reclaimed at some later point. A report still
+        being generated finishes, and its window is dropped with it.
 
         Idempotent: a run has two plausible closers, the command line's context
         manager and a later stop request, and both may arrive.
@@ -154,18 +220,30 @@ class Session:
         if self._closed:
             return
         self._closed = True
-        for reader in (self.roster, self.publisher, self.tracker):
+        if self.recorder:
+            self.recorder.close()
+        # The action recogniser reads the tracker's faces, so it stops first.
+        for reader in (self.roster, self.publisher, self.actions, self.tracker):
             if reader:
                 reader.close()
+        for holder in (self.actions, self.speakers, self.tracker):
+            if holder:
+                holder.clear()
+        self.laut = loudness.Calibration()
         self.stream.close()
 
     def describe(self) -> str:
         """The channels this run is using, for the operator to read at startup."""
-        lines = [devices.describe(self.stream.device, self.audio)]
+        lines = [devices.describe(self.stream.device, self.audio),
+                 f"speech: {self.options.language} ({transcribe.MODEL})"]
         if self.publisher:
             lines.append(f"ndi:    {self.options.ndi} @ {self.options.ndi_fps:g} fps")
         if self.sender:
             lines.append(f"osc:    {self.sender.host}:{self.sender.port}")
+        if self.actions:
+            lines.append(f"action: NTU120 ST-GCN on {actions.model.active_provider()}")
+        else:
+            lines.append("action: off, risiko and menschlichkeit not measured")
         if self.tracker.cast:
             lines.append(f"cast:   {', '.join(self.tracker.cast.names)}")
         else:

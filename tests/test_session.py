@@ -6,6 +6,7 @@ raises on its own, so it is pinned here. Needs no camera, model, NDI or
 TouchDesigner.
 """
 
+import threading
 import time
 from datetime import datetime
 
@@ -79,10 +80,11 @@ def room(monkeypatch):
 
 
 class FakeReader:
-    """A publisher or tracker, recording that it was started and closed."""
+    """A publisher, tracker or action recogniser, recording that it was started and closed."""
 
-    def __init__(self, source, closed, label, **kwargs):
+    def __init__(self, source, closed, label, faces=None, **kwargs):
         self.source = source
+        self.faces = faces
         self._closed = closed
         self._label = label
         self.started = False
@@ -96,15 +98,43 @@ class FakeReader:
         """A tracker's reading, which the roster stream asks for on its thread."""
         return []
 
+    def take(self, until, gain=None):
+        """An action recogniser's ratings, which each report asks for."""
+        return []
+
+    def clear(self):
+        self.cleared = True
+
     def close(self):
         self._closed.append(self._label)
 
 
+class FakeSpeakers:
+    """Mouth measurement, without the landmark model."""
+
+    cleared = False
+
+    def clear(self):
+        self.cleared = True
+
+    def load(self):
+        return self
+
+    def observe(self, image, frame):
+        pass
+
+    def attribute(self, segments, audio_start, names):
+        return []
+
+
 @pytest.fixture(autouse=True)
 def no_face_models(monkeypatch):
-    """Every session follows faces; no test here loads the face models to do so."""
+    """Every session follows faces and bodies; no test here loads a model to do so."""
     monkeypatch.setattr(session.presence, "PresenceTracker",
                         lambda source, cast, **kwargs: FakeReader(source, [], "tracker"))
+    monkeypatch.setattr(session.actions, "ActionRatings",
+                        lambda source, faces, **kwargs: FakeReader(source, [], "actions", faces))
+    monkeypatch.setattr(session.speakers, "Speakers", FakeSpeakers)
 
 
 @pytest.fixture
@@ -122,8 +152,14 @@ def readers(monkeypatch, room):
         made["tracker"].cast = cast
         return made["tracker"]
 
+    def action_ratings(source, faces, on_frame=None, **kwargs):
+        made["actions"] = FakeReader(source, closed, "actions", faces)
+        made["actions"].on_frame = on_frame
+        return made["actions"]
+
     monkeypatch.setattr(session.feed, "Publisher", publisher)
     monkeypatch.setattr(session.presence, "PresenceTracker", tracker)
+    monkeypatch.setattr(session.actions, "ActionRatings", action_ratings)
     monkeypatch.setattr(session.gallery, "enrol",
                         lambda root: (FakeGallery(), [root / "blurred.jpg"]))
     return made
@@ -161,6 +197,10 @@ def test_every_reader_is_given_the_one_open_camera(room, readers, tmp_path):
         assert len(opened) == 1
         assert readers["publisher"].source is live.stream
         assert readers["tracker"].source is live.stream
+        assert readers["actions"].source is live.stream
+        assert readers["actions"].faces is readers["tracker"]
+        # Mouths are measured on the frames the action recogniser tracks.
+        assert readers["actions"].on_frame == live.speakers.observe
 
 
 def test_readers_are_closed_before_the_camera(room, readers, tmp_path):
@@ -169,7 +209,21 @@ def test_readers_are_closed_before_the_camera(room, readers, tmp_path):
     options = session.Options(cast=tmp_path, ndi="Orest Test")
     session.Session(video, audio, options).close()
     assert closed[-1] == "camera"
-    assert set(closed[:-1]) == {"publisher", "tracker"}
+    assert set(closed[:-1]) == {"publisher", "actions", "tracker"}
+
+
+def test_the_action_recogniser_stops_before_the_tracker_it_reads(room, readers):
+    video, audio, _, _, closed = room
+    session.Session(video, audio).close()
+    assert closed.index("actions") < closed.index("tracker")
+
+
+def test_without_actions_no_recogniser_runs(room, readers):
+    video, audio, _, _, _ = room
+    with session.Session(video, audio, session.Options(actions=False)) as live:
+        assert live.actions is None
+        assert "not measured" in live.describe()
+        assert "actions" not in readers
 
 
 def test_a_reader_that_fails_to_start_does_not_strand_the_camera(room, monkeypatch):
@@ -241,18 +295,27 @@ def test_faces_are_followed_with_or_without_a_cast(room, readers, tmp_path):
         assert isinstance(live.tracker.cast, FakeGallery)
 
 
-def test_each_report_is_given_the_trackers_roster(monkeypatch, room, readers, sitrep):
+def test_each_report_is_given_the_roster_and_the_action_ratings(
+        monkeypatch, room, readers, sitrep):
     video, audio, _, _, _ = room
     given = {}
 
-    def sitreps(windows, model=None, roster=None):
-        given["roster"] = roster
+    def sitreps(windows, model=None, roster=None, handlungen=None, sprecher=None,
+                einschaetzen=None, laut=None, language=None):
+        given.update(roster=roster, handlungen=handlungen, sprecher=sprecher,
+                     einschaetzen=einschaetzen, laut=laut, language=language)
         return iter([sitrep])
 
     monkeypatch.setattr(session.report, "sitreps", sitreps)
     with session.Session(video, audio) as live:
         list(live.reports())
         assert given["roster"] == live.tracker.roster
+        assert given["handlungen"] == live.actions.take
+        assert given["language"] == "de"
+        assert given["sprecher"] == live._sprecher
+        assert given["einschaetzen"] == live._einschaetzen
+        # One loudness calibration for the whole run.
+        assert given["laut"] is live.laut
 
 
 def test_the_models_frames_are_marked_with_the_trackers_names(monkeypatch, room, readers):
@@ -302,11 +365,14 @@ def test_options_carry_the_command_line_through(tmp_path):
         interval, window = 5.0, 20.0
         width, height = 1920, 1080
         model = "gemma4:e4b"
+        language = "en"
         cast = tmp_path
         send_ndi, ndi_name, ndi_fps = True, "Orest Test", 15.0
         send_td = True
+        no_actions = False
 
     options = session.Options.from_args(Args())
+    assert options.language == "en"
     assert options.ndi == "Orest Test"
     assert options.ndi_fps == 15.0
     assert options.cast == tmp_path
@@ -318,11 +384,15 @@ def test_ndi_is_off_unless_asked_for(tmp_path):
         interval, window = 5.0, 20.0
         width = height = None
         model = "gemma4:e4b"
+        language = "de"
         cast = None
         send_ndi, ndi_name, ndi_fps = False, "Orest Test", 30.0
         send_td = False
+        no_actions = True
 
-    assert session.Options.from_args(Args()).ndi is None
+    options = session.Options.from_args(Args())
+    assert options.ndi is None
+    assert not options.actions
 
 
 def test_the_startup_lines_name_every_open_channel(room, readers, tmp_path, monkeypatch):
@@ -350,3 +420,32 @@ def test_enrolment_images_without_a_face_are_reported(room, readers, tmp_path):
     video, audio, _, _, _ = room
     with session.Session(video, audio, session.Options(cast=tmp_path)) as live:
         assert live.missing_enrolment == [tmp_path / "blurred.jpg"]
+
+
+def test_stopping_deletes_what_the_readers_hold(room, readers):
+    video, audio, _, _, _ = room
+    live = session.Session(video, audio)
+    live.close()
+    assert readers["actions"].cleared and readers["tracker"].cleared
+    assert live.speakers.cleared
+    assert not live.laut.calibrated
+
+
+def test_stopping_drops_the_windows_waiting_for_a_report(room, readers, monkeypatch):
+    """A report still being generated must not keep the recording alive."""
+    video, audio, _, _, _ = room
+    started = threading.Event()
+
+    def sitreps(windows, **kwargs):
+        started.set()
+        yield from ()
+
+    monkeypatch.setattr(session.report, "sitreps", sitreps)
+    live = session.Session(video, audio, session.Options(interval=0.1, window=0.2))
+    reports = live.reports()
+    thread = threading.Thread(target=lambda: list(reports), daemon=True)
+    thread.start()
+    assert started.wait(5)
+    time.sleep(0.5)
+    live.close()
+    assert live.recorder.held == (0, 0)
