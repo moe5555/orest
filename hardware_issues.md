@@ -178,6 +178,7 @@ rehearsal week.
 | `gemma4:e4b` | 9.6 GB | Ollama registry | live SITREP |
 | Whisper `large-v3-turbo` | ~1.6 GB | Hugging Face | transcription |
 | Qwen3-VL-Embedding-2B | 4.0 GB | Hugging Face | deferred, see H-2 |
+| ST-GCN NTU120 2D (`data/models/ntu120_stgcn/`) | 12.5 MB | OpenMMLab | action recognition, evaluation only |
 | SigLIP2-512 + MS CLAP | small | Hugging Face | already cached |
 
 The Ollama registry download **failed repeatedly over IPv6 on this machine**
@@ -269,6 +270,32 @@ frames — about 0.7 s, acceptable — not indexing.
 **When hardware is final:** confirm `active_provider()` still reports
 `CUDAExecutionProvider`, and match the `onnxruntime-gpu` major line to whatever
 CUDA the installed torch brings. `OREST_POSE_DEVICE` forces the device.
+
+**Orest's environment, resolved 2026-09-28 on `VSH-ARLT-5090`.** Until then,
+the `orest` environment had only the CPU `onnxruntime`, pulled in by `rtmlib`
+and `faster-whisper`, so pose, face and action recognition ran on the CPU
+there on every machine. Now:
+- `onnxruntime-gpu[cuda,cudnn]==1.26.0` is declared in `pyproject.toml`. It
+  is the last CUDA 12 line, the same line CTranslate2 uses, and it brings the
+  CUDA runtime and cuDNN as `nvidia-*-cu12` pip packages.
+- A uv override drops the CPU `onnxruntime` that `rtmlib` and
+  `faster-whisper` ask for, which would otherwise shadow the GPU build
+  (cause 1 above).
+- Without torch, `orest_pose.model` and `face.model` put
+  `site-packages/nvidia/*/bin` on PATH. `onnxruntime.preload_dlls()` is not
+  enough on its own: cuDNN 9.26 loads `cudnn_engines_tensor_ir64_9.dll` by
+  name on first use and failed with `CUDNN_STATUS_SUBLIBRARY_LOADING_FAILED`.
+
+Measured on the RTX 5090:
+
+| Model | Before, on the CPU | Now, on CUDA |
+|---|---|---|
+| RTMO pose | 43 ms per frame | 8.1 ms per frame |
+| Face detection and embedding | ~226 ms per pass | 10.1 ms per pass |
+| NTU120 action model, 10 clips | 122 ms | 3.9 ms |
+
+The action model's figure is without TF32; with TF32 it is 2.7 ms, but the
+probabilities move by up to 8 × 10⁻⁴. Whisper is unaffected.
 
 ---
 

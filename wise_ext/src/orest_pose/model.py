@@ -12,15 +12,17 @@ wide outdoor stage shot, and a floor posture tracked correctly under a single
 spotlight.
 """
 
+import glob
 import logging
 import os
+import sysconfig
 import threading
 
 logger = logging.getLogger(__name__)
 
-# RTMO-s, trained on body7, 640x640 input. The small build is chosen because
-# pose runs on CPU here: ONNX Runtime resolves no CUDA provider in either
-# environment (see hardware_issues.md). It is 35 MB and downloads on first use.
+# RTMO-s, trained on body7, 640x640 input. The small build was chosen while
+# pose ran on the CPU (hardware_issues.md H-10); it is 35 MB and downloads on
+# first use.
 MODEL_URL = (
     "https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/"
     "rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip"
@@ -44,18 +46,24 @@ def _add_cuda_libraries_to_path():
     fails with cublasLt64_12.dll missing — the same behaviour CTranslate2 shows
     in sitrep/transcribe.py.
 
-    The libraries are not installed on their own account: torch ships a
-    complete CUDA 12 runtime, and pointing at it avoids a second multi-gigabyte
-    copy. Absent in environments without torch, where pose falls back to CPU.
+    Where torch is installed, as in WISE's environment, its complete CUDA 12
+    runtime is used, avoiding a second multi-gigabyte copy. Elsewhere the
+    runtime comes from NVIDIA's pip packages (nvidia-*-cu12), which Orest's
+    environment installs with onnxruntime-gpu. Their folders go on PATH rather
+    than being preloaded, because cuDNN loads its sub-libraries by name on
+    first use, which only a search path satisfies.
     """
     try:
         import torch
+        folders = [os.path.join(os.path.dirname(torch.__file__), "lib")]
     except ImportError:
-        return
+        nvidia = os.path.join(sysconfig.get_paths()["purelib"], "nvidia")
+        folders = sorted(glob.glob(os.path.join(nvidia, "*", "bin")))
 
-    libraries = os.path.join(os.path.dirname(torch.__file__), "lib")
-    if os.path.isdir(libraries) and libraries not in os.environ.get("PATH", ""):
-        os.environ["PATH"] = libraries + os.pathsep + os.environ["PATH"]
+    path = os.environ.get("PATH", "")
+    missing = [folder for folder in folders if os.path.isdir(folder) and folder not in path]
+    if missing:
+        os.environ["PATH"] = os.pathsep.join(missing) + os.pathsep + path
 
 
 def device() -> str:

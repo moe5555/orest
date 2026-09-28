@@ -10,6 +10,11 @@ dependencies = [
     "numpy>=2.5.3",
     "nvidia-cublas-cu12>=12.9.2.10",
     "ollama>=0.6.2",
+    # GPU inference for pose, face and action recognition. 1.26 is the last
+    # line built against CUDA 12, which CTranslate2 (faster-whisper) also uses
+    # here, so the environment carries one CUDA runtime rather than two. The
+    # extras install that runtime and cuDNN as NVIDIA's pip packages.
+    "onnxruntime-gpu[cuda,cudnn]==1.26.0",
     "opencv-python>=5.0.0.93",
     "orest-pose",
     "pillow>=12.3.0",
@@ -39,7 +44,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sitrep", "src/smartsearch", "src/face", "src/osc", "src/interface"]
+packages = ["src/sitrep", "src/smartsearch", "src/face", "src/osc", "src/interface", "src/action"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -48,7 +53,13 @@ testpaths = ["tests"]
 # rtmlib asks for opencv-contrib-python, which ships its own cv2 and collides
 # with the opencv-python this project pins. The marker is never satisfiable,
 # which drops the request while leaving the rest of rtmlib's resolution intact.
-override-dependencies = ["opencv-contrib-python; python_version < '3'"]
+# rtmlib and faster-whisper both ask for the CPU onnxruntime, which installs
+# the same `onnxruntime` module as onnxruntime-gpu; whichever lands last wins,
+# and with the CPU build no CUDA provider exists (hardware_issues.md H-10).
+override-dependencies = [
+    "opencv-contrib-python; python_version < '3'",
+    "onnxruntime; python_version < '3'",
+]
 
 [tool.uv.workspace]
 members = [

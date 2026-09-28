@@ -37,6 +37,215 @@ accuracy (`knowledge/components/02_processing.md`). 272 tests pass.
 
 ---
 
+## 2026-09-28 — Pretrained action recognition, step 4: continuous pose, tracking, pairs (VSH-ARLT-5090)
+
+`src/action/` feeds the NTU120 ST-GCN what it was trained on, from a live
+source or a recording:
+
+    python -m action --recording <file> --start 120 --duration 60
+
+- **`preprocess.py`** reproduces the model's MMAction2 test pipeline in
+  numpy: normalisation, joint features, frame sampling, decoding and person
+  slots. It is **bit-identical** to MMAction2's output on the reference
+  sequence. Its frame indices also match MMAction2's for 100-, 150- and
+  250-frame sequences, the sampling branches the 75-frame reference doesn't
+  reach. The export script now records those indices too. Three details
+  decide the match:
+  - The keypoints pass through float16.
+  - The 10 test clips are sampled with a generator seeded at 255. A local
+    `RandomState(255)` draws the same numbers without touching NumPy's
+    global state.
+  - An absent person is zeros before normalisation, so -1 after it, as in
+    training.
+- **`tracking.py`** gives each body a stable id by greedy box overlap between
+  consecutive frames. A body may go undetected for up to 1 s and keep its id.
+  Detections with fewer than 5 visible joints aren't followed.
+- **`recognizer.py`** runs pose at **25 fps** and classifies the last **4 s**
+  every second. 25 × 4 = 100 frames is exactly one clip. NTU clips mostly
+  span a whole action in 100 or more frames, and a shorter window would be
+  looped to fill the clip, showing the action faster and repeated. Each person
+  present in at least half the window is classified alone, and each pair
+  whose centres stay within 1.5 mean body heights is classified together.
+  NTU recorded mutual actions with two people and single actions with one,
+  so the model knows each only in that form. Everything in a window goes to
+  the model as one batch.
+- **`model.py`** runs the ONNX file on CUDA with TF32 off, and averages the
+  softmax over the 10 clips as MMAction2 does.
+
+**Measured** over 30 s of "Boom" from the test corpus: pose 8.2 ms per frame,
+the action model 47 ms per window for all groups together, both on CUDA. 20
+new tests, none needing the model or a GPU; 304 pass.
+
+**Not measured: whether it recognises anything that matters.** The corpus is
+improvised comedy with no violence. The readings are what NTU makes of people
+talking:
+- A woman holding a glass: "reading".
+- Seated spectators: "playing with phone/tablet".
+- Pairs in conversation: "point finger at the other person", "touch other
+  person's pocket".
+
+A test needs footage of the actions the SITREP cares about, such as staged
+pushes, slaps or embraces, ideally from the production's own rehearsals.
+
+**Open:**
+- **The audience dominates.** Track ids reach 17 in 30 s as spectators at the
+  frame's edges come and go, and each is classified. A stage region, or a
+  minimum body size, would restrict recognition to the performers.
+- **Readings aren't filtered or mapped yet.** Every reading carries all 120
+  classes. Step 5 selects the classes of interest, and step 7 connects them
+  to the SITREP's values.
+- **Combined GPU load is unmeasured.** Pose at 25 fps takes about 200 ms of
+  GPU time per second. That comes on top of the presence tracker's face
+  passes, Whisper and Gemma, and all of them together have not been run.
+
+---
+
+## 2026-09-28 — GPU ONNX Runtime in Orest's environment (VSH-ARLT-5090)
+
+Pose detection, face recognition and the new action model now run on the GPU
+in the `orest` environment. Until now they ran on the CPU there, on every
+machine (`hardware_issues.md` H-10). The step 3 entry below wrongly called this
+a regression on the new machine: the laptop's `orest` environment was CPU-only
+too, and the GPU build H-10 describes lived in WISE's environment.
+
+- **`onnxruntime-gpu[cuda,cudnn]==1.26.0`** is declared in `pyproject.toml`.
+  It is the last CUDA 12 line, matching CTranslate2's, so the environment
+  carries one CUDA runtime. It is also the first version with Python 3.14
+  wheels on the CUDA 12 line; 1.27 onwards needs CUDA 13.
+- **A uv override drops the CPU `onnxruntime`** that `rtmlib` and
+  `faster-whisper` depend on. Both packages install the same `onnxruntime`
+  module, and whichever lands last wins.
+- **`orest_pose.model` and `face.model`** put
+  `site-packages/nvidia/*/bin` on PATH when torch isn't installed. The first
+  attempt used `onnxruntime.preload_dlls()` alone, and cuDNN then failed on
+  the first convolution: it loads `cudnn_engines_tensor_ir64_9.dll` by name
+  and couldn't find it (`CUDNN_STATUS_SUBLIBRARY_LOADING_FAILED`).
+
+**Verified:** all three models report `CUDAExecutionProvider`, and Whisper
+still transcribes. 284 tests pass.
+
+| Model | Before, on the CPU | Now, on the RTX 5090 |
+|---|---|---|
+| RTMO pose | 43 ms per frame | 8.1 ms per frame |
+| Face detection and embedding | ~226 ms per pass | 10.1 ms per pass |
+| NTU120 action model, 10 clips | 122 ms | 3.9 ms |
+
+**TF32 changes results slightly.** ONNX Runtime's CUDA provider uses TF32 by
+default, which moved the action model's probabilities by up to 8 × 10⁻⁴
+against MMAction2 (2.7 ms). With `use_tf32=0` the difference is 3.6 × 10⁻⁷
+(3.9 ms). The action model will run without TF32, which keeps its tests
+exact.
+
+---
+
+## 2026-09-28 — Pretrained action recognition, step 3: exported to ONNX (VSH-ARLT-5090)
+
+The NTU120 ST-GCN now exists as `data/models/ntu120_stgcn/stgcn_ntu120_2d.onnx`.
+Orest can run it with `onnxruntime` alone; MMAction2 and PyTorch are needed
+only to produce the file. `src/scripts/export_ntu_stgcn.py` does the export
+and checks it. Its docstring gives the environment setup, so the export can
+be repeated.
+
+**A separate conda environment, `mmaction`** (Python 3.10, torch 2.3.1 CPU,
+mmengine 0.10.7, mmcv-lite 2.1.0, MMAction2 1.2.0). It follows the same
+pattern as `wise`: a PyTorch stack that can't live in Orest's Python 3.14
+environment is kept apart. Three things needed working around:
+
+- **MMAction2 1.2.0 can't be imported as packaged, from PyPI or from git.**
+  `mmaction/models/localizers/drn` has no `__init__.py`, so the package build
+  skips it, and `import mmaction.models` fails. The fix was an editable
+  install from a clone at tag v1.2.0 in `external/mmaction2`, which is
+  gitignored.
+- **Pinned to torch 2.3.** From torch 2.6, `torch.load` defaults to
+  `weights_only`, which checkpoints of this generation don't load under.
+- **mmcv-lite rather than full mmcv.** ST-GCN needs none of mmcv's compiled
+  operators, and full mmcv has no wheels for this setup.
+
+**What was exported:** the network only, `cls_head(backbone(x))`. It takes
+`(batch, 2 people, 100 frames, 17 joints, x/y/score)` and returns 120
+logits, with a dynamic batch axis, at opset 17. MMAction2's preprocessing, and
+its softmax averaged over 10 test clips, stay outside the file for Orest to
+reproduce in step 4.
+
+**Verified:**
+
+| Check | Max difference |
+|---|---|
+| Network: PyTorch vs ONNX Runtime, random input, logits | 1.9 × 10⁻⁶ |
+| Recogniser: MMAction2 `inference_skeleton` vs ONNX fed MMAction2's preprocessing, 120 probabilities | 6.6 × 10⁻⁷ |
+| The same, in Orest's environment (onnxruntime 1.29.0) | 3.0 × 10⁻⁷ |
+
+- **Speed in Orest, on the CPU:** 10.6 ms per clip, about 130 ms for the
+  full 10-clip average.
+- **Reference fixture (`reference.npz`):** a synthetic two-person sequence
+  of 75 frames at 1080p, with MMAction2's preprocessed tensor for it and its
+  final prediction. Step 4's preprocessing is to be tested against it. It's
+  synthetic, so it holds no footage of anyone.
+- **The synthetic sequence's result:** its arm sweep was classified as
+  "point finger at the other person" (0.67) and "pat on back" (0.24). Both
+  are two-person classes, but that says nothing about accuracy on real
+  footage.
+
+**Found on the way: ONNX Runtime in the `orest` environment is CPU-only on
+this machine.** It is version 1.29.0 with no CUDA provider, which is the
+silent regression `hardware_issues.md` H-10 warns about. The laptop's
+`onnxruntime-gpu` was a manual install that was never declared, so it didn't
+reach this machine, and RTMO pose detection runs on the CPU here too. The
+recogniser itself is fast enough on the CPU. Fixing it means declaring the
+GPU build in `pyproject.toml`; see H-10.
+
+---
+
+## 2026-09-28 — Pretrained action recognition, step 1: model chosen and downloaded (VSH-ARLT-5090)
+
+This is the first step toward the *Pose* route under "Calculating Values" in
+`knowledge/components/02_processing.md`: recognising activities such as
+hitting or hugging, and mapping them to SITREP values. The plan starts from a
+recogniser someone else trained. Training one on Orest's own footage would
+need a labelled archive first.
+
+**Model: ST-GCN, joint modality, NTU RGB+D 120 cross-subject, 2D keypoints**,
+from the MMAction2 model zoo. The choice rests on three points:
+
+- **The keypoints match.** MMAction2's 2D NTU skeletons were produced with
+  HRNet-w32 in COCO-17 layout, the same 17 joints in the same order that RTMO
+  (`orest_pose`) outputs.
+- **NTU120, not NTU60.** NTU120 has all 26 two-person classes. Only it has
+  "hit other person with something", "wield knife towards other person" and
+  "knock over other person". The NTU60 models score higher (ST-GCN++ 89.3%)
+  but lack these classes.
+- **Joint modality, plain ST-GCN.** It takes raw keypoints, with no bone or
+  motion features to derive, at 83.19% top-1 against 83.36% for the bone
+  variant. It is also the simplest architecture on offer, which matters for
+  the ONNX export in step 3.
+
+Files are in `data/models/ntu120_stgcn/`, which is gitignored. `SOURCE.md`
+there gives URLs and the checksum. MMAction2 publishes only an NTU60 class
+list, so `label_map_ntu120.txt` was assembled from it and the official NTU
+README; the first 60 classes agree exactly.
+
+**Verified** in the `wise` environment, which has torch:
+- The SHA-256 begins `612416c6`, matching the filename.
+- 3.1 M parameters and a 120-class head.
+- The input batch norm expects 51 values: 17 joints × (x, y, confidence).
+
+**What step 4 has to reproduce**, per the config:
+- `PreNormalize2D` normalises keypoints to the image size.
+- `FormatGCNInput` always takes two people, padding the second with zeros.
+- `UniformSampleFrames` resamples every clip to 100 frames, whatever its
+  length; testing averages 10 such clips. NTU clips run about 2–5 s, so a live
+  window should be about that long, resampled the same way.
+
+**Licence:** NTU RGB+D is "for academic research only … for non-commercial
+purposes" and prohibits "derivation … and commercial usage … in any way or
+form" without permission from ROSE Lab. Moe confirmed that the theatre
+project is part of a research project, which these terms cover.
+
+Training Orest's own recogniser on rehearsal footage is listed as a
+nice-to-have in `todo_with_data.md`.
+
+---
+
 ## 2026-09-25 — Operator page: the live SITREP in the browser (VSH-ARLT-5090)
 
 The live SITREP is displayed in a browser instead of TouchDesigner. Laid out

@@ -30,9 +30,33 @@ Implementation Steps:
 #### Calculating Values
 How do we calculate the values the system comes up with? 
 
+```mermaid
+flowchart LR
+    actors([Actors on stage])
+
+    actors --> cam[Camera]
+    cam --> ac[Action Classifier]
+    ac --> map["Action → SITREP value mapping"]
+
+    actors --> mic[Microphone]
+    mic --> stt[Transcript]
+    stt --> sent[Sentiment Analysis]
+    stt --> trig[Trigger word table]
+    mic --> loud[Loudness]
+
+    map --> formula{{SITREP formula}}
+    sent --> formula
+    trig --> formula
+    loud --> formula
+
+    formula --> z1[z1]
+    formula --> z2[z2]
+    formula --> zn["… zn"]
+```
+
 - *Sentiment Analysis*: feed the transcript into Gemma and ask it to score the person's values (gefahr, kollaborativ, etc.) - to do this, we need to implement speaker diarisation. There should also be a file with key value pairs that we can add to this analysis so that we can hardcode certain things like if sentence x is said -> set value x to y 
-- *Pose*: certain activites are recognised. For instance, people hitting each other, running, hugging, etc. and are then mapped to the values
-  > Claude's notes (2026-09-25), not yet reviewed:
+- *Pose*: certain activites are recognised. For instance, people hitting each other, running, hugging, etc. and are then mapped to the SITREP values. 
+  > Claude's notes (2026-09-25), reviewed 28.09.26, kept here for now as background info:
   > - **No live WISE needed.** The pose embedding (`orest_pose`) already runs in Orest; a labelled reference corpus of a few hundred clips can be matched directly. WISE helps *build* the corpus: body-search one good example in the archive to find its rehearsed repetitions.
   > - **Label activities, not values.** Clips are tagged "Schlag", "Umarmung", …; a separate editable table maps activities to values (Schlag → gefahr ≥ 9). Same format as the key-value file for spoken lines.
   > - **Negatives are essential.** Ordinary postures barely differ in the embedding, so a large "nothing special" class is needed; an activity counts only when it clearly beats the neutral examples.
@@ -41,7 +65,8 @@ How do we calculate the values the system comes up with?
   > - **Rule sets the floor.** A detected hit sets a minimum on gefahr in code, decaying over the following windows; Gemma is told, but can't lower it. Linking body boxes to named faces attributes it to a person.
   > - **False positives trigger Einschreiten.** Measure precision per activity; confirm high-stakes ones over two segments or with a loudness spike.
   > - **First experiment:** one activity, ~30 positive and ~100 neutral 4 s segments, nearest-neighbour separation.
-- *Audio*: loudness 
+- *Audio*: higher loudness increases negative-coded values like gefahr etc. 
+
 
 ### Smart Search 
 **data_in**: rehearsal corpus <br>

@@ -16,8 +16,10 @@ second numpy stack behind it. Only onnxruntime, numpy and cv2 are needed, all
 three of which Orest already has.
 """
 
+import glob
 import logging
 import os
+import sysconfig
 import threading
 import urllib.request
 import zipfile
@@ -66,18 +68,24 @@ def _add_cuda_libraries_to_path():
     os.add_dll_directory() does not cover that second hop and the load still
     fails with cublasLt64_12.dll missing (hardware_issues.md H-10).
 
-    The libraries are not installed on their own account: torch ships a
-    complete CUDA 12 runtime, and pointing at it avoids a second multi-gigabyte
-    copy. Absent in environments without torch, where inference runs on CPU.
+    Where torch is installed, its complete CUDA 12 runtime is used, avoiding a
+    second multi-gigabyte copy. Elsewhere the runtime comes from NVIDIA's pip
+    packages (nvidia-*-cu12), which Orest's environment installs with
+    onnxruntime-gpu. Their folders go on PATH rather than being preloaded,
+    because cuDNN loads its sub-libraries by name on first use, which only a
+    search path satisfies.
     """
     try:
         import torch
+        folders = [os.path.join(os.path.dirname(torch.__file__), "lib")]
     except ImportError:
-        return
+        nvidia = os.path.join(sysconfig.get_paths()["purelib"], "nvidia")
+        folders = sorted(glob.glob(os.path.join(nvidia, "*", "bin")))
 
-    libraries = os.path.join(os.path.dirname(torch.__file__), "lib")
-    if os.path.isdir(libraries) and libraries not in os.environ.get("PATH", ""):
-        os.environ["PATH"] = libraries + os.pathsep + os.environ["PATH"]
+    path = os.environ.get("PATH", "")
+    missing = [folder for folder in folders if os.path.isdir(folder) and folder not in path]
+    if missing:
+        os.environ["PATH"] = os.pathsep.join(missing) + os.pathsep + path
 
 
 def device() -> str:
