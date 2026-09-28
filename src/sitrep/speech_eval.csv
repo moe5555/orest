@@ -1,0 +1,35 @@
+art,satz,risiko,menschlichkeit
+drohung,"Wenn du das noch einmal machst, bist du tot.",5,-3
+drohung,"Ich weiß, wo du wohnst.",4,-2
+drohung,"You'll regret this, I promise you.",4,-2
+drohung,"Pass bloß auf, was du sagst.",3,-1
+hass,"Ich kann dich nicht ausstehen.",2,-3
+hass,"Du widerst mich an.",2,-4
+hass,"I hate everything about you.",3,-3
+beleidigung,"Du Idiot.",2,-3
+beleidigung,"You're pathetic.",1,-4
+duester,"Manchmal will ich einfach, dass alles aufhört.",3,0
+duester,"Die Welt wäre besser ohne diese Leute.",4,-3
+radikal,"Man muss sie alle loswerden.",5,-4
+gewalt,"Ich schlag dir gleich eine rein.",4,-2
+gewalt,"Gib mir das Messer.",3,0
+freundlich,"Schön, dass du wieder da bist.",0,3
+freundlich,"Ich bin stolz auf dich.",0,4
+freundlich,"I'm so glad we met.",0,3
+dank,"Vielen Dank für deine Hilfe.",0,3
+hilfe,"Warte, ich trag das für dich.",0,4
+hilfe,"Here, take my jacket, you're freezing.",0,4
+trost,"Das wird schon wieder, ich bin bei dir.",-1,4
+entschuldigung,"Es tut mir leid, das war nicht fair von mir.",-1,3
+beruhigen,"Lass uns erst mal durchatmen.",-2,2
+neutral,"Wo hast du den Schlüssel hingelegt?",0,0
+neutral,"Um acht fängt die Probe an.",0,0
+neutral,"The door is on a timer.",0,0
+probe,"Noch mal von vorne, bitte.",0,0
+probe,"Kannst du einen Schritt nach links gehen?",0,0
+fuellwort,"Ähm, ja.",0,0
+fuellwort,"So, like...",0,0
+redewendung,"Ich lach mich tot.",0,0
+redewendung,"Das bringt mich noch um den Verstand.",0,0
+ironie,"Na toll, genau das hat mir noch gefehlt.",0,-1
+ironie,"Oh great, another brilliant idea.",0,-1
