@@ -6,6 +6,576 @@ referenced below.
 
 ---
 
+## 2026-09-28 — Recording never pauses; cut lines held back; loudness marked; previous lines as context (VSH-ARLT-5090)
+
+**Moe's observation** on "Four Dogs a Bone" (test corpus), run with
+`--window 5 --interval 5`:
+- Eskalation and Gefahr rose with the conflict, but crucial lines were
+  missing from the dashboard.
+- Loud shouting didn't raise Risiko or Eskalation.
+
+**Diagnosed** by replaying the clip through the live loop's own steps, with
+a Whisper transcript of the whole clip as ground truth:
+- **The loop stopped recording while it made a report.** At 5 s windows a
+  report took ~4–5 s, so 58 % of the conflict (150–360 s) was captured and 20
+  of 67 lines were heard whole. 4 of the 10 loudest lines fell into the gaps.
+  At 15 s windows: 73 %, 40 of 65 lines. This is concern 3 of
+  `claude_concerns.md`.
+- **Short windows cost as much per report.** Whisper ~0.1 s, the line rating
+  ~1 s (in parallel), the Gemma report 2.3–5 s, mostly generated text. The
+  cost is per report, not per second of footage.
+- **The model rated each window blind to the previous one,** and couldn't
+  know a line was shouted.
+- **Risiko per person needs attributed lines;** on this footage most stay
+  `(unklar)`.
+
+**1. `capture.Recorder`** replaces the generator that recorded only while it
+was waited on.
+- It records on its own thread, windows back to back.
+- `AudioBuffer` hands over all sound since the last cut. `AudioRing`, which
+  kept only the last window's worth, is gone.
+- A report takes every window that finished meanwhile, merged (`merge`): all
+  the sound, and the usual number of frames spread over them. More than 60 s
+  behind (`MAX_BACKLOG`), the oldest sound is dropped with a message.
+- The session holds the recorder, so stopping drops waiting windows at once,
+  even while a report is still being generated.
+- `Session.close()` now also deletes face tracks (`PresenceTracker.clear`),
+  poses, names and unreported readings (`ActionRatings.clear`), mouth
+  measurements (`Speakers.clear`) and the loudness calibration. Tests check
+  that nothing is held after a stop. Kept, as agreed: the last report on the
+  page, and Ollama's cached prompt.
+
+**2. Cut lines held back** (`report._held_back`). A last segment ending within
+0.5 s of the window's sound (`CUT`), and at most 10 s long (`MAX_CARRY`), is
+left out and its sound put in front of the next window (`capture.prepend`),
+where it is transcribed and reported whole.
+
+**3. Loudness marked for the model.** Lines 1.5 or 2.5 standard deviations
+above normal carry `lautstaerke` "laut" or "geschrien". The transcript reads
+`Name (geschrien): …`, and the prompt says what the marks mean.
+- **Calibration** became provisional after 30 s of speech and fixed after
+  120 s (`PROVISIONAL`, `CALIBRATION`).
+- Calibrated on 30 s alone, the whispered opening of "Four Dogs" (−38.8 dBFS
+  against a median of −26) marked 63 % of all lines. Now 44 lines of the
+  conflict are "laut" and 3 "geschrien", the three loudest of the clip.
+- The page and console show "lernt n/120 s" until it's fixed.
+
+**4. Previous lines as context.** The report's model sees the previous
+report's last 8 lines as "Zuvor gesagt", and is told to rate this window
+while noting whether the situation is sharpening or easing.
+
+**Result**, replaying 0–405 s of "Four Dogs" at `--window 15 --interval 5`
+through the new pipeline:
+- **Lines:** 119 of 128 ground-truth lines appear in a report; the rest
+  differ in Whisper's wording.
+- **Eskalation:** 0 through the calm opening, 6–8 through the conflict (peak
+  8 at "That's fucking racist, you stupid bitch!"), easing to 2–4 around
+  300 s and back to 7 at 345–375 s. Gefahr up to 4. Before: mostly 0–3.
+- **Delay:** reports 5.7 s after their window on average, at most 7.4 s. No
+  merging was needed at 15 s.
+
+**On window length:** a report costs 3–7 s whatever the window, so 10–15 s
+windows keep up. At 5 s, windows are merged, and the reports are both later
+and coarser than at 15 s.
+
+17 new tests; 395 pass.
+
+---
+
+## 2026-09-28 — Loudness amplifies Risiko, calibrated per session (VSH-ARLT-5090)
+
+The Audio route under "Calculating Values" in `02_processing.md`: higher
+loudness increases negative-coded values. As Moe asked, each session
+calibrates itself at the beginning and loudness amplifies what pose and speech
+measure.
+- **Risiko only**, following the spec's "negative-coded". Menschlichkeit is
+  left as it is.
+- **Amplifies, never lowers**, and adds no evidence of its own, so a loud
+  laugh is not a danger.
+
+**`src/sitrep/loudness.py`:**
+- **Level:** the window's audio in 100 ms steps as dBFS. A stretch's level is
+  the 90th percentile of its steps, so pauses between words don't pull a line
+  down.
+- **Calibration:** `Calibration` learns the mean and spread (at least 3 dB)
+  of the first 30 s of detected speech, weighting each Whisper segment by its
+  length. Silence isn't counted, since it would make every line loud. Until
+  then every gain is 1. There is one calibration per `Session`.
+- **Gain:** the first standard deviation above normal counts as ordinary
+  speech (`QUIET`). Beyond it, `1 + 0.5` per standard deviation, capped at
+  2×. It multiplies positive Risiko evidence before rounding and clipping to
+  0–5.
+
+**Where it applies:**
+- **Actions:** each reading gets the gain of its own 4 s, before the peak is
+  taken (`actions.rate(..., gain)`). The Handlung records it as
+  `verstaerkung`, and the cause says `laut ×1.5`. Readings from before the
+  window's audio, such as those made while the previous report was generated,
+  get 1.
+- **Speech:** each line carries `pegel_db` and `verstaerkung`.
+  `Sitrep.bewertung` uses the amplified Risiko.
+- **Report order:** `report.sitrep` now transcribes first, learns from the
+  window's speech, and then takes the action readings with the gain.
+- **Display:** the report carries `pegel` (calibrated, seconds heard, normal
+  level, spread). The console footer and the page header show it, and
+  amplified lines show their gain.
+
+**Measured on 5 min of "Boom"** in 15 s windows:
+- Calibrated after the third window (31 s of speech): normal −29.8 dBFS
+  ±5.0.
+- With a plain `1 + 0.25·σ`, nearly every later line was amplified, by 1.1 to
+  1.3, because the scene opens quietly and grows louder.
+- With the one-σ dead zone and a 0.5 slope: 37 lines amplified, 13 above
+  ×1.3. The loudest are the argument about being locked in (375–392 s, ×1.5
+  to ×1.7): "Why did you lock the door?", "The obsession with the fish is
+  too much."
+
+11 new tests; 383 pass.
+
+**Open:** a session that opens quietly and escalates sets a low normal level.
+This is in `todo_with_data.md`, with checking the constants on the
+production's microphones.
+
+---
+
+## 2026-09-28 — Speech rated per line; combined with actions by maximum (VSH-ARLT-5090)
+
+The Sentiment Analysis route under "Calculating Values" in `02_processing.md`.
+Decided with Moe:
+- Lines are taken at their word: as seriously meant, whether acted or not.
+- Risiko and Menschlichkeit combine with the action values by maximum.
+- The prompt's example lines stand in for the trigger-word table for now.
+
+**`src/sitrep/speech.py`:**
+- One text-only request per report to the report's model, run alongside the
+  report's own request, with the same context size so Ollama keeps one
+  loaded model.
+- Each line (`Name: text`) gets a one-sentence reason and evidence from −5 to
+  +5 for risiko and menschlichkeit, the scale of the action table.
+- The reason comes first in the schema, so the model states what a line
+  means before it scores it.
+- The grammar holds the reply to one reading per line. Temperature is 0.
+- A failed request leaves the lines unrated and keeps the report.
+- The anchors are `src/sitrep/speech_examples.csv`, an editable table like
+  `action/sitrep_map.csv`.
+
+**Combination.**
+- `Aeusserung` carries each line's `begruendung`, `risiko` and
+  `menschlichkeit`.
+- `Sitrep.bewertung(name, rating)` returns the higher of the person's action
+  rating and the peak of their attributed lines, clipped to 0–5, together
+  with its cause: an NTU class, or the line and its reason.
+- Unattributed lines count for no one.
+- Console, operator page and OSC show the combined values. The console and
+  page also show each line's evidence, with the reason on hover.
+
+**Evaluation: `python -m sitrep.speech`** rates `src/sitrep/speech_eval.csv`,
+34 invented German and English lines, none of them among the examples, in
+groups of 6.
+- First prompt: 26 of 34 within ±1. Friendly lines got risiko −2, and idioms
+  were read word for word ("Ich lach mich tot" → risiko +5).
+- After stating that negative risiko means actively calming, that friendliness
+  alone is 0, and that idioms keep their ordinary meaning: **31 of 34**.
+- Asking the reason field for "what the speaker means" instead of "what the
+  line says literally" gave 29 and was reverted.
+- Remaining misses: two idioms, and "Ich schlag dir gleich eine rein" at +5
+  where +4 was expected.
+- Every threat, hate line and insult lands: "I hate everything about you" →
+  risiko +3, "Man muss sie alle loswerden" → +5.
+- 1.2–1.5 s per request with `gemma4:26b`.
+
+13 new tests; 373 pass.
+
+---
+
+## 2026-09-28 — Speaker attribution by lip movement; the tracked people named on the operator's video (VSH-ARLT-5090)
+
+Moe asked for the two most visible people on stage to be tracked, for what
+they say to be attributed to them, and for their names and boxes to appear on
+the webcam feed, using the models that already track people and their
+identity. This is the speaker diarisation that the sentiment analysis in
+`02_processing.md` ("Calculating Values") needs.
+
+**The people** are the action recogniser's: the two tallest bodies from pose
+tracking (`recognizer.MAX_PEOPLE`), named through the face tracker
+(`actions.py`). `recognizer.tallest()` picks them per frame.
+
+**Mouths: `src/sitrep/speakers.py`.**
+- The recogniser now hands each tracked frame to an `on_frame` listener.
+- For each of the two tallest bodies, a face box comes from the pose's head
+  joints: the ear distance, or the eye distance, sets its size.
+- `2d106det.onnx`, the 106-point landmark model of the `buffalo_l` bundle
+  whose detector and recogniser Orest already uses (`face/model.py` unpacks
+  it from the cached zip), finds the lips.
+- The opening is the gap between the inner lip centres (points 62/60) divided
+  by the mouth's width (52/61). Found by drawing the points on a corpus face.
+- 1.3 ms per face on the GPU, so about 65 ms of GPU time per second for two
+  people at 25 fps.
+
+**Attribution.** Whisper now returns timed segments (`transcribe.segments`).
+A segment goes to the person whose mouth opening varied at least `RATIO` 1.5
+times as much as the other's over it, each needing at least 5 measurements.
+- With fewer than two mouths seen, or no clear difference, the line stays
+  unattributed.
+- A speaker whose body carries no name is `Unbekannt`.
+- The report gains the measured field `aeusserungen` (name or None, text,
+  beginning, end). `gesagt` stays verbatim.
+- The model reads the transcript as `Name: line`, with `(unklar)` where the
+  speaker isn't known.
+- The console and the operator page list the lines with speakers.
+
+**Names now survive a body leaving the frame.** A name moves off another body
+only if that body is in the same frame. Before, every camera cut stripped a
+name from the earlier body's readings. On a replay, lines attributed to
+`Unbekannt` fell from 12 to 5.
+
+**Overlay.** The operator page's MJPEG feed draws the two tallest bodies with
+their names, or `Körper <id>` while unnamed. It uses `annotate.draw_names`,
+off the event loop. The NDI feed stays unmarked.
+
+**Measured on "Boom"** (edited multi-camera footage):
+- Feasibility, 5 min: 107 segments with both mouths visible, of which 69 had
+  a clear mover (≥1.5×). Clear cases can be decisive, e.g. 15× on "Yeah, I
+  don't have a good job".
+- Full pipeline, 60 s from 200 s: 17 of 34 lines attributed.
+- The two actors appear under many guessed names, because face tracks restart
+  at cuts, and even with the two enrolled from the clip, their dark, profile
+  and wide-shot faces were rarely recognised. Where "Person A" was recognised,
+  the lines fit the character.
+- Accuracy is unmeasured; `todo_with_data.md` describes how to measure it on
+  the production's own footage.
+
+The overlay was checked on a replayed frame: both performers boxed, audience
+heads in the foreground excluded. 16 new tests; 361 pass.
+
+---
+
+## 2026-09-28 — People and their ratings on the first screen, with numbers (VSH-ARLT-5090)
+
+**The values were on the page but easy to miss.** A full-page capture showed:
+- The per-person ratings were the third panel under the video, below the
+  first screen at 1600×900.
+- They were drawn as five pips with no number, so a 0 looked like an empty
+  field. Most ratings on the corpus are 0.
+
+Changes to the operator page:
+- **Personen and Gemessen** now come directly after the recommendation,
+  before the description and the scene.
+- **The video** takes at most 48 % of the window height, down from 62 %.
+- **Each rating shows its number** next to the pips, or `–` if not measured.
+
+At 1600×900 the first screen now holds the video, the report header, the
+recommendation and the people with their ratings.
+
+**A stale cache was also real.** Moe's regular Edge profile went on showing
+no values while a private tab worked. The page files had been served without
+cache headers since 2026-09-25. Edge could therefore reuse a copy that was
+days old for hours without asking the server, and a newer script ran against
+older markup. The `no-cache` header added earlier today applies only once a
+file has been fetched fresh, so an existing profile needs its cache cleared
+once.
+
+---
+
+## 2026-09-28 — Sound from an NDI source: `--audio-ndi` (VSH-ARLT-5090)
+
+Live test runs had no speech: OBS Virtual Camera carries video only, and the
+NDI Webcam audio device Orest recorded had no source. Once OBS's DistroAV NDI
+output was on (`VSH-ARLT-5090 (OBS PGM)`), NDI Webcam still couldn't be set
+to it, since its window didn't respond. Orest now receives the NDI source's
+audio itself.
+
+- **`src/sitrep/ndi_audio.py`**: `NdiAudio(source)` names the source.
+  `Receiving` finds it (up to 10 s, and the error lists the sources seen),
+  receives audio only on a thread, mixes it to mono and resamples to 48 kHz if
+  needed. It fills the same `capture.AudioRing` a microphone does. It uses
+  cyndilib, already a dependency for the NDI video output (`feed.py`).
+- **`capture.windows`** opens either a microphone (sounddevice) or the NDI
+  receiver, both as context managers.
+- **`--audio-ndi SOURCE`** in `orest-sitrep` and `orest-ui`.
+  `session.resolve_sources(args)` picks the camera and the sound source for
+  both entry points. `devices.describe` names an NDI source in the startup
+  lines.
+- 5 new tests; 347 pass.
+
+**Verified** against OBS playing the corpus: 15 s received through
+`Receiving` gave 13.5 s of audio (about 1.5 s to connect) at −40 dBFS RMS.
+Whisper `en` transcribed it cleanly ("Who's gonna stay in this apartment and
+who's not? … You are deeply cruel.").
+
+---
+
+## 2026-09-28 — Report back on the first screen; readings named when a report takes them (VSH-ARLT-5090)
+
+**The report was below the visible area.** In a new Edge window Moe again saw
+only the video. Checked from this machine:
+- The server made a report every ~17 s with 1.9–2.1 s latency.
+- All 22 event-stream messages in 20 s were valid JSON.
+- A headless Edge rendered the report without error.
+- A screenshot at 1600×900 showed the cause: the live action panel, added
+  between the video and the report, pushed the report's top to 803 px, below
+  the 808 px viewport. The page is laid out so that the video takes a fixed
+  share of the window and the report starts on the first screen (`style.css`,
+  `.feed`).
+
+The panel now comes after the report. The stale-page explanation of the entry
+below also held: Moe's regular Edge profile kept showing nothing while a
+private tab worked (see the entry above).
+
+**Readings are named when a report takes them.** The live panel showed both
+performers as `Körper 37` and `Körper 41` at one moment, and named a few
+seconds later. Readings were named when they were recorded, so everything a
+body did before its face was matched was lost: 2–10 readings per person in a
+15 s report, of about 45 possible. `ActionRatings` now keeps readings under
+the body's track id (`Evidence.members`) and resolves names in `take()`. A
+body named at any point before the report counts with all its readings. Name
+changes are serialised with the same lock as the records. 1 new test; 342
+pass. A replay of 60 s of "Boom" with the real models still names and rates
+both performers.
+
+**No NDI source exists on this machine.** An NDI finder (cyndilib) listed
+none. OBS's DistroAV output is off, so NDI Webcam has nothing to select, and
+live runs still record silence.
+
+---
+
+## 2026-09-28 — Transcription language selectable: `--language` (VSH-ARLT-5090)
+
+Whisper's language was fixed to German (`transcribe.LANGUAGE`, for the
+Stuttgart production). A fixed language is also the language Whisper writes
+in, so the English test corpus came out as rough German. On 20 s of "Boom":
+"thank you for noticing the tank is nice" became "danke für die Aufmerksamkeit,
+die Tank ist nett", and "They are dying" was lost. With `en` the same audio
+transcribes cleanly.
+
+`--language` in `orest-sitrep` and `orest-ui` sets it per run (default `de`).
+It passes through `session.Options.language` and `report.sitreps` to
+`transcribe.transcribe`, and appears in the startup lines. It prepares the
+sentiment analysis in `02_processing.md` ("Calculating Values"), which reads
+the transcript. 341 tests pass.
+
+Also found: **live test runs have had no speech.** OBS Virtual Camera carries
+only video, and the NDI Webcam Audio device Orest records had no source
+(report #42: `gesagt` empty). OBS's DistroAV NDI output can feed it; steps are
+in `todo_with_data.md`.
+
+---
+
+## 2026-09-28 — Operator page no longer mixes cached and new files (VSH-ARLT-5090)
+
+**Symptom.** After the action panels were added, a run in `orest-ui` showed a
+smooth video and "Live", but never a report.
+
+**Cause.** The server was producing reports: #7 after 2 min, with 2.1–2.2 s
+latency, so `gemma4:26b` was back on the GPU. The browser tab had kept the
+old `sitrep.html` alongside the new `sitrep.js`. The script looked for the new
+live-action panel, found no element, and threw before reaching the report.
+
+Verified in a fresh headless Edge driven over DevTools: the same page showed
+report #14, 3 person cards, 4 measured people and 3 live action rows, with no
+script error.
+
+**Fix.** Page and static responses now carry `Cache-Control: no-cache`, so the
+browser checks every file on each load; an unchanged file costs a 304. The
+video and event streams keep `no-store`. 340 tests pass.
+
+---
+
+## 2026-09-28 — Action recognition limited to the two tallest people (VSH-ARLT-5090)
+
+Set by Moe: the production's footage shows two performers, and they are the
+tallest bodies in frame. `recognizer.MAX_PEOPLE` is now 2, down from 6 in the
+entry below. Each window then classifies at most three groups: each performer
+alone, and the pair while they stand close. 339 tests pass.
+
+---
+
+## 2026-09-28 — Action classification no longer takes over the GPU (VSH-ARLT-5090)
+
+**Symptom.** In `orest-ui` with `gemma4:26b` on sample footage showing about 17
+people, reports hardly arrived and the video stuttered.
+
+**Cause, measured.**
+- Orest's process held **27.4 GB of the 5090's 32 GB**. Ollama kept 3.8 GB on
+  the GPU, and Windows moved the rest of the model (~21 GB) into system RAM,
+  so generation ran largely from system memory.
+- The action recogniser sent every person and every close pair to the network
+  in one batch. With 17 people that can be over 150 groups a second, each as
+  10 clips.
+- GPU memory grew by about 250 MB per group, and ONNX Runtime keeps its arena
+  and grew it by doubling.
+- The three people of the earlier Boom test needed only a few hundred MB.
+
+**Fix:**
+- **`model.CHUNK = 4`**: the network gets at most 4 sequences (40 clips) per
+  run. Results are unchanged; a test checks that chunks stay aligned.
+- **`arena_extend_strategy: kSameAsRequested`**: the CUDA arena grows by what a
+  run needs instead of doubling.
+- Measured: 1 to 40 groups now stay at **~2 GB** for the process, including the
+  CUDA context. Before, 8 groups already took 2.6 GB, still growing.
+- **`recognizer.MAX_PEOPLE = 6`**: only the six tallest bodies in a window are
+  classified, alone and in pairs, so at most 21 groups. Even with bounded
+  memory, 150 groups can't be classified within the one-second step.
+  Performers usually stand nearer the camera than an audience at the edges.
+  This partly answers "The audience dominates" (2026-09-28, step 4).
+
+339 tests pass. Clean timings with Gemma on the GPU are still to be measured:
+the machine was occupied by the run being diagnosed.
+
+---
+
+## 2026-09-28 — Operator page shows the action recogniser live and per report (VSH-ARLT-5090)
+
+The operator page (`orest-ui`) now shows what the action recogniser measures,
+so it can be watched while testing on sample footage:
+
+- **Aktionserkennung · live**, under the camera. The latest classification,
+  refreshed every second. Each row shows a person or pair, the most probable
+  class with its probability, and the signed evidence for risiko and
+  menschlichkeit. The strongest evidence comes first, and at most 12 rows are
+  shown, since spectators are classified too. Unnamed bodies appear as
+  `Körper <id>`, which shows at once whether naming works. A recogniser that
+  stopped shows its error here.
+- **Gemessen**, in each report. One card per rated person, with both ratings,
+  the class behind each and the number of readings. It includes people the
+  model left out of its list.
+- The header says whether action recognition is on.
+
+`ActionRatings` keeps its last classification (`latest`, `evaluations`) for
+this view. The snapshot carries it as `aktionen`. The event stream now sends
+whenever the snapshot changes, not only when the version rises, because live
+readings change every second without changing the run's state.
+
+4 new tests; 337 pass. The page script passes `node --check`. It has not been
+looked at in a browser.
+
+---
+
+## 2026-09-28 — Risiko and Menschlichkeit measured by the action recogniser in the live SITREP (VSH-ARLT-5090)
+
+The live SITREP now takes `risiko` and `menschlichkeit` per person from the
+NTU120 action recogniser, not from the model. This is the Pose route under
+"Calculating Values" in `knowledge/components/02_processing.md`, and step 7 of
+action recognition. The model rates only `auffaelligkeit`.
+
+**`src/sitrep/actions.py`** runs the recogniser as another reader of the
+session's camera (`Session.actions`). It turns readings into ratings in three
+steps:
+
+- **Naming.** Every second, when the recogniser classifies, each body whose
+  head joints (nose, eyes, ears) lie in a face box takes that face's name. The
+  box must come from the presence tracker's last 1 s, and may be up to half
+  its size away. Pairing is one-to-one, nearest centre first, and a name seen
+  on a new body leaves the old one. `PresenceTracker.faces()` hands out the
+  recent boxes without running a pass.
+- **Evidence.** A reading's evidence is `Σ P(class) · table value`, the
+  expected value under the model's own uncertainty, using
+  `action/sitrep_map.csv`. A pair reading counts for both people.
+- **Rating.** Over a report, each rating is the peak evidence, rounded and
+  clipped to 0–5. A single blow is enough, however calm the rest of the window
+  was. A report takes every reading since the previous one, including those
+  made while that report was being generated, when capture is paused.
+
+**Measured and generated are kept apart**, as for `anwesend`:
+- The measured values are a new field, `Sitrep.handlungen`. Each `Handlung`
+  holds a name, the two ratings, the class behind each (`anlass_risiko`,
+  `anlass_menschlichkeit`) and the number of readings.
+- `Person` in the model's schema holds only `auffaelligkeit`, and the prompt
+  defines only that.
+- `Sitrep.bewertungen(person)` joins the two sources in `BEWERTUNGEN` order.
+- A person the recogniser read nothing of gets `None`, which is not a 0. It
+  travels as **-1 over OSC** and shows as `–` in the console and "nicht
+  gemessen" on the operator page. The console and the page also show the
+  class behind each rating above 0.
+
+**Other changes:**
+- On by default. `--no-actions` turns it off in `orest-sitrep` and `orest-ui`.
+- The action model loads when the run starts, so a missing model fails the
+  run immediately.
+- The session stops the recogniser before the face tracker it reads.
+- An error on the recogniser's thread is now kept (`ActionRecognizer.error`)
+  and printed, and recognition stops. Before, the thread ended silently.
+- 22 new tests, none needing a model or GPU; 333 pass.
+
+**Replay on sample data.** A scratch script ran 90 s of "Boom" (from 120 s)
+through the real pose, face and action models, driven frame by frame, with a
+report every 30 s:
+
+- All three people on stage were named from their faces and rated, with
+  54–104 readings each per report. It took 38 s of wall time for 90 s of
+  footage.
+- **Everyone came out at risiko 1** in an ordinary conversation. Small
+  probabilities on many risk classes add up, and the peak over ~100 readings
+  rounds them up.
+- One person got menschlichkeit 4 from "giving something to other person
+  0.93". Not checked against the footage.
+
+A live window on this machine started cleanly ("action: NTU120 ST-GCN on
+CUDAExecutionProvider"), with 3.3 s latency. The NDI Webcam was empty, so it
+measured no one.
+
+Calibration steps, open questions and a way to feed sample footage into the
+live SITREP are in `todo_with_data.md`.
+
+---
+
+## 2026-09-28 — Per-person ratings narrowed to Risiko, Menschlichkeit, Auffälligkeit; suggested Action-to-SITREP table (VSH-ARLT-5090)
+
+Moe set the categories per person under Realtime-SITREP in
+`knowledge/components/02_processing.md`, where they are now defined. They
+replace `kollaborativ relevanz verantwortungsvoll menschlich gefahr`, still
+0–5:
+
+| Rating | Meaning |
+|---|---|
+| `risiko` | how dangerous the person is: hitting, threatening or dark speech, aggressive or radical behaviour |
+| `menschlichkeit` | pro-social behaviour: giving, helping, saying something positive |
+| `auffaelligkeit` | deviation from the person's past behaviour, e.g. a Mahalanobis distance |
+
+**Each rating is defined in the prompt.** In the 2026-09-25 test run the
+undefined `menschlich` came back 0 for everyone. Nothing measures
+`auffaelligkeit` yet, so the model rates it against the others in the window,
+the only reference it has. The scene ratings (`relevanz eskalation gefahr`,
+0–10) and the intervention rule are unchanged.
+
+Renamed throughout, with no other change: the OSC person row
+(`<risiko> <menschlichkeit> <auffaelligkeit>`), `PERSON_HEADER` in
+`TouchDesigner/code/sitrep_osc.py`, the setup note, the README and the operator
+page. The console and the page colour `risiko` as they coloured `gefahr`.
+**TouchDesigner's `sitrep_personen` table changes from nine columns to seven.**
+
+**Suggested Action-to-SITREP table: `src/action/sitrep_map.csv`.** This is the
+first half of action recognition step 7. It has one row per NTU120 class, with
+evidence from -5 to +5 for `risiko` and `menschlichkeit`, a `paar` flag for
+NTU's 26 mutual classes, and a note. It follows the "label activities, not
+values" note in `02_processing.md`: the recogniser names actions, and the
+table says what they mean.
+
+- Strong risk: hitting, kicking, knocking over, knife, gun (+5, and -3 to
+  menschlichkeit). Pushing and shaking a fist are +3.
+- Strong humanity: hugging, giving, supporting (+4). Handshake, pat on the
+  back, high-five and carrying together are +3.
+- Classes the recogniser produced for ordinary conversation in the test
+  corpus (point finger, touch pocket) have at most ±1.
+- Warm-up exercises (side kick, arm swings) and signals that belong to the
+  scene rather than a person (falling, staggering, hands up, "stop") are 0,
+  with notes.
+
+`action/sitrep_map.py` loads and checks it: every class once, in order, and
+within ±5. A test compares the names with the model's label map when that map
+is present. 310 tests pass.
+
+**Open:**
+- **Pair classes have no direction.** NTU does not record which of two people
+  hits, so both would receive +5 risiko. The victim needs a rule, e.g. whose
+  wrist moves toward whose body.
+- **The table is not applied yet.** Turning probabilities into ratings is the
+  SITREP formula, which is still undecided.
+- **The longer prompt costs latency.** The three definitions add tokens,
+  though there are now fewer rating fields to generate. Not measured.
+
+---
+
 ## 2026-09-25 — Review of the name-tagging change; a failed naming pass no longer ends the session
 
 Review of the entry below. Python, the OSC wire format, `sitrep_osc.py`, the

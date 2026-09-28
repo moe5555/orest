@@ -19,7 +19,7 @@ was built and why is in `changelog.md`; open questions are in
 | 6 · Latency budget | done — `sitrep.benchmark` |
 | 7 · Output | done — operator page (`orest-ui`): camera with the report beneath it; console; NDI video and OSC data to TouchDesigner |
 | — · Cast recognition | built — `face`, `sitrep.presence`; the roster names the people in the report |
-| — · Action recognition | step 4 of 7 — `action`: NTU120 ST-GCN runs on continuous pose; classes not yet filtered or mapped to values |
+| — · Action recognition | in the live SITREP — `sitrep.actions` rates risiko and menschlichkeit per named person from the NTU120 ST-GCN and `action/sitrep_map.csv`; uncalibrated (`todo_with_data.md`) |
 
 Report content is not yet trustworthy (`claude_concerns.md`, concern 1). A
 first run of `gemma4:26b` on the production machine described a stage frame

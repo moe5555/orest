@@ -194,6 +194,10 @@ mitigations 3 and 4 above.
 
 ### 3. Coverage gaps between windows
 
+*Resolved 2026-09-28: recording no longer pauses for a report
+(`capture.Recorder`, `changelog.md`). The text below describes the earlier
+state.*
+
 Generation blocks the next capture window, so the gap between windows equals the
 generation latency. Coverage is W/(W+latency): **65% at a 15s window, 83% at
 30s**. The system is blind for ~7s after every report.

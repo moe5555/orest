@@ -13,7 +13,11 @@ Overview: components/pipeline.md
   - who is in the scene (provide the system with images of each team member, perhaps their bio?)
   - what they are doing 
   - time frame covered
-  - categories per person: verantwortungsvoll, menschlich, gefahr, kollaborativ, relevanz
+  - categories per person, 0–5:
+    - **Risiko**: how dangerous a person is, e.g. punching someone, saying something threatening or dark, aggressive or radical behaviour.
+    - **Menschlichkeit**: pro-social behaviour, e.g. giving someone something, helping, saying something positive.
+    - Risiko and Menschlichkeit are measured from the action classifier (`src/sitrep/actions.py`) and from what each person says (`src/sitrep/speech.py`); a person's rating is the higher of the two. Loudness amplifies the Risiko evidence of both (`src/sitrep/loudness.py`).
+    - **Auffälligkeit**: how far a person's behaviour deviates from their past behaviour, e.g. as a Mahalanobis distance. Until that is measured, the model rates it against the others in the window.
   - prediction of what might happen next. 
   - whether to interfere, if so, what to do. 
 - prioritises low latency over accuracy 
@@ -54,8 +58,8 @@ flowchart LR
     formula --> zn["… zn"]
 ```
 
-- *Sentiment Analysis*: feed the transcript into Gemma and ask it to score the person's values (gefahr, kollaborativ, etc.) - to do this, we need to implement speaker diarisation. There should also be a file with key value pairs that we can add to this analysis so that we can hardcode certain things like if sentence x is said -> set value x to y 
-- *Pose*: certain activites are recognised. For instance, people hitting each other, running, hugging, etc. and are then mapped to the SITREP values. 
+- *Sentiment Analysis*: feed the transcript into Gemma and ask it to score the person's values (gefahr, kollaborativ, etc.) - to do this, we need to implement speaker diarisation. Speaker attribution by lip movement of the two most visible people exists (`src/sitrep/speakers.py`); each report carries its lines with speakers (`aeusserungen`). There should also be a file with key value pairs that we can add to this analysis so that we can hardcode certain things like if sentence x is said -> set value x to y. For now the prompt's example lines (`src/sitrep/speech_examples.csv`) take this role; a separate trigger table is built only if they prove insufficient. 
+- *Pose*: certain activites are recognised. For instance, people hitting each other, running, hugging, etc. and are then mapped to the SITREP values. The mapping is `src/action/sitrep_map.csv`: evidence from -5 to +5 for Risiko and Menschlichkeit per NTU120 class.
   > Claude's notes (2026-09-25), reviewed 28.09.26, kept here for now as background info:
   > - **No live WISE needed.** The pose embedding (`orest_pose`) already runs in Orest; a labelled reference corpus of a few hundred clips can be matched directly. WISE helps *build* the corpus: body-search one good example in the archive to find its rehearsed repetitions.
   > - **Label activities, not values.** Clips are tagged "Schlag", "Umarmung", …; a separate editable table maps activities to values (Schlag → gefahr ≥ 9). Same format as the key-value file for spoken lines.
@@ -65,7 +69,7 @@ flowchart LR
   > - **Rule sets the floor.** A detected hit sets a minimum on gefahr in code, decaying over the following windows; Gemma is told, but can't lower it. Linking body boxes to named faces attributes it to a person.
   > - **False positives trigger Einschreiten.** Measure precision per activity; confirm high-stakes ones over two segments or with a loudness spike.
   > - **First experiment:** one activity, ~30 positive and ~100 neutral 4 s segments, nearest-neighbour separation.
-- *Audio*: higher loudness increases negative-coded values like gefahr etc. 
+- *Audio*: higher loudness increases negative-coded values like gefahr etc. Implemented as a gain on Risiko evidence from pose and speech, relative to the session's normal speaking level, which each session learns from its first 30 s of speech (`src/sitrep/loudness.py`). 
 
 
 ### Smart Search 

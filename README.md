@@ -64,12 +64,27 @@ package, so `uv sync` puts the entry point on the path:
     uv run orest-sitrep --json     # raw report JSON instead of the console block
 
 Ollama must be running with the model given by `--model` (default
-`gemma4:e4b`) pulled. The live SITREP records nothing: reports are streamed to
+`gemma4:e4b`) pulled.
+
+Recording never pauses for a report. Windows are cut back to back on a thread
+of their own (`capture.Recorder`), and a report takes every window that
+finished while the previous one was being made, merged into one. A line still
+being spoken when a window ends is held back and reported whole with the next
+window. Each report's model also sees the previous report's last lines. A
+report takes 3–7 s to make with `gemma4:26b`, so windows of 10–15 s keep up;
+shorter windows are merged in pairs or more, which delays the reports.
+Stopping a run deletes at once everything it holds: waiting windows, sound
+not yet cut, face tracks, poses, mouth measurements and unreported readings. Speech is transcribed as German unless `--language` names
+another Whisper language code; the English test corpus needs `--language en`,
+or it comes out as rough German. `--audio-ndi SOURCE` takes the sound from an
+NDI source instead of a microphone, e.g. OBS's programme output with DistroAV:
+
+    uv run orest-ui --video "OBS Virtual Camera" --audio-ndi "VSH-ARLT-5090 (OBS PGM)" --language en The live SITREP records nothing: reports are streamed to
 the console and not retained, and no frame or audio clip is written to disk.
 
 Each report carries a **Beschreibung** (what happened, who did what), the
-**Personen** in the window, each with a short description and five 0–5
-ratings (kollaborativ, relevanz, verantwortungsvoll, menschlich, gefahr), the
+**Personen** in the window, each with a short description and three 0–5
+ratings (risiko, menschlichkeit, auffaelligkeit), the
 **Szene** rated 0–10 for relevanz, eskalation and gefahr, a **Prognose** of the
 three most likely developments with a percentage each, most likely first, and
 an **Empfehlung**. The Empfehlung is written only when the scene's eskalation
@@ -82,6 +97,42 @@ a guessed name such as `Vielleicht: Jakob`. Each name is drawn above its face
 in the frames the model sees, and the model may only use those names, or
 `Unbekannt`. The NDI picture sent to TouchDesigner stays unmarked.
 
+**risiko** and **menschlichkeit** are measured, not generated. The NTU120
+action recogniser (`src/action/`) runs on the camera at 25 fps beside the
+report. Each body takes the name of the face its head is in, and the
+recognised actions are weighed with `src/action/sitrep_map.csv`
+(`src/sitrep/actions.py`). A person whose body the recogniser didn't read
+shows these two ratings as `–`. The model rates only **auffaelligkeit**.
+
+**What was said** is rated per line by a second, text-only request to the same
+model (`src/sitrep/speech.py`). Each line is taken at its word, as if seriously
+meant, and scored from −5 to +5 for risiko and menschlichkeit, reason first.
+The example lines in `src/sitrep/speech_examples.csv` anchor the scale; add a
+row there to fix how a line is scored. A person's risiko and menschlichkeit are
+the higher of their action and speech ratings. `python -m sitrep.speech
+--model gemma4:26b` rates the lines in `src/sitrep/speech_eval.csv` and counts
+the misses.
+
+**Loudness** amplifies Risiko (`src/sitrep/loudness.py`). Each run learns its
+normal speaking level from its first speech: provisionally after 30 s of
+detected speech, fixed after 120 s. Until the first 30 s nothing is
+amplified. Lines that stand out are marked `(laut)` or `(geschrien)` in the
+transcript the model reads. Afterwards, a line or an action louder than one standard
+deviation above normal has its positive Risiko evidence multiplied by up to 2.
+Menschlichkeit is left as it is. The report header shows the calibration
+(`Pegel normal −30 dBFS ±5`), and each amplified line its gain (`×1.5`).
+
+**Who said what** is measured by lip movement (`src/sitrep/speakers.py`). The
+two tallest bodies are the people the system follows. Each Whisper segment
+goes to the one whose lips moved at least 1.5 times as much as the other's,
+measured with the 106-point landmark model of the face models' `buffalo_l`
+bundle. Otherwise it stays `(unklar)`. The report carries the lines as
+`aeusserungen`, and the model reads the transcript as `Name: line`. The
+operator page's video shows both people boxed with their names. The NDI feed
+and the model's frames are marked as before.
+`--no-actions` turns the recogniser off. It needs the exported model in
+`data/models/ntu120_stgcn/`.
+
 ### The operator page
 
 `src/interface/` serves the operator page on the loopback interface:
@@ -93,6 +144,13 @@ Open http://127.0.0.1:9680/. **Start live SITREP** opens a new tab, starts the
 run and shows the camera with the current report beneath it. The tab's
 **Stoppen** button releases the camera. Closing the tab does not stop the run.
 Reopening the page rejoins it.
+
+Below the camera, **Aktionserkennung · live** shows the action recogniser's
+latest classification every second: each person or pair, their most probable
+action and its evidence for risiko and menschlichkeit. Bodies without a
+recognised face appear as `Körper <id>` and don't count toward the report. In
+each report, **Gemessen** lists everyone the recogniser rated, with the action
+behind each rating.
 
 `orest-ui` takes the same camera, microphone, window, `--cast`, `--send-td`
 and `--send-ndi` options as `orest-sitrep`, and applies them to every run
@@ -124,8 +182,7 @@ addresses are namespaced so one DAT can route both:
     /orest/sitrep/beschreibung  <id> <beschreibung>
     /orest/sitrep/gesagt        <id> <gesagt>
     /orest/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
-                                <kollaborativ> <relevanz> <verantwortungsvoll>
-                                <menschlich> <gefahr>
+                                <risiko> <menschlichkeit> <auffaelligkeit>
     /orest/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
     /orest/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
     /orest/sitrep/empfehlung    <id> <einschreiten> <massnahme>
@@ -145,6 +202,8 @@ report, `vermutet` is 1 for a guessed name and for `Unbekannt`. A report `name`
 is always a roster `label` from the report's window, or `Unbekannt`.
 Forecasts arrive most likely first. `einschreiten` is 1 when the scene's
 `eskalation` or `gefahr` is above 6; `massnahme` is empty otherwise.
+`risiko` and `menschlichkeit` are -1 when the action recogniser read nothing
+of the person.
 
 The TouchDesigner side is described in
 `TouchDesigner/2026-09-25_touchdesigner_setup.md`.
