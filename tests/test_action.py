@@ -197,3 +197,35 @@ def test_classification_averages_the_softmax_of_each_clip(monkeypatch):
     expected = (np.exp(10) / (np.exp(10) + 119) + 1 / 120) / 2
     assert probabilities.shape == (1, 120)
     assert probabilities[0, 0] == pytest.approx(expected)
+
+
+def test_a_large_batch_runs_in_chunks_with_the_same_result(monkeypatch):
+    """GPU memory grows with the batch sent to the network, so it is bounded."""
+    sizes = []
+
+    class Session:
+        def run(self, outputs, feeds):
+            flat = feeds["keypoints"]
+            sizes.append(len(flat))
+            # Logits that differ per clip, so a misaligned chunk would show.
+            logits = np.zeros((len(flat), 120), dtype=np.float32)
+            logits[np.arange(len(flat)), flat[:, 0, 0, 0, 0].astype(int)] = 5.0
+            return [logits]
+
+    monkeypatch.setattr(model, "session", lambda: Session())
+    sequences = 2 * model.CHUNK + 1
+    batch = np.zeros((sequences, 2, 2, 100, 17, 3), dtype=np.float32)
+    batch[:, :, 0, 0, 0, 0] = np.arange(sequences)[:, None]
+
+    probabilities = model.classify(batch)
+
+    assert max(sizes) == model.CHUNK * 2 and sum(sizes) == sequences * 2
+    assert list(probabilities.argmax(axis=1)) == list(range(sequences))
+
+
+def test_only_the_largest_bodies_are_classified():
+    """Performers near the camera, not an audience at the frame's edges."""
+    near, far = figure(300, height=500.0), figure(1500, height=150.0)
+    frames = track([(near, far)] * 50)
+    assert recognizer.groups(frames, max_people=1) == [(1,)]
+    assert recognizer.groups(frames, max_people=2) == [(1,), (2,)]

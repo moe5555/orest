@@ -43,6 +43,12 @@ STEP = 1.0
 # it, most of the sequence would be the zeros that stand for "absent".
 MIN_PRESENCE = 0.5
 
+# People classified per window, the largest bodies first. The production's
+# footage shows two performers, nearer the camera than anyone else in frame.
+# Every person admitted also adds pairs: 17 people can make over 150 groups,
+# which the network cannot classify within one STEP.
+MAX_PEOPLE = 2
+
 # Two people form a pair when their box centres are, on average over the
 # frames they share, closer than this many mean body heights. Touching
 # distance with an outstretched arm is about one; a little more keeps an
@@ -69,9 +75,19 @@ def _centre_and_height(body: tracking.Body) -> tuple[np.ndarray, float]:
     return np.array([(x1 + x2) / 2, (y1 + y2) / 2]), float(y2 - y1)
 
 
+def tallest(frame: tracking.Frame, count: int = MAX_PEOPLE) -> list[int]:
+    """The track ids of the `count` tallest bodies in one frame, tallest first."""
+    return sorted(frame.bodies, key=lambda track: -_centre_and_height(frame.bodies[track])[1])[:count]
+
+
 def groups(frames: list[tracking.Frame], *, min_presence: float = MIN_PRESENCE,
-           pair_distance: float = PAIR_DISTANCE) -> list[tuple[int, ...]]:
-    """The people and the pairs of people in a window worth classifying."""
+           pair_distance: float = PAIR_DISTANCE,
+           max_people: int = MAX_PEOPLE) -> list[tuple[int, ...]]:
+    """The people and the pairs of people in a window worth classifying.
+
+    At most `max_people` people are considered, those with the tallest mean
+    body over the window.
+    """
     if not frames:
         return []
     needed = min_presence * len(frames)
@@ -79,7 +95,14 @@ def groups(frames: list[tracking.Frame], *, min_presence: float = MIN_PRESENCE,
     for frame in frames:
         for track in frame.bodies:
             counts[track] = counts.get(track, 0) + 1
-    present = sorted(track for track, count in counts.items() if count >= needed)
+    present = [track for track, count in counts.items() if count >= needed]
+
+    heights: dict[int, list[float]] = {track: [] for track in present}
+    for frame in frames:
+        for track in present:
+            if track in frame.bodies:
+                heights[track].append(_centre_and_height(frame.bodies[track])[1])
+    present = sorted(sorted(present, key=lambda track: -np.mean(heights[track]))[:max_people])
 
     found: list[tuple[int, ...]] = [(track,) for track in present]
     for first, second in itertools.combinations(present, 2):
@@ -121,17 +144,23 @@ class ActionRecognizer:
     """
 
     def __init__(self, source=None, *, fps: float = FPS, window: float = WINDOW,
-                 step: float = STEP, on_readings: Callable[[list[Reading]], None] | None = None):
+                 step: float = STEP, on_readings: Callable[[list[Reading]], None] | None = None,
+                 on_frame: Callable[[np.ndarray, tracking.Frame], None] | None = None):
         self._source = source
         self._fps = fps
         self._window = window
         self._step = step
         self._on_readings = on_readings
+        # Called with each camera frame and the bodies tracked in it, on this
+        # thread, for measurements that need the picture as well as the pose.
+        self._on_frame = on_frame
         self.tracker = tracking.BodyTracker(history=max(tracking.HISTORY, 2 * window))
         self.image_shape: tuple[int, int] | None = None
         self.readings: list[Reading] = []
         self.pose_seconds: list[float] = []
         self.classify_seconds: list[float] = []
+        # The exception that stopped the background thread, if one did.
+        self.error: Exception | None = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
@@ -175,13 +204,23 @@ class ActionRecognizer:
         interval = 1.0 / self._fps
         origin = time.monotonic()
         next_evaluation = origin + self._window
-        while not self._stop.is_set():
-            started = time.monotonic()
-            self.observe(self._source.latest(), started - origin)
-            if started >= next_evaluation:
-                self.evaluate(started - origin)
-                next_evaluation += self._step
-            self._stop.wait(max(0.0, interval - (time.monotonic() - started)))
+        try:
+            while not self._stop.is_set():
+                started = time.monotonic()
+                image = self._source.latest()
+                tracked = self.observe(image, started - origin)
+                if self._on_frame:
+                    self._on_frame(image, tracked)
+                if started >= next_evaluation:
+                    self.evaluate(started - origin)
+                    next_evaluation += self._step
+                self._stop.wait(max(0.0, interval - (time.monotonic() - started)))
+        except Exception as error:
+            # An exception on this thread reaches no caller. It is kept and
+            # printed, and recognition stops rather than repeating the failure
+            # at the pose rate.
+            self.error = error
+            print(f"action recognition stopped: {error!r}", file=sys.stderr)
 
     def close(self):
         self._stop.set()

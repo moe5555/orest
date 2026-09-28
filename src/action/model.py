@@ -25,6 +25,12 @@ MODEL_DIR = Path(os.environ.get("OREST_ACTION_MODEL_DIR",
 MODEL_FILE = "stgcn_ntu120_2d.onnx"
 LABELS_FILE = "label_map_ntu120.txt"
 
+# Sequences sent to the network per run. GPU memory grows with the batch, by
+# roughly 250 MB per sequence of 10 clips, and ONNX Runtime keeps what it has
+# once taken. A fixed chunk bounds that at about 1 GB however many people are
+# in frame, leaving the GPU to the SITREP's language model.
+CHUNK = 4
+
 _lock = threading.Lock()
 _session = None
 
@@ -41,7 +47,11 @@ def _providers() -> list:
     from orest_pose import model as pose_model
 
     if pose_model.device() == "cuda":
-        return [("CUDAExecutionProvider", {"use_tf32": 0}), "CPUExecutionProvider"]
+        # kSameAsRequested grows the memory arena by what a run needs rather
+        # than doubling it.
+        return [("CUDAExecutionProvider", {"use_tf32": 0,
+                                           "arena_extend_strategy": "kSameAsRequested"}),
+                "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
 
 
@@ -76,7 +86,9 @@ def classify(batch: np.ndarray) -> np.ndarray:
     """
     sequences, clips = batch.shape[:2]
     flat = batch.reshape((sequences * clips,) + batch.shape[2:]).astype(np.float32)
-    logits = session().run(None, {"keypoints": flat})[0]
+    step = CHUNK * clips
+    logits = np.concatenate([session().run(None, {"keypoints": flat[start:start + step]})[0]
+                             for start in range(0, len(flat), step)])
     shifted = np.exp(logits - logits.max(axis=-1, keepdims=True))
     probabilities = shifted / shifted.sum(axis=-1, keepdims=True)
     return probabilities.reshape(sequences, clips, -1).mean(axis=1)
