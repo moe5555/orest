@@ -16,7 +16,7 @@ from interface import app as app_module
 from interface import live as live_module
 from interface.app import create_app
 from interface.live import LiveSitrep
-from sitrep import devices, report, session
+from sitrep import actions, devices, report, session
 
 
 def wait_for(predicate, timeout=5.0):
@@ -48,6 +48,7 @@ class FakeSession:
         self.audio = devices.AudioDevice(0, "Fake Mic", "MME", 0, 1, 16000.0)
         self.stream = FakeStream()
         self.tracker = FakeTracker()
+        self.actions = None
         self.gate = threading.Semaphore(0)
         self.closed = threading.Event()
         self._documents = documents
@@ -59,6 +60,9 @@ class FakeSession:
                     return
             yield document
         self.closed.wait()
+
+    def overlay(self, frame):
+        return frame
 
     def close(self):
         self.closed.set()
@@ -214,8 +218,7 @@ def test_the_video_feed_ends_when_the_viewer_leaves(live, run):
 
 
 def test_the_page_payload_marks_guessed_names_only(sitrep):
-    guessed = report.Person(name=report.UNBEKANNT, beschreibung="", kollaborativ=0,
-                            relevanz=0, verantwortungsvoll=0, menschlich=0, gefahr=0)
+    guessed = report.Person(name=report.UNBEKANNT, beschreibung="", auffaelligkeit=0)
     document = sitrep.model_copy(update={"bericht": sitrep.bericht.model_copy(update={
         "personen": [*sitrep.bericht.personen, guessed]})})
 
@@ -226,3 +229,51 @@ def test_the_page_payload_marks_guessed_names_only(sitrep):
     assert [person["vermutet"] for person in rendered["bericht"]["personen"]] == [
         False, True, False]
     assert "einschreiten" in rendered["bericht"]
+
+
+def test_the_page_payload_joins_measured_and_generated_ratings(sitrep):
+    klara, jakob = live_module.payload(sitrep, 1)["bericht"]["personen"]
+    assert (klara["risiko"], klara["menschlichkeit"], klara["auffaelligkeit"]) == (0, 4, 3)
+    assert klara["anlass"] == ["menschlichkeit: hugging other person 0.81"]
+    assert (jakob["risiko"], jakob["menschlichkeit"], jakob["auffaelligkeit"]) == (None, None, 4)
+    assert jakob["anlass"] == []
+
+
+class FakeRatings:
+    """An action recogniser's live state, as sitrep.actions.ActionRatings keeps it."""
+
+    error = None
+    evaluations = 7
+    latest = [
+        actions.Recognised(("Klara",), "reading", 0.41, np.array([0.2, 0.1])),
+        actions.Recognised(("Klara", "Körper 9"), "pushing other person", 0.8,
+                           np.array([2.4, -1.6])),
+    ]
+
+
+def test_the_live_action_readings_show_the_strongest_evidence_first():
+    shown = live_module.aktionen(FakeRatings())
+    assert shown["aktiv"] and shown["stand"] == 7 and shown["fehler"] is None
+    first = shown["lesungen"][0]
+    assert first == {"wer": ["Klara", "Körper 9"], "handlung": "pushing other person",
+                     "wahrscheinlichkeit": 0.8, "risiko": 2.4, "menschlichkeit": -1.6}
+
+
+def test_a_run_without_action_recognition_says_so(live, run):
+    live.start()
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    assert live.snapshot()["aktionen"] == {"aktiv": False}
+    assert live.snapshot()["quelle"]["aktionen"] is False
+
+
+def test_a_stopped_recogniser_reports_its_error():
+    class Failed(FakeRatings):
+        error = RuntimeError("CUDA out of memory")
+
+    assert "CUDA out of memory" in live_module.aktionen(Failed())["fehler"]
+
+
+def test_the_page_and_its_script_are_revalidated_on_every_load(client):
+    """A cached page paired with a newer script renders nothing."""
+    for path in ("/", "/sitrep", "/static/sitrep.js", "/static/style.css"):
+        assert client.get(path).headers["cache-control"] == "no-cache"

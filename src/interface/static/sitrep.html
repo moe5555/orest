@@ -37,6 +37,18 @@
           <span class="grund" id="grund"></span>
         </article>
 
+        <!-- The people and their ratings come first: they are what an operator
+             watches from window to window. -->
+        <article class="panel">
+          <span class="label">Personen</span>
+          <div class="people" id="personen"></div>
+        </article>
+
+        <article class="panel">
+          <span class="label">Gemessen · Aktionserkennung · 0–5</span>
+          <div class="people" id="gemessen"></div>
+        </article>
+
         <div class="grid">
           <article class="panel">
             <span class="label">Beschreibung</span>
@@ -50,14 +62,16 @@
         </div>
 
         <article class="panel">
-          <span class="label">Personen</span>
-          <div class="people" id="personen"></div>
-        </article>
-
-        <article class="panel">
           <span class="label">Prognose</span>
           <div class="prognose" id="prognose"></div>
         </article>
+    </section>
+
+    <!-- After the report, so that the report keeps its place on the first screen. -->
+    <section class="panel" id="aktionen" hidden>
+      <span class="label">Aktionserkennung · live</span>
+      <p class="hinweis" id="aktionen-hinweis"></p>
+      <div class="aktionen" id="aktionen-liste"></div>
     </section>
   </main>
 

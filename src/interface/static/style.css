@@ -123,15 +123,15 @@ button:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); 
 .stack { display: grid; gap: 16px; }
 
 /* The feed takes a fixed share of the window rather than its full width, so
-   the report starts on the first screen; the picture is fitted inside it at
-   whatever aspect ratio the camera delivers. */
+   the report and the people's ratings start on the first screen; the picture
+   is fitted inside it at whatever aspect ratio the camera delivers. */
 .feed {
   position: relative;
   background: #000;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  height: min(62vh, calc((100vw - 48px) * 0.5625));
+  height: min(48vh, calc((100vw - 48px) * 0.5625));
   min-height: 200px;
 }
 .feed img { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -208,12 +208,43 @@ button:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); 
 .person h3 .guess { font: 11px/1 var(--mono); color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; }
 .person p { margin: 0 0 12px; color: var(--text-dim); font-size: 14px; }
 .ratings { display: grid; gap: 6px; }
-.rating { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; font: 11px/1 var(--mono); color: var(--text-dim); }
+.rating { display: grid; grid-template-columns: 1fr auto 16px; align-items: center; gap: 10px; font: 11px/1 var(--mono); color: var(--text-dim); }
 .pips { display: inline-flex; gap: 3px; }
 .pip { width: 14px; height: 6px; border-radius: 2px; background: #232a33; }
 .pip.on { background: var(--accent); }
 [data-level="amber"] .pip.on { background: var(--amber); }
 [data-level="red"] .pip.on { background: var(--red); }
+.rating .value { text-align: right; color: var(--text); }
+.pips .unmeasured { color: var(--text-faint); letter-spacing: 0.04em; }
+.person .meter { margin-top: 8px; grid-template-columns: 116px 1fr 20px; }
+.hinweis { margin: 8px 0 12px; font: 12px/1.4 var(--mono); color: var(--text-faint); }
+.hinweis[data-level="red"] { color: var(--red); }
+.aktionen { display: grid; gap: 4px; }
+.aktion {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) minmax(160px, 2fr) auto auto;
+  gap: 4px 16px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  font: 12px/1.4 var(--mono);
+  color: var(--text-dim);
+}
+.aktion .wer { color: var(--text); font-weight: 600; }
+.aktion .evidenz { text-align: right; }
+.aktion[data-level="amber"] .risiko { color: var(--amber); }
+.aktion[data-level="red"] .risiko { color: var(--red); }
+@media (max-width: 640px) {
+  .aktion { grid-template-columns: 1fr auto; }
+}
+.gesagt .zeile { display: grid; grid-template-columns: minmax(90px, auto) 1fr; gap: 12px; }
+.gesagt .zeile + .zeile { margin-top: 6px; }
+.gesagt .sprecher { font: 600 12px/1.9 var(--mono); color: var(--accent); white-space: nowrap; }
+.gesagt .sprecher.unklar { color: var(--text-faint); font-weight: 400; }
+.gesagt .gewertet { font: 11px/1 var(--mono); color: var(--text-faint); white-space: nowrap; }
+.gesagt .gewertet[data-level="amber"] { color: var(--amber); }
+.gesagt .gewertet[data-level="red"] { color: var(--red); }
+.person p.anlass { margin: 10px 0 0; font: 11px/1.4 var(--mono); color: var(--text-faint); }
 
 .prognose { display: grid; gap: 14px; }
 .verlauf { display: grid; grid-template-columns: 58px 1fr; gap: 4px 14px; align-items: center; }

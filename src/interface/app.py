@@ -54,7 +54,8 @@ async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]]):
         frame = live.latest_frame()
         if frame is None:
             return
-        jpeg = await asyncio.to_thread(_jpeg, frame)
+        # Marking and encoding both run off the event loop.
+        jpeg = await asyncio.to_thread(lambda: _jpeg(live.overlay(frame)))
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n"
                b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
                + jpeg + b"\r\n")
@@ -64,6 +65,16 @@ async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]]):
 def create_app(live: LiveSitrep) -> FastAPI:
     app = FastAPI(title="Orest", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+    @app.middleware("http")
+    async def revalidate(request: Request, call_next):
+        # The page and its script change together. A browser left to its own
+        # caching can keep one while fetching the other, and a page whose
+        # markup lacks what the script expects renders nothing. no-cache makes
+        # every load ask; an unchanged file costs a 304. Streams keep no-store.
+        response = await call_next(request)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
 
     @app.get("/")
     def operator():
@@ -92,9 +103,11 @@ def create_app(live: LiveSitrep) -> FastAPI:
         async def stream():
             seen = None
             while not await request.is_disconnected():
+                # Compared whole, not by version: live action readings change
+                # every second without being a change of the run's state.
                 snapshot = live.snapshot()
-                if snapshot["version"] != seen:
-                    seen = snapshot["version"]
+                if snapshot != seen:
+                    seen = snapshot
                     yield f"data: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
                 await asyncio.sleep(EVENT_POLL_S)
 

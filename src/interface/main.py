@@ -3,6 +3,7 @@
     orest-ui
     orest-ui --video "OBS Virtual Camera" --model gemma4:26b
     orest-ui --cast data/cast --send-td --send-ndi
+    uv run orest-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
 
 Takes the same camera, microphone, window and output options as orest-sitrep;
 they apply to every live SITREP started from the page. Devices are resolved
@@ -20,7 +21,7 @@ import sys
 
 import uvicorn
 
-from sitrep import cli, devices, report, session
+from sitrep import cli, report, session, transcribe
 
 from .app import create_app
 from .live import LiveSitrep
@@ -38,13 +39,22 @@ def main(argv=None) -> int:
     parser.add_argument("--cast", type=pathlib.Path,
                         help="folder of enrolment images; recognises the cast by "
                              "name, everyone else is given a guessed name")
+    parser.add_argument("--audio-ndi", metavar="SOURCE",
+                        help="take the sound from this NDI source instead of a "
+                             'microphone, e.g. "VSH-ARLT-5090 (OBS PGM)"')
+    parser.add_argument("--language", default=transcribe.LANGUAGE,
+                        help=f"language spoken, as a Whisper code, e.g. en for the "
+                             f"test corpus (default: {transcribe.LANGUAGE})")
+    parser.add_argument("--no-actions", action="store_true",
+                        help="don't run the action recogniser; risiko and "
+                             "menschlichkeit are then not measured")
     parser.add_argument("--host", default=HOST, help=f"address to bind (default: {HOST})")
     parser.add_argument("--port", type=int, default=PORT,
                         help=f"port to serve on (default: {PORT})")
     args = parser.parse_args(argv)
 
     def open_session() -> session.Session:
-        video, audio = devices.resolve(args.video, args.audio, args.audio_api)
+        video, audio = session.resolve_sources(args)
         run = session.Session(video, audio, session.Options.from_args(args))
         for path in run.missing_enrolment:
             print(f"no face found in {path}", file=sys.stderr)

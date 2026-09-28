@@ -6,8 +6,9 @@ because a session yields a report only once per window and generation blocks,
 while the web server has to keep answering the page in the meantime.
 
 The page is fed from a snapshot rather than from the session directly: status,
-the latest report and a version number that rises with every change, so a page
-polling or streaming the state knows whether anything is new.
+the latest report, the action recogniser's latest readings and a version
+number that rises with every change of the run's state, so a page polling or
+streaming the state knows whether anything is new.
 """
 
 import threading
@@ -24,16 +25,50 @@ def payload(document: report.Sitrep, nummer: int) -> dict:
     """A report as the page renders it.
 
     The document as JSON, plus what the page cannot work out for itself: the
-    report's number within the run, which names are guesses, and the
-    threshold the scene ratings are read against.
+    report's number within the run, which names are guesses, each person's
+    ratings joined from what was measured and what was generated (null where
+    nothing was measured), and the threshold the scene ratings are read
+    against.
     """
     rendered = document.model_dump(mode="json")
     rendered["nummer"] = nummer
     rendered["schwelle"] = report.SCHWELLE
-    for person in rendered["bericht"]["personen"]:
+    for person, source in zip(rendered["bericht"]["personen"], document.bericht.personen):
         person["vermutet"] = (person["name"] != report.UNBEKANNT
                               and not document.erkannt(person["name"]))
+        person.update(document.bewertungen(source))
+        person["anlass"] = [f"{name}: {document.bewertung(source.name, name)[1]}"
+                            for name in report.GEMESSEN
+                            if document.bewertung(source.name, name)[1]]
     return rendered
+
+
+# Live action readings shown at once, strongest evidence first. The audience
+# at the frame's edges is classified too, and would otherwise fill the list.
+AKTIONEN_SHOWN = 12
+
+
+def aktionen(ratings) -> dict:
+    """The action recogniser's last classification, as the page shows it live.
+
+    `stand` counts classifications, so the page can tell a new one from a
+    repeat of the last.
+    """
+    if ratings is None:
+        return {"aktiv": False}
+    latest = sorted(ratings.latest, key=lambda seen: -float(abs(seen.values).max()))
+    return {
+        "aktiv": True,
+        "fehler": repr(ratings.error) if ratings.error else None,
+        "stand": ratings.evaluations,
+        "lesungen": [
+            {"wer": list(seen.who), "handlung": seen.action,
+             "wahrscheinlichkeit": round(seen.probability, 2),
+             **{name: round(float(value), 1)
+                for name, value in zip(report.GEMESSEN, seen.values)}}
+            for seen in latest[:AKTIONEN_SHOWN]
+        ],
+    }
 
 
 class LiveSitrep:
@@ -138,6 +173,7 @@ class LiveSitrep:
                     "mikrofon": run.audio.name,
                     "modell": run.options.model,
                     "fenster_s": run.options.window,
+                    "aktionen": run.actions is not None,
                     "besetzung": list(run.tracker.cast.names) if run.tracker.cast else [],
                 }
             return {
@@ -146,6 +182,7 @@ class LiveSitrep:
                 "version": self.version,
                 "gestartet": self.started.isoformat(timespec="seconds") if self.started else None,
                 "quelle": quelle,
+                "aktionen": aktionen(run.actions) if run is not None else None,
                 "report": self.report,
             }
 
@@ -155,3 +192,8 @@ class LiveSitrep:
         if run is None or self.status != RUNNING:
             return None
         return run.stream.latest()
+
+    def overlay(self, frame):
+        """The frame with the people the run tracks boxed and named."""
+        run = self.session
+        return run.overlay(frame) if run is not None else frame
