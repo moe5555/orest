@@ -125,7 +125,7 @@ The source name can be changed with `--ndi-name`.
    | Operator | Name | Contents |
    |---|---|---|
    | Table DAT | `sitrep_meta` | One row: `id nummer beginn ende dauer_s bilder ton_s latenz_s personen prognosen beschreibung gesagt relevanz eskalation gefahr einschreiten massnahme` |
-   | Table DAT | `sitrep_personen` | One row per person: `zeile name vermutet beschreibung kollaborativ relevanz verantwortungsvoll menschlich gefahr` |
+   | Table DAT | `sitrep_personen` | One row per person: `zeile name vermutet beschreibung risiko menschlichkeit auffaelligkeit` |
    | Table DAT | `sitrep_prognose` | The three forecasts, most likely first: `rang wahrscheinlichkeit verlauf` |
    | Text DAT | `sitrep_text` | The whole report as readable text |
    | Table DAT | `presence_meta` | One row: `tick zeit anwesend` |
@@ -215,6 +215,9 @@ uv run orest-sitrep --send-ndi --send-td --model gemma4:26b --cast data/cast  # 
 - **`einschreiten` follows from the scene ratings.** It's 1 when `eskalation`
   or `gefahr` is above 6, and only then does `massnahme` hold a recommended
   action. The model doesn't decide it.
+- **`risiko` and `menschlichkeit` can be -1.** They're measured by the action
+  recogniser, and -1 means it read nothing of that person, e.g. a face seen
+  without its body. A 0 is a measurement. `auffaelligkeit` is always 0–5.
 - **Rating columns are fixed in `sitrep_osc.py`.** `PERSON_HEADER` follows
   `report.BEWERTUNGEN` in `src/sitrep/report.py`. If a rating is renamed
   there, update the header by hand.

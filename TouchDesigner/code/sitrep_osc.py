@@ -29,8 +29,10 @@ META_HEADER = ['id', 'nummer', 'beginn', 'ende', 'dauer_s', 'bilder', 'ton_s',
 			   'einschreiten', 'massnahme']
 
 # Rating columns follow report.BEWERTUNGEN in Orest, in the same order.
+# risiko and menschlichkeit are -1 when the action recogniser read nothing of
+# the person.
 PERSON_HEADER = ['zeile', 'name', 'vermutet', 'beschreibung',
-				 'kollaborativ', 'relevanz', 'verantwortungsvoll', 'menschlich', 'gefahr']
+				 'risiko', 'menschlichkeit', 'auffaelligkeit']
 
 PROGNOSE_HEADER = ['rang', 'wahrscheinlichkeit', 'verlauf']
 
@@ -121,7 +123,7 @@ def _as_text(report):
 		if int(vermutet) and name != UNBEKANNT:
 			name = '{} (vermutet)'.format(name)
 		lines.append('PERSON        {} - {}   [{}]'.format(
-			name, beschreibung, ' '.join(str(r) for r in ratings)))
+			name, beschreibung, ' '.join('-' if int(r) < 0 else str(r) for r in ratings)))
 	relevanz, eskalation, gefahr = report['szene']
 	lines.append('SZENE         relevanz {} . eskalation {} . gefahr {}'.format(
 		relevanz, eskalation, gefahr))
