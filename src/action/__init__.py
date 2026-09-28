@@ -10,6 +10,7 @@ others: ST-GCN on NTU RGB+D 120, exported to ONNX once, outside Orest
     model       the ONNX network and its 120 classes
     tracking    bodies followed from frame to frame
     recognizer  continuous pose, windows, pairs, and the readings they produce
+    sitrep_map  the editable table from classes to evidence for the ratings
 
 Watch it run over a recording:
 
