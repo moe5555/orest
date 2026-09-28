@@ -8,8 +8,6 @@ Runs at its own rate, independent of the SITREP window. A window delivers
 frames to the model every five or ten seconds, which is far too sparse to
 follow a person across; this reads the camera several times a second, so an
 actor only has to face it once to be named for as long as their track lives.
-It also keeps observing during generation, when capture is otherwise blind
-(claude_concerns.md, "Coverage gaps between windows").
 
 Tracks are linked by the face embedding itself rather than by box position.
 Across two hours of stage footage no two different people ever exceeded 0.35
@@ -245,6 +243,23 @@ class PresenceTracker:
             touched = self.observe(frame)
             with self._lock:
                 return [(track.box, track.label) for track in touched]
+
+    def clear(self):
+        """Delete every track, with the face embeddings it holds."""
+        with self._lock:
+            self._tracks = []
+
+    def faces(self, within: float) -> list[tuple[np.ndarray, str]]:
+        """The face box and name of every track sighted in the last `within` seconds.
+
+        Reads the boxes of past passes without running one, for a reader that
+        needs to know where each named person is but cannot afford a pass of
+        its own.
+        """
+        cutoff = datetime.now() - timedelta(seconds=within)
+        with self._lock:
+            return [(track.box, track.label) for track in self._tracks
+                    if track.box is not None and track.last_seen >= cutoff]
 
     def _forget(self, at: datetime):
         cutoff = at - timedelta(seconds=FORGET)
