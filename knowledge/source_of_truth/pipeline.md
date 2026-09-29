@@ -38,16 +38,9 @@ graph TD;
     CAM --> SYNC["Synchronisation<br/>common timebase, shared timecode"]:::proc;
     MIC --> SYNC;
 
-    SYNC --> ORE["Orest — real-time mode<br/>Gemma-4 (local inference)"]:::orest;
     SYNC --> REC["Recorder<br/>raw A/V + metadata"]:::proc;
 
     REC --> STORE[("Local storage<br/>rehearsal database")]:::store;
-    ORE --> SIT["SITREP monitor<br/>running situation report:<br/>who / where / what is happening"]:::out;
-    ORE --> ANN["Live annotations<br/>tags, events, timestamps"]:::proc;
-    ANN --> STORE;
-    SIT --> STORE; 
-
-    HUM["Human annotator<br/>(tags during rehearsal)"]:::human --> ANN;
 
     STORE ==>|feeds| NEXT["2 · PROCESSING"]:::mode;
 
@@ -82,7 +75,6 @@ graph TD;
     ORE --> COMP["Compression / curation<br/>keep what is usable in the play"]:::proc;
     COMP --> IDX;
 
-    GATE{{"Compliance gate<br/>EU AI Act, consent"}}:::gate -.-> ORE;
     HITL["Human in the loop<br/>review & correct"]:::human --> TAG;
 
     IDX ==>|feeds| NEXT["3 · RENDER"]:::mode;
@@ -116,12 +108,7 @@ graph TD;
     SS --> HITS["Ranked moments<br/>most similar rehearsal footage"]:::out;
     HITS --> CUT["Extracted footage<br/>clips for the play"]:::out;
 
-    HITS -.-> GEN["GENERATIVE RENDERING<br/>new material from the input<br/>(nice-to-have)"]:::opt;
-    ENC -.-> GEN;
-    GEN -.-> NEW["Generated material"]:::opt;
-
     CUT --> STAGE["Playback on stage / in rehearsal"]:::stage;
-    NEW -.-> STAGE;
 
     classDef q fill:#fdf3e3,stroke:#c08a2e,color:#3a2a0a;
     classDef orest fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;

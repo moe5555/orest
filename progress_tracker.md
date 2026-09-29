@@ -21,10 +21,10 @@ was built and why is in `changelog.md`; open questions are in
 | — · Cast recognition | built — `face`, `sitrep.presence`; the roster names the people in the report |
 | — · Action recognition | in the live SITREP — `sitrep.actions` rates risiko and menschlichkeit per named person from the NTU120 ST-GCN and `action/sitrep_map.csv`; uncalibrated (`todo_with_data.md`) |
 
-Report content is not yet trustworthy (`claude_concerns.md`, concern 1). A
-first run of `gemma4:26b` on the production machine described a stage frame
-correctly (`changelog.md`, 2026-09-25); the model choice is not settled
-(`hardware_issues.md`, H-1).
+`gemma4:26b` is the default model since 2026-09-29. On the production machine
+its descriptions have matched the frame, where `gemma4:e4b` on the laptop
+confabulated (`changelog.md`, 2026-09-09, 2026-09-25). A p95 benchmark is
+still outstanding (`hardware_issues.md`, H-1).
 
 ### Cast recognition
 
@@ -193,8 +193,9 @@ with a different scheduler.
 
 ### Deferred — segment-level visual index, and clip-as-query
 
-Qwen3-VL-Embedding-2B is not viable on this GPU (`hardware_issues.md` H-2).
-Revisit when the production machine exists; H-2 gives the re-test.
+Qwen3-VL-Embedding-2B is not viable on the laptop's 8 GB GPU
+(`hardware_issues.md` H-2). Not yet re-tested on the production machine; H-2
+gives the re-test.
 
 If it becomes viable, it also needs the clip-as-query patch, which was the
 original phase 2: WISE declares a video segment as a query term but never
