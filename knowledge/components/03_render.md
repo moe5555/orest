@@ -1,6 +1,14 @@
 # Rendering 
 Overview: pipeline.md
 
+## Live SITREP 
+How will the live SITREP be displayed? Let's create a new tab on localhost for each prototype UI. 
+
+### Prototype 1
+
+
+
+
 ---
 
 > **⚠ Written by Claude — draft, not yet reviewed by Moe (2026-09-12).**
@@ -15,9 +23,9 @@ graph LR;
     CUT[("Clip folder<br/>cut hits")]:::store -->|files| TD;
     UI -->|cuts clips| CUT;
     TD <-->|TDAbleton / OSC| ABL["Ableton<br/>sound design"]:::proc;
-    TD -->|NDI or capture card| QL["QLab<br/>(macOS)"]:::proc;
-    QL -->|OSC: cue state| TD;
-    QL --> PROJ["Projectors"]:::out;
+    TD -->|NDI or capture card| QL["QLab (macOS)<br/>mapping · blending · cues"]:::proc;
+    QL -->|OSC: cues| TD;
+    QL -->|all outputs| PROJ["Projectors"]:::out;
 
     classDef orest fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
     classDef proc fill:#e8eef7,stroke:#3f6ea8,color:#12263a;
@@ -27,17 +35,6 @@ graph LR;
 
 ### Open decisions
 
-- **Who owns the projectors.** Two workable arrangements:
-  1. QLab owns the outputs (mapping, blending, cue timeline); TD's output is
-     taken into QLab. Costs one extra video hop and its latency.
-  2. QLab is the cue master only, sending OSC to TD and Ableton, and TD drives
-     the projectors directly.
-
-  To be settled with the video department before the interface is built.
-- **Crossing machines.** QLab runs on macOS only; Orest and TD run on Windows.
-  TD's output reaches QLab over NDI or through a capture card (Syphon works
-  only within one Mac). Which inputs QLab accepts depends on its version and
-  must be checked.
 - **TD ↔ Ableton.** TDAbleton (Derivative's official bridge, via Max for Live),
   plain OSC/MIDI, or Ableton Link for tempo. No Orest involvement.
 
