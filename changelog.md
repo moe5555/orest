@@ -6,6 +6,24 @@ referenced below.
 
 ---
 
+## 2026-09-29 — Decision: QLab owns the final output and projection
+
+**Decided by Moe.** QLab owns the outputs (mapping, blending, cue timeline);
+TouchDesigner's output is taken into QLab, at the cost of one extra video hop
+and its latency. The alternative, TouchDesigner driving the projectors with
+QLab as cue master only, is dropped from the open decisions in
+`knowledge/components/03_render.md`. This settles the output end of the RENDER
+graph in `knowledge/source_of_truth/pipeline.md` ("Playback on stage"). The
+playback chain diagram in 03_render.md shows QLab driving all outputs and
+cueing TouchDesigner.
+
+**Consequence for Orest:** QLab runs on a Mac, and Orest's control listener
+binds `127.0.0.1` by default (`OREST_CONTROL_HOST`), so a QLab cue cannot
+start a body capture until the listener is bound to the show network. Nothing
+in the code changed.
+
+---
+
 ## 2026-09-29 — NDI sound received in a child process (VSH-ARLT-5090)
 
 **Moe's observation:** with `--audio-ndi "VSH-ARLT-5090 (OBS PGM)"` the page
