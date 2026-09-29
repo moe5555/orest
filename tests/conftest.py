@@ -10,6 +10,7 @@ from sitrep import report
 @pytest.fixture
 def bericht() -> report.Lagebericht:
     return report.Lagebericht(
+        verlauf="Ruhiger Beginn; seit 14:30 Wortwechsel am Tisch.",
         beschreibung="Klara tritt an den Tisch und spricht Jakob an; Probenarbeit an einer Szene.",
         personen=[
             report.Person(
@@ -51,7 +52,7 @@ def sitrep(bericht) -> report.Sitrep:
             ende=datetime(2026, 9, 10, 14, 30, 30),
             dauer_s=30.0,
         ),
-        quelle=report.Quelle(bilder=3, ton_s=30.0),
+        quelle=report.Quelle(bilder=2, abschnitte=4, woertlich_s=12.5),
         gesagt="Noch einmal von vorne, bitte.",
         anwesend=[
             report.Anwesend(name="Klara", erkannt=True),

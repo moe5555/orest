@@ -1,11 +1,22 @@
-"""SITREP generation: turns a capture window into a structured German report.
+"""SITREP generation: the report the operator asks for, and the recommendation.
 
 Implements step 5 of the Realtime-SITREP implementation steps in
 knowledge/components/02_processing.md ("Write SITREP report JSON format").
 
-Nothing is written to disk. Frames arrive as in-memory bytes from capture.py,
-and a finished report is yielded to whatever is consuming the stream and then
-dropped: the live SITREP leaves no record behind.
+A report is made when the operator asks for one, not every window
+(changelog.md, 2026-09-29). It reads the Chronik, the running summary of the
+scene kept in the background (chronik.py), so it covers the last minutes and
+how they developed, not only the last seconds; the live values (lage.py);
+the last stretch's lines word for word; and stills from the last seconds.
+Everything urgent reaches the operator before and without it, through the
+fast lane (utterances.py, lage.py).
+
+The recommendation (`empfehlen`) reads the same and writes a fraction of it:
+whether to intervene now, and how. It is asked for when the live values
+raise the alarm, or by the operator.
+
+Nothing is written to disk. A finished report is handed to whoever asked for
+it and then dropped: the live SITREP leaves no record behind.
 
 Speech is transcribed by Whisper (transcribe.py) and given to the model as
 text; the model never hears the audio. The transcript is written into the
@@ -37,35 +48,25 @@ ever taking the place of a measured one.
 
 Ollama is given the schema as a grammar constraint, so the reply parses as JSON
 without repair. Field descriptions are part of that schema and steer the model,
-so they are kept short: every token in the schema and the reply costs latency,
-which step 6 caps.
-
-A run is assembled by session.py, which owns the camera and the microphone and
-feeds `sitreps()` the windows they produce.
+so they are kept short: every token in the schema and the reply costs latency.
 """
 
 from __future__ import annotations
 
-import sys
 import time
-from collections.abc import Callable, Iterable, Iterator
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from datetime import datetime
 
 import numpy as np
 
-from ollama import ResponseError, chat
-from pydantic import (BaseModel, Field, ValidationError, computed_field, field_validator,
-                      model_validator)
+from ollama import chat
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
-from . import capture, loudness, transcribe
+from . import llm, loudness
 
-if TYPE_CHECKING:
-    from . import presence
-
-# e4b fits well on an 8GB GPU.
-MODEL = "gemma4:e4b"
+# The model on the production machine (VSH-ARLT-5090, 32 GB). Any Ollama
+# model can be chosen with --model; a run checks that it is installed
+# (llm.pruefen).
+MODEL = "gemma4:26b"
 
 # Cap on generated tokens. A three-person report with its three forecasts needs
 # roughly 500. The reply is only parseable if generation finishes: the schema
@@ -80,43 +81,53 @@ CONTEXT = 8192
 # has no set phrase for.
 TEMPERATURE = 0.2
 
-# e4b is prone to degenerate repetition, which runs a reply into the token cap
-# and truncates the JSON. Penalising repeats keeps generations terminating.
+# Degenerate repetition runs a reply into the token cap and truncates the
+# JSON; it was seen with gemma4:e4b. Penalising repeats keeps generations
+# terminating.
 REPEAT_PENALTY = 1.2
 
 # Scene ratings above this, for escalation or danger, call for intervention.
 SCHWELLE = 6
 
-ANWEISUNG = f"""Du bist Orest, ein Ueberwachungssystem.
-Du erhaeltst Standbilder aus einem Zeitfenster, das Transkript dessen, was
-dort gesprochen wurde, und die Anwesenheitsliste der Gesichtserkennung. In
-den Bildern steht der Name jeder erfassten Person in einem Schild ueber ihrem
-Gesicht. Erstelle daraus einen Lagebericht.
+# What every prompt says about its sources: the Chronik's context, the
+# transcript and the stills. Kept first and identical, so that Ollama can
+# reuse its cache for the prompt's opening (live_sitrep_latency.md, fix 4).
+QUELLEN = """Du bist Orest, ein Ueberwachungssystem.
 
-Regeln:
-- Berichte ausschliesslich, was in den Bildern und im Transkript belegt ist.
-  Keine Spekulation, keine Ausschmueckung.
-- Das Transkript ist die einzige Quelle fuer Gesprochenes. Erfinde keine
-  weiteren Aeusserungen, Stimmen oder Geraeusche.
-- Vor jeder Aeusserung im Transkript steht, wer sie gesagt hat. "(unklar)"
-  heisst, der Sprecher ist nicht bestimmt. "(laut)" oder "(geschrien)" nach
-  dem Namen ist die gemessene Lautstaerke, verglichen mit dem sonst ueblichen
-  Sprechen im Raum.
-- "Zuvor gesagt" ist der Zusammenhang aus dem vorigen Zeitfenster. Bewerte,
-  was in diesem Zeitfenster geschieht, und ob sich die Lage gegenueber vorher
-  zuspitzt oder beruhigt.
-- Beschreibung: kurz und knapp, was passiert ist und wer was getan hat.
-- Personen: den Namen aus dem Schild ueber dem Gesicht uebernehmen. Wer ohne
-  Schild zu sehen ist, heisst "Unbekannt".
-- Auffaelligkeit je Person 0-5: wie stark das Verhalten der Person von dem
-  der anderen Anwesenden abweicht. 0 gar nicht, 5 sehr stark.
-- Szene: Relevanz, Eskalation und Gefahr der Szene, 0-10, von niedrig bis hoch.
-- Prognose: die drei wahrscheinlichsten Verlaeufe, jeweils mit
-  Wahrscheinlichkeit in Prozent, zusammen hoechstens 100.
-- Empfehlung: nur wenn Eskalation oder Gefahr der Szene ueber {SCHWELLE} liegt,
-  eine konkrete Massnahme zum Einschreiten. Sonst leer.
+Quellen:
+- Rueckblick und Abschnitte: das laufende Protokoll der Szene, aelteste
+  zuerst, mit Eskalation und Gefahr (0-10) und Tendenz je Abschnitt.
+- Gemessen jetzt: Risiko und Menschlichkeit (0-5) je Person aus
+  Aktionserkennung und Sprache, mit Anlass und Alter.
+- Transkript: das Woertliche der letzten Abschnitte. Vor jeder Aeusserung
+  steht, wer sie gesagt hat. "(unklar)" heisst, der Sprecher ist nicht
+  bestimmt. "(laut)" oder "(geschrien)" nach dem Namen ist die gemessene
+  Lautstaerke, verglichen mit dem sonst ueblichen Sprechen im Raum.
+- Standbilder der letzten Sekunden. In den Bildern steht der Name jeder
+  erfassten Person in einem Schild ueber ihrem Gesicht.
+
+Regeln fuer alles:
+- Ausschliesslich, was in diesen Quellen belegt ist. Keine Spekulation,
+  keine Ausschmueckung. Erfinde keine Aeusserungen, Stimmen oder Geraeusche.
 - Knapp und nominal, Behoerdenstil. Keine Anrede, keine Erzaehlsaetze.
 - Ist etwas nicht erkennbar, lass das Feld leer statt zu raten."""
+
+ANWEISUNG = f"""{QUELLEN}
+
+Aufgabe: ein Lagebericht ueber die Szene bis jetzt.
+- Verlauf: zwei bis drei Saetze, chronologisch: wie die Szene begann,
+  die Wendepunkte mit Uhrzeit und Anlass, und wo die Lage jetzt steht.
+- Beschreibung: die Lage jetzt, kurz: was geschieht, wer was tut.
+- Personen: den Namen aus dem Schild ueber dem Gesicht uebernehmen. Wer ohne
+  Schild zu sehen ist, heisst "Unbekannt". Beschreibung ein kurzer Satz.
+- Auffaelligkeit je Person 0-5: wie stark das Verhalten der Person von dem
+  der anderen Anwesenden abweicht. 0 gar nicht, 5 sehr stark.
+- Szene: Relevanz, Eskalation und Gefahr der Lage jetzt, 0-10, von niedrig
+  bis hoch.
+- Prognose: die drei wahrscheinlichsten Verlaeufe, je ein kurzer Satz, mit
+  Wahrscheinlichkeit in Prozent, zusammen hoechstens 100.
+- Empfehlung: nur wenn Eskalation oder Gefahr der Szene ueber {SCHWELLE}
+  liegt, eine konkrete Massnahme zum Einschreiten. Sonst leer."""
 
 # Name for a person in frame whom the presence tracker has not followed, e.g.
 # someone who never faced the camera.
@@ -183,16 +194,26 @@ class Szene(BaseModel):
     gefahr: int = Field(ge=0, le=10)
 
 
+def ueber_schwelle(szene: Szene) -> bool:
+    """Whether a scene's ratings call for intervention."""
+    return szene.eskalation > SCHWELLE or szene.gefahr > SCHWELLE
+
+
+EMPFEHLUNG_FELD = (f"Massnahme zum Einschreiten, nur bei Eskalation oder Gefahr "
+                   f"ueber {SCHWELLE}, sonst leer")
+
+
 class Lagebericht(BaseModel):
     """The model-generated part of a SITREP."""
 
-    beschreibung: str = Field(description="Was passiert ist, wer was getan hat")
+    # First, so the model has stated how the scene developed before it
+    # describes where it stands.
+    verlauf: str = Field(description="Wie sich die Lage entwickelt hat, mit Wendepunkten")
+    beschreibung: str = Field(description="Die Lage jetzt: was geschieht, wer was tut")
     personen: list[Person]
     szene: Szene
     prognose: list[Verlauf] = Field(min_length=PROGNOSEN, max_length=PROGNOSEN)
-    empfehlung: str = Field(
-        description=f"Massnahme zum Einschreiten, nur bei Eskalation oder Gefahr "
-                    f"ueber {SCHWELLE}, sonst leer")
+    empfehlung: str = Field(description=EMPFEHLUNG_FELD)
 
     @computed_field
     @property
@@ -202,7 +223,7 @@ class Lagebericht(BaseModel):
         Derived rather than generated, so the rule is SCHWELLE and not the
         model's judgement. Absent from the schema the model is given.
         """
-        return self.szene.eskalation > SCHWELLE or self.szene.gefahr > SCHWELLE
+        return ueber_schwelle(self.szene)
 
     @field_validator("prognose")
     @classmethod
@@ -285,7 +306,8 @@ class Anwesend(BaseModel):
 
 
 class Zeitfenster(BaseModel):
-    """The stretch of rehearsal a report covers."""
+    """The stretch of rehearsal a report covers: from the start of the
+    Chronik it read to the moment it was asked for."""
 
     beginn: datetime
     ende: datetime
@@ -296,7 +318,10 @@ class Quelle(BaseModel):
     """How much material the report was made from."""
 
     bilder: int
-    ton_s: float
+    # Summarised stretches of the scene read (chronik.py), and the seconds of
+    # them given word for word.
+    abschnitte: int = 0
+    woertlich_s: float = 0.0
 
 
 class Sitrep(BaseModel):
@@ -365,32 +390,43 @@ class Sitrep(BaseModel):
                 **{name: getattr(person, name) for name in GENERIERT}}
 
 
-def _prompt(transcript: str, anwesend: list[Anwesend] = (), vorher: str = "") -> str:
+def _prompt(anweisung: str, transcript: str, anwesend: list[Anwesend] = (),
+            kontext: str = "", werte: str = "", anlass: str = "") -> str:
+    """The prompt, fixed part first: instructions, then the roster, the
+    Chronik, the live values and the transcript, which change most."""
     liste = "\n".join(f"- {person.name} ({'erkannt' if person.erkannt else 'vermutet'})"
                       for person in anwesend) or "(niemand erfasst)"
-    zuvor = f"\n\nZuvor gesagt:\n{vorher}" if vorher else ""
-    return (f"{ANWEISUNG}\n\nAnwesenheitsliste:\n{liste}{zuvor}"
-            f"\n\nTranskript:\n{transcript or '(keine Sprache erkannt)'}")
+    parts = [anweisung, f"Anwesenheitsliste:\n{liste}"]
+    if kontext:
+        parts.append(kontext)
+    if werte:
+        parts.append(f"Gemessen jetzt:\n{werte}")
+    if anlass:
+        parts.append(f"Anlass:\n{anlass}")
+    parts.append(f"Transkript:\n{transcript or '(keine Sprache erkannt)'}")
+    return "\n\n".join(parts)
 
 
 def schema(anwesend: list[Anwesend] = ()) -> dict:
-    """The Lagebericht schema, with person names held to who is present."""
+    """The Lagebericht schema, with person names held to who is present.
+
+    The list of people is capped at one entry per name: without stills the
+    model was seen to list "Unbekannt" until the token cap cut the reply off
+    (the Chronik of a 405 s replay, text only)."""
     document = Lagebericht.model_json_schema()
-    document["$defs"]["Person"]["properties"]["name"]["enum"] = [
-        *(person.name for person in anwesend), UNBEKANNT]
+    names = [*(person.name for person in anwesend), UNBEKANNT]
+    document["$defs"]["Person"]["properties"]["name"]["enum"] = names
+    document["properties"]["personen"]["maxItems"] = len(names)
     return document
 
 
-def analyse(frames: list[bytes], transcript: str = "", anwesend: list[Anwesend] = (),
-            model=MODEL, num_predict=NUM_PREDICT, vorher: str = "") -> Lagebericht:
-    """Run one SITREP generation over the given stills, transcript and roster."""
-    response = chat(
+def _chat(prompt: str, frames: list[bytes], format: dict, model: str, num_predict: int):
+    return chat(
         model=model,
-        messages=[{"role": "user", "content": _prompt(transcript, anwesend, vorher),
-                   "images": list(frames)}],
+        messages=[{"role": "user", "content": prompt, "images": list(frames)}],
         think=False,
         keep_alive=-1,
-        format=schema(anwesend),
+        format=format,
         options={
             "num_ctx": CONTEXT,
             "num_predict": num_predict,
@@ -398,178 +434,117 @@ def analyse(frames: list[bytes], transcript: str = "", anwesend: list[Anwesend] 
             "repeat_penalty": REPEAT_PENALTY,
         },
     )
+
+
+def analyse(frames: list[bytes], transcript: str = "", anwesend: list[Anwesend] = (),
+            model=MODEL, num_predict=NUM_PREDICT, kontext: str = "",
+            werte: str = "") -> Lagebericht:
+    """Run one SITREP generation over the given stills, transcript, roster and
+    the Chronik's context."""
+    with llm.turn(llm.BERICHT):
+        response = _chat(_prompt(ANWEISUNG, transcript, anwesend, kontext, werte),
+                         frames, schema(anwesend), model, num_predict)
     return Lagebericht.model_validate_json(response.message.content)
 
 
-# A presence tracker's roster(since, until): who was seen during a stretch of time.
-Roster = Callable[[datetime, datetime], "list[presence.Presence]"]
+def bericht(*, beginn: datetime, ende: datetime, frames: list[bytes],
+            aeusserungen: list[Aeusserung], anwesend: list[Anwesend] = (),
+            handlungen: list[Handlung] = (), kontext: str = "", werte: str = "",
+            abschnitte: int = 0, laut: loudness.Calibration | None = None,
+            model=MODEL, started: float | None = None) -> Sitrep:
+    """The report the operator asked for, from the Chronik and the last seconds.
 
-# What the action recogniser measured up to a moment and has not yet reported,
-# with a loudness gain on Risiko (actions.ActionRatings.take).
-Handlungen = Callable[[datetime, Callable[[datetime, datetime], float] | None], list[Handlung]]
-
-# Who spoke each segment, given the segments and the moment the audio began
-# (speakers.Speakers.attribute, with the names known at the time).
-Sprecher = Callable[[list[transcribe.Segment], datetime], list[Aeusserung]]
-
-# The lines with their literal reading filled in (speech.rate).
-Einschaetzen = Callable[[list[Aeusserung]], list[Aeusserung]]
-
-
-# A line whose segment ends this close to the end of its window's sound was
-# most likely cut off by the window's end (Whisper's voice detection ends a
-# segment where the sound stops).
-CUT = 0.5
-
-# The longest sound held back for the next window. A longer line is reported
-# as it stands, so that a monologue does not delay its report indefinitely.
-MAX_CARRY = 10.0
-
-# Sound kept before a held-back line's start, so its first word is not clipped.
-CARRY_LEAD = 0.2
-
-# Lines of the previous report given to the model as context.
-VORHER = 8
-
-
-def _held_back(segmente: list[transcribe.Segment],
-               window: capture.Window) -> tuple[list[transcribe.Segment], np.ndarray | None]:
-    """The segments to report now, and the sound of a line cut off by the window's end."""
-    if not segmente:
-        return segmente, None
-    last = segmente[-1]
-    if (last.end < window.audio_seconds - CUT
-            or window.audio_seconds - last.start > MAX_CARRY):
-        return segmente, None
-    samples, rate = capture.decode_wav(window.audio)
-    return segmente[:-1], samples[max(0, int((last.start - CARRY_LEAD) * rate)):]
-
-
-def sitrep(window: capture.Window, model=MODEL, roster: Roster | None = None,
-           handlungen: Handlungen | None = None, sprecher: Sprecher | None = None,
-           einschaetzen: Einschaetzen | None = None,
-           laut: loudness.Calibration | None = None,
-           language: str = transcribe.LANGUAGE, vorher: list[Aeusserung] = ()) -> Sitrep:
-    """Build the full SITREP document for a capture window.
-
-    Latency covers transcription and generation together: both have to finish
-    inside the window for the report to keep pace with the live feed.
+    `beginn` is where the Chronik the report reads begins and `ende` the
+    moment it was asked for. `aeusserungen` are the lines given word for
+    word, `handlungen` what the recogniser measured over them. Latency runs
+    from `started` (time.monotonic), the moment of the request.
     """
-    return _sitrep(window, model=model, roster=roster, handlungen=handlungen,
-                   sprecher=sprecher, einschaetzen=einschaetzen, laut=laut,
-                   language=language, vorher=vorher)[0]
-
-
-def _sitrep(window: capture.Window, model=MODEL, roster: Roster | None = None,
-            handlungen: Handlungen | None = None, sprecher: Sprecher | None = None,
-            einschaetzen: Einschaetzen | None = None,
-            laut: loudness.Calibration | None = None,
-            language: str = transcribe.LANGUAGE, vorher: list[Aeusserung] = (),
-            hold_back: bool = False) -> tuple[Sitrep, np.ndarray | None]:
-    """sitrep(), and with `hold_back` the sound of a line cut off by the
-    window's end: left out of this report, for the next window to begin with."""
-    started = time.monotonic()
-    anwesend = [Anwesend(name=person.label, erkannt=person.known)
-                for person in (roster(window.started, window.ended) if roster else [])]
-    segmente = transcribe.segments(window.audio, language=language)
-    carry = None
-    if hold_back:
-        segmente, carry = _held_back(segmente, window)
-    # The recorder cuts the sound when the window ends, so its first sample
-    # was recorded this long before the window's end.
-    audio_start = window.ended - timedelta(seconds=window.audio_seconds)
-
-    # Loudness: the session learns its normal speaking level from its first
-    # speech, then amplifies Risiko where the room was louder (loudness.py).
-    timeline = loudness.Timeline(window.audio, audio_start) if laut else None
-    if laut:
-        for segment in segmente:
-            laut.learn(timeline.level(audio_start + timedelta(seconds=segment.start),
-                                      audio_start + timedelta(seconds=segment.end)),
-                       segment.end - segment.start)
-
-    def gain(begins: datetime, ends: datetime) -> float:
-        return loudness.gain_over(timeline, laut, begins, ends)
-
-    gemessen = handlungen(window.ended, gain if laut else None) if handlungen else []
-    aeusserungen = (sprecher(segmente, audio_start) if sprecher else
-                    [Aeusserung(text=segment.text,
-                                beginn=audio_start + timedelta(seconds=segment.start),
-                                ende=audio_start + timedelta(seconds=segment.end))
-                     for segment in segmente])
-    if laut:
-        aeusserungen = [line.model_copy(update={
-                            "pegel_db": timeline.level(line.beginn, line.ende),
-                            "verstaerkung": round(gain(line.beginn, line.ende), 2),
-                            "lautstaerke": loudness.label(laut, timeline.level(line.beginn,
-                                                                               line.ende))})
-                        for line in aeusserungen]
-    if einschaetzen and aeusserungen:
-        # Rating the lines needs neither the frames nor the report, so it runs
-        # alongside the report's own request.
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            eingeschaetzt = pool.submit(einschaetzen, aeusserungen)
-            bericht = analyse(window.frames, protokoll(aeusserungen), anwesend, model=model,
-                              vorher=protokoll(list(vorher)))
-            aeusserungen = eingeschaetzt.result()
-    else:
-        bericht = analyse(window.frames, protokoll(aeusserungen), anwesend, model=model,
-                          vorher=protokoll(list(vorher)))
+    started = time.monotonic() if started is None else started
+    generated = analyse(frames, protokoll(aeusserungen), anwesend, model=model,
+                        kontext=kontext, werte=werte)
+    woertlich = (sum(loudness.seconds(line.beginn, line.ende) for line in aeusserungen))
     return Sitrep(
-        zeitfenster=Zeitfenster(beginn=window.started, ende=window.ended,
-                                dauer_s=round(window.seconds, 1)),
-        quelle=Quelle(bilder=len(window.frames), ton_s=round(window.audio_seconds, 1)),
-        gesagt=transcribe.join(segmente),
-        anwesend=anwesend,
-        handlungen=gemessen,
-        aeusserungen=aeusserungen,
-        pegel=Pegel(kalibriert=laut.calibrated, endgueltig=laut.settled,
-                    gehoert_s=round(laut.heard, 1),
-                    normal_db=None if laut.mean is None else round(laut.mean, 1),
-                    streuung_db=None if laut.spread is None else round(laut.spread, 1))
-              if laut else None,
+        zeitfenster=Zeitfenster(beginn=beginn, ende=ende,
+                                dauer_s=round((ende - beginn).total_seconds(), 1)),
+        quelle=Quelle(bilder=len(frames), abschnitte=abschnitte,
+                      woertlich_s=round(woertlich, 1)),
+        gesagt=" ".join(line.text for line in aeusserungen).strip(),
+        anwesend=list(anwesend),
+        handlungen=list(handlungen),
+        aeusserungen=list(aeusserungen),
+        pegel=pegel(laut),
         latenz_s=round(time.monotonic() - started, 1),
-        bericht=bericht,
-    ), carry
+        bericht=generated,
+    )
 
 
-def sitreps(windows: Iterable[capture.Window], *, model=MODEL,
-            roster: Roster | None = None,
-            handlungen: Handlungen | None = None,
-            sprecher: Sprecher | None = None,
-            einschaetzen: Einschaetzen | None = None,
-            laut: loudness.Calibration | None = None,
-            language: str = transcribe.LANGUAGE) -> Iterator[Sitrep]:
-    """Yield one SITREP per capture window.
+def pegel(laut: loudness.Calibration | None) -> Pegel | None:
+    """The session's loudness calibration as it stands."""
+    if laut is None:
+        return None
+    return Pegel(kalibriert=laut.calibrated, endgueltig=laut.settled,
+                 gehoert_s=round(laut.heard, 1),
+                 normal_db=None if laut.mean is None else round(laut.mean, 1),
+                 streuung_db=None if laut.spread is None else round(laut.spread, 1))
 
-    Takes the windows rather than the devices that produce them, so the caller
-    decides where the camera comes from: a loop of its own, a shared stream, or
-    a fixture. Runs until the caller stops consuming, and a window whose reply
-    is unusable is skipped rather than ending the session.
 
-    A line still being spoken when its window ended is held back and reported
-    whole with the next window. Each report's model is shown the previous
-    report's last lines, so that it can see a scene building up.
-    """
-    carry = None
-    vorher: list[Aeusserung] = []
-    for captured in windows:
-        if carry is not None:
-            captured = capture.prepend(carry, captured)
-        try:
-            document, carry = _sitrep(captured, model=model, roster=roster,
-                                      handlungen=handlungen, sprecher=sprecher,
-                                      einschaetzen=einschaetzen, laut=laut, language=language,
-                                      vorher=vorher, hold_back=True)
-        except (ValidationError, ResponseError) as error:
-            # A reply that ran into the token cap is truncated and does not
-            # parse; a rejected prompt returns an error. Losing one window
-            # beats ending the session.
-            kind = ("unparseable reply" if isinstance(error, ValidationError)
-                    else "rejected prompt")
-            print(f"window {captured.index}: {kind}, skipped", file=sys.stderr)
-            carry = None
-            continue
+# The recommendation: whether to intervene, asked for when the live values
+# raise the alarm (lage.py) or by the operator. It reads what a report reads
+# and writes a fraction of it, so it arrives in about a second.
 
-        vorher = document.aeusserungen[-VORHER:]
-        yield document
+ANWEISUNG_EMPFEHLUNG = f"""{QUELLEN}
+
+Aufgabe: beurteilen, ob eingeschritten werden muss. Der Anlass sagt, warum
+gefragt wird.
+- Lage: ein Satz, was jetzt geschieht.
+- Szene: Relevanz, Eskalation und Gefahr jetzt, 0-10. Wiege den Anlass gegen
+  den Verlauf: ein einzelner Ausreisser in ruhiger Lage wiegt weniger als
+  eine Zuspitzung ueber mehrere Abschnitte.
+- Empfehlung: nur wenn Eskalation oder Gefahr ueber {SCHWELLE} liegt, eine
+  konkrete Massnahme, ein Satz. Sonst leer."""
+
+# Tokens for a recommendation: a sentence, three numbers and a measure.
+EMPFEHLUNG_TOKENS = 250
+
+
+class Urteil(BaseModel):
+    """The model-generated part of a recommendation."""
+
+    lage: str = Field(description="Ein Satz: was jetzt geschieht")
+    szene: Szene
+    empfehlung: str = Field(description=EMPFEHLUNG_FELD)
+
+    @computed_field
+    @property
+    def einschreiten(self) -> bool:
+        """By the rule, as for a Lagebericht."""
+        return ueber_schwelle(self.szene)
+
+    @model_validator(mode="after")
+    def _empfehlung_nur_ueber_schwelle(self) -> Urteil:
+        if not self.einschreiten:
+            self.empfehlung = ""
+        return self
+
+
+class Empfehlung(BaseModel):
+    """A recommendation: when and why it was asked for, and the model's verdict."""
+
+    zeit: datetime
+    anlass: str
+    latenz_s: float
+    urteil: Urteil
+
+
+def empfehlen(*, anlass: str, frames: list[bytes], aeusserungen: list[Aeusserung],
+              anwesend: list[Anwesend] = (), kontext: str = "", werte: str = "",
+              model=MODEL, started: float | None = None) -> Empfehlung:
+    """Whether to intervene now, and how, weighed against the Chronik."""
+    started = time.monotonic() if started is None else started
+    zeit = datetime.now()
+    with llm.turn(llm.EMPFEHLUNG):
+        response = _chat(_prompt(ANWEISUNG_EMPFEHLUNG, protokoll(aeusserungen), anwesend,
+                                 kontext, werte, anlass),
+                         frames, Urteil.model_json_schema(), model, EMPFEHLUNG_TOKENS)
+    return Empfehlung(zeit=zeit, anlass=anlass, latenz_s=round(time.monotonic() - started, 1),
+                      urteil=Urteil.model_validate_json(response.message.content))

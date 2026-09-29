@@ -29,6 +29,7 @@ Implementation Steps:
 4. Transcribe everything that is said, speaker diarisation eventually. 
 5. Write SITREP report JSON format.
 6. Every x seconds, prompt a SITREP report. X is dependent on latency - do a p95, p99 test and make sure that the system only processes as many seconds as it can keep up with. e.g. if it takes 40 seconds to process a range of 30 seconds, that will cause increasing delay. 
+   > Changed 29.09.26 (Moe): the report is made only when the operator presses R. Every x seconds the scene is summarised in the background instead (the Chronik), so a report covers the last minutes. Lines, live values and the alarm reach the operator within about a second, and the Empfehlung follows an alarm. See `knowledge/background/live_distillation.md`.
 7. Output: video output (for testing, eventually this will be handled perhaps via TouchDesigner) and SITREP text beneath it. 
 
 #### Calculating Values

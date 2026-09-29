@@ -8,7 +8,7 @@ TouchDesigner.
 
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pytest
@@ -94,13 +94,23 @@ class FakeReader:
         self.started = True
         return self
 
-    def roster(self):
-        """A tracker's reading, which the roster stream asks for on its thread."""
+    def roster(self, since=None, until=None):
+        """A tracker's reading, which the roster stream and the Chronik ask for."""
         return []
 
-    def take(self, until, gain=None):
-        """An action recogniser's ratings, which each report asks for."""
+    def name_faces(self, frame):
         return []
+
+    def since(self, since, until=None):
+        """An action recogniser's readings, which the live values read."""
+        return [], {}
+
+    def between(self, since, until, gain=None):
+        """An action recogniser's ratings over a stretch."""
+        return []
+
+    def names(self):
+        return {}
 
     def clear(self):
         self.cleared = True
@@ -125,6 +135,18 @@ class FakeSpeakers:
 
     def attribute(self, segments, audio_start, names):
         return []
+
+
+@pytest.fixture(autouse=True)
+def no_ollama(monkeypatch):
+    """Every run checks its model with Ollama; no test here needs Ollama."""
+    monkeypatch.setattr(session.llm, "pruefen", lambda model: None)
+
+
+@pytest.fixture(autouse=True)
+def no_whisper(monkeypatch):
+    """Listening loads Whisper onto the GPU; no test here transcribes."""
+    monkeypatch.setattr(session.transcribe, "load", lambda: None)
 
 
 @pytest.fixture(autouse=True)
@@ -248,41 +270,6 @@ def test_closing_twice_is_harmless(room):
     assert closed.count("camera") == 1
 
 
-def test_a_run_streams_without_writing_anything(monkeypatch, tmp_path, room, sitrep):
-    """The live SITREP is streamed and not retained."""
-    video, audio, _, _, _ = room
-    monkeypatch.setattr(session.report, "sitreps", lambda windows, **kwargs: iter([sitrep]))
-    monkeypatch.chdir(tmp_path)
-
-    with session.Session(video, audio) as live:
-        produced = list(live.reports())
-
-    assert produced == [sitrep]
-    assert list(tmp_path.rglob("*")) == []
-
-
-def test_every_report_is_announced_over_osc(monkeypatch, room, sitrep):
-    video, audio, _, _, _ = room
-    monkeypatch.setattr(session.td, "Sender", RecordingSender)
-    monkeypatch.setattr(session.report, "sitreps",
-                        lambda windows, **kwargs: iter([sitrep, sitrep]))
-
-    with session.Session(video, audio, session.Options(send_td=True)) as live:
-        list(live.reports())
-        begins = [arguments for address, arguments in live.sender.sent
-                  if address == session.td.SITREP_BEGIN]
-
-    assert [arguments[1] for arguments in begins] == [1, 2]
-
-
-def test_a_run_without_send_td_announces_nothing(monkeypatch, room, sitrep):
-    video, audio, _, _, _ = room
-    monkeypatch.setattr(session.report, "sitreps", lambda windows, **kwargs: iter([sitrep]))
-    with session.Session(video, audio) as live:
-        list(live.reports())
-        assert live.sender is None
-
-
 def test_faces_are_followed_with_or_without_a_cast(room, readers, tmp_path):
     """Every person in a report carries a name, so the tracker runs on every
     run; a cast only turns guesses into recognitions."""
@@ -293,29 +280,6 @@ def test_faces_are_followed_with_or_without_a_cast(room, readers, tmp_path):
 
     with session.Session(video, audio, session.Options(cast=tmp_path)) as live:
         assert isinstance(live.tracker.cast, FakeGallery)
-
-
-def test_each_report_is_given_the_roster_and_the_action_ratings(
-        monkeypatch, room, readers, sitrep):
-    video, audio, _, _, _ = room
-    given = {}
-
-    def sitreps(windows, model=None, roster=None, handlungen=None, sprecher=None,
-                einschaetzen=None, laut=None, language=None):
-        given.update(roster=roster, handlungen=handlungen, sprecher=sprecher,
-                     einschaetzen=einschaetzen, laut=laut, language=language)
-        return iter([sitrep])
-
-    monkeypatch.setattr(session.report, "sitreps", sitreps)
-    with session.Session(video, audio) as live:
-        list(live.reports())
-        assert given["roster"] == live.tracker.roster
-        assert given["handlungen"] == live.actions.take
-        assert given["language"] == "de"
-        assert given["sprecher"] == live._sprecher
-        assert given["einschaetzen"] == live._einschaetzen
-        # One loudness calibration for the whole run.
-        assert given["laut"] is live.laut
 
 
 def test_the_models_frames_are_marked_with_the_trackers_names(monkeypatch, room, readers):
@@ -349,7 +313,7 @@ def test_a_failed_naming_pass_sends_the_frame_unmarked(room, readers):
         assert live._name_faces(frame) is frame
 
 
-def test_the_roster_is_sent_whenever_reports_are(monkeypatch, room, readers):
+def test_the_roster_is_sent_whenever_touchdesigner_is(monkeypatch, room, readers):
     video, audio, _, _, _ = room
     monkeypatch.setattr(session.td, "Sender", RecordingSender)
 
@@ -364,7 +328,7 @@ def test_options_carry_the_command_line_through(tmp_path):
     class Args:
         interval, window = 5.0, 20.0
         width, height = 1920, 1080
-        model = "gemma4:e4b"
+        model = "some-model:tag"
         language = "en"
         cast = tmp_path
         send_ndi, ndi_name, ndi_fps = True, "Orest Test", 15.0
@@ -383,7 +347,7 @@ def test_ndi_is_off_unless_asked_for(tmp_path):
     class Args:
         interval, window = 5.0, 20.0
         width = height = None
-        model = "gemma4:e4b"
+        model = "some-model:tag"
         language = "de"
         cast = None
         send_ndi, ndi_name, ndi_fps = False, "Orest Test", 30.0
@@ -431,21 +395,215 @@ def test_stopping_deletes_what_the_readers_hold(room, readers):
     assert not live.laut.calibrated
 
 
-def test_stopping_drops_the_windows_waiting_for_a_report(room, readers, monkeypatch):
-    """A report still being generated must not keep the recording alive."""
+def test_stopping_deletes_what_the_live_part_holds(room, readers):
     video, audio, _, _, _ = room
+    running = Running(session.Session(video, audio))
+    line = spoken("Du lügst.")
+    running.live._zeilen([line])
+    running.live.frames.sample()
+    running.stop()
+    assert running.live.chronik.zeilen_seit(line.ende - timedelta(seconds=1)) == []
+    assert running.live.frames.between(datetime.min, datetime.max, 10) == []
+    assert running.live._events.empty()
+
+
+class Running:
+    """A session's live part on a thread, with every event it yields collected."""
+
+    def __init__(self, live):
+        self.live = live
+        self.events = []
+        self._thread = threading.Thread(target=self._follow, daemon=True)
+        self._thread.start()
+        assert wait_for(lambda: live.lage is not None and live._empfehlungen is not None)
+
+    def _follow(self):
+        for event in self.live.events():
+            self.events.append(event)
+
+    def of(self, kind):
+        return [event for event in self.events if isinstance(event, kind)]
+
+    def stop(self):
+        self.live.close()
+        self._thread.join(5)
+
+
+def wait_for(predicate, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def spoken(text, name="Klara", risiko=0):
+    now = datetime.now()
+    return session.report.Aeusserung(name=name, text=text, beginn=now, ende=now, risiko=risiko,
+                                     menschlichkeit=0)
+
+
+def test_a_run_streams_without_writing_anything(monkeypatch, tmp_path, room, readers):
+    """The live SITREP is streamed and not retained."""
+    video, audio, _, _, _ = room
+    monkeypatch.chdir(tmp_path)
+    running = Running(session.Session(video, audio))
+    running.live._zeilen([spoken("Noch einmal von vorne.")])
+    assert wait_for(lambda: running.of(session.Zeilen))
+    running.stop()
+    assert list(tmp_path.rglob("*")) == []
+
+
+def test_lines_reach_the_chronik_the_page_and_touchdesigner_at_once(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.td, "Sender", RecordingSender)
+    running = Running(session.Session(video, audio, session.Options(send_td=True)))
+    line = spoken("Du lügst.")
+    running.live._zeilen([line])
+    assert wait_for(lambda: running.of(session.Zeilen))
+    assert running.live.chronik.zeilen_seit(line.ende - timedelta(seconds=1)) == [line]
+    assert [address for address, _ in running.live.sender.sent
+            if address == session.td.LIVE_ZEILE] == [session.td.LIVE_ZEILE]
+    running.stop()
+
+
+def test_a_report_is_made_only_when_asked_for(monkeypatch, room, readers, sitrep):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.td, "Sender", RecordingSender)
+    given = {}
+
+    def bericht(**kwargs):
+        given.update(kwargs)
+        return sitrep
+
+    monkeypatch.setattr(session.report, "bericht", bericht)
+    running = Running(session.Session(video, audio, session.Options(send_td=True)))
+    line = spoken("Du lügst.")
+    running.live._zeilen([line])
+    time.sleep(0.2)
+    assert not running.of(session.NeuerBericht)
+
+    assert running.live.bericht()
+    assert wait_for(lambda: running.of(session.NeuerBericht))
+    [made] = running.of(session.NeuerBericht)
+    assert (made.sitrep, made.nummer) == (sitrep, 1)
+    assert running.of(session.Angefordert)[0].was == "bericht"
+    assert given["aeusserungen"] == [line]
+    assert given["kontext"] == running.live.chronik.kontext()
+    assert given["laut"] is running.live.laut
+    assert [arguments[1] for address, arguments in running.live.sender.sent
+            if address == session.td.SITREP_BEGIN] == [1]
+    running.stop()
+
+
+def test_a_report_that_fails_is_announced_and_the_run_goes_on(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+
+    def bericht(**kwargs):
+        raise ValueError("unparseable reply")
+
+    monkeypatch.setattr(session.report, "bericht", bericht)
+    running = Running(session.Session(video, audio))
+    running.live.bericht()
+    assert wait_for(lambda: running.of(session.Fehlgeschlagen))
+    running.live._zeilen([spoken("Weiter.")])
+    assert wait_for(lambda: running.of(session.Zeilen))
+    running.stop()
+
+
+def test_the_alarm_asks_for_one_recommendation_while_it_lasts(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    made = []
+
+    def empfehlen(**kwargs):
+        made.append(kwargs["anlass"])
+        return session.report.Empfehlung(
+            zeit=datetime.now(), anlass=kwargs["anlass"], latenz_s=0.1,
+            urteil=session.report.Urteil(lage="Drohung.", empfehlung="Probe unterbrechen.",
+                                         szene=session.report.Szene(relevanz=8, eskalation=8,
+                                                                    gefahr=7)))
+
+    monkeypatch.setattr(session.report, "empfehlen", empfehlen)
+    running = Running(session.Session(video, audio))
+    running.live._zeilen([spoken("Ich bring dich um.", risiko=4)])
+    assert wait_for(lambda: running.of(session.NeueEmpfehlung))
+    time.sleep(3 * session.WERTE_TAKT)
+    assert len(made) == 1
+    assert made[0].startswith("Alarm: Klara, Risiko 4.")
+    [alarm] = [event for event in running.of(session.Werte) if event.stand.alarm.aktiv][:1]
+    assert alarm.stand.personen["Klara"]["risiko"].wert == 4
+    running.stop()
+
+
+def test_without_auto_empfehlung_the_alarm_asks_for_nothing(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.report, "empfehlen",
+                        lambda **kwargs: pytest.fail("no recommendation expected"))
+    running = Running(session.Session(video, audio, session.Options(auto_empfehlung=False)))
+    running.live._zeilen([spoken("Ich bring dich um.", risiko=4)])
+    assert wait_for(lambda: any(event.stand.alarm.aktiv for event in running.of(session.Werte)))
+    time.sleep(2 * session.WERTE_TAKT)
+    running.stop()
+
+
+def test_a_request_while_one_is_made_is_made_once_more_after():
     started = threading.Event()
+    release = threading.Event()
+    made = []
 
-    def sitreps(windows, **kwargs):
+    def make(anlass):
+        made.append(anlass)
         started.set()
-        yield from ()
+        release.wait(5)
 
-    monkeypatch.setattr(session.report, "sitreps", sitreps)
-    live = session.Session(video, audio, session.Options(interval=0.1, window=0.2))
-    reports = live.reports()
-    thread = threading.Thread(target=lambda: list(reports), daemon=True)
-    thread.start()
+    requests = session.Anfragen(make)
+    assert requests.request("erste")
     assert started.wait(5)
-    time.sleep(0.5)
-    live.close()
-    assert live.recorder.held == (0, 0)
+    assert not requests.request("zweite")
+    assert not requests.request("dritte")
+    release.set()
+    assert wait_for(lambda: made == ["erste", "dritte"] and not requests.running)
+    requests.close()
+
+
+def test_a_request_with_a_pause_waits_for_it():
+    made = []
+    requests = session.Anfragen(lambda anlass: made.append(time.monotonic()), pause=0.3)
+    requests.request("a", pause=True)
+    assert wait_for(lambda: len(made) == 1)
+    requests.request("b", pause=True)
+    assert wait_for(lambda: len(made) == 2)
+    assert made[1] - made[0] >= 0.29
+    requests.close()
+
+
+def test_nothing_can_be_asked_for_before_the_run_listens(room, readers):
+    video, audio, _, _, _ = room
+    with session.Session(video, audio) as live:
+        assert not live.bericht()
+        assert not live.empfehlung()
+
+
+def test_a_model_ollama_does_not_have_fails_the_run_before_the_camera_opens(room, monkeypatch):
+    video, audio, _, opened, _ = room
+
+    def pruefen(model):
+        raise RuntimeError(f"Model {model!r} is not in Ollama.")
+
+    monkeypatch.setattr(session.llm, "pruefen", pruefen)
+    with pytest.raises(RuntimeError, match="other-model:7b"):
+        session.Session(video, audio, session.Options(model="other-model:7b"))
+    assert opened == []
+
+
+def test_a_source_that_delivers_no_sound_is_reported_silent(monkeypatch, room, readers):
+    """An unfed audio device left a run without a single line and no sign why."""
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session, "STUMM", 0.3)
+    running = Running(session.Session(video, audio))
+    assert wait_for(lambda: running.of(session.Ton))
+    [ton] = running.of(session.Ton)
+    assert ton.stumm and ton.quelle == "Fake Mic"
+    assert running.live.ton()["stumm"]
+    running.stop()

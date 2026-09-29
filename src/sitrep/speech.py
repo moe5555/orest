@@ -1,7 +1,7 @@
 """What was said, rated: Risiko and Menschlichkeit evidence per line of speech.
 
 The Sentiment Analysis route under "Calculating Values" in
-knowledge/components/02_processing.md. Each line of a window's transcript is
+knowledge/components/02_processing.md. Each line of the transcript is
 rated by the model, as evidence from -5 to +5, the scale of the action table
 (action/sitrep_map.csv), so that speech and actions combine per person
 (report.Sitrep.bewertungen).
@@ -10,10 +10,11 @@ Lines are taken at their word: as seriously meant, whether they might be acted
 or quoted. A surveillance system does not know it is watching a play. Idioms
 keep their ordinary meaning, so "Ich lach mich tot" is not a death.
 
-The request carries text only, no frames, and is separate from the report's
-own request, which rates the scene from both. It runs alongside that request
-(report.sitrep) and uses the same model and context size, so Ollama serves
-both from the one loaded model rather than reloading it.
+The request carries text only, no frames. Lines are rated as soon as their
+utterance ends (utterances.py), a few at a time, with the lines said just
+before them as context that is not rated. It uses the report's model and
+context size, so Ollama serves both from the one loaded model rather than
+reloading it, and it goes to the model before any other request (llm.ZEILEN).
 
 The schema puts each line's reason before its scores. The model writes JSON
 in order, so it has stated what the line expresses before it scores it.
@@ -30,7 +31,7 @@ from pathlib import Path
 from ollama import ResponseError, chat
 from pydantic import BaseModel, Field, ValidationError
 
-from . import report
+from . import llm, report
 
 EXAMPLES = Path(__file__).with_name("speech_examples.csv")
 
@@ -56,8 +57,8 @@ Fuer jede nummerierte Aeusserung, in derselben Reihenfolge:
   Zuneigung, Positives. Negativ, wenn sie herabsetzt oder verachtet.
 - 0, wenn nichts davon zutrifft, und fuer Bruchstuecke, Fuellwoerter oder
   Unverstaendliches.
-Die Aeusserungen stehen im Zusammenhang: lies die anderen mit, bewerte aber
-jede fuer sich.
+Die Aeusserungen stehen im Zusammenhang: lies die anderen mit, auch was
+zuvor gesagt wurde, bewerte aber jede nummerierte fuer sich.
 
 Beispiele:
 {beispiele}"""
@@ -83,10 +84,12 @@ def examples(path: Path = EXAMPLES) -> str:
                      f'menschlichkeit {row["menschlichkeit"]}' for row in rows)
 
 
-def prompt(lines: list[report.Aeusserung]) -> str:
+def prompt(lines: list[report.Aeusserung], vorher: list[report.Aeusserung] = ()) -> str:
     listed = "\n".join(f"{number}. {line.name or report.UNKLAR}: {line.text}"
                        for number, line in enumerate(lines, start=1))
-    return f"{ANWEISUNG.format(beispiele=examples())}\n\nAeusserungen:\n{listed}"
+    zuvor = ("\n\nZuvor gesagt, nicht bewerten:\n" + report.protokoll(list(vorher))
+             if vorher else "")
+    return f"{ANWEISUNG.format(beispiele=examples())}{zuvor}\n\nAeusserungen:\n{listed}"
 
 
 def schema(count: int) -> dict:
@@ -96,29 +99,32 @@ def schema(count: int) -> dict:
     return document
 
 
-def rate(lines: list[report.Aeusserung], model: str = report.MODEL) -> list[report.Aeusserung]:
+def rate(lines: list[report.Aeusserung], model: str = report.MODEL,
+         vorher: list[report.Aeusserung] = ()) -> list[report.Aeusserung]:
     """The lines with each one's reason and evidence filled in.
 
-    A reply that cannot be used leaves the lines unrated, so a failed rating
-    costs the window its speech evidence and not its report.
+    `vorher` are lines said just before, given as context and not rated. A
+    reply that cannot be used leaves the lines unrated, so a failed rating
+    costs the lines their evidence and not their place on screen.
     """
     if not lines:
         return lines
     try:
-        response = chat(
-            model=model,
-            messages=[{"role": "user", "content": prompt(lines)}],
-            think=False,
-            keep_alive=-1,
-            format=schema(len(lines)),
-            options={
-                # The report's own context size: a different one would make
-                # Ollama reload the model between the two requests.
-                "num_ctx": report.CONTEXT,
-                "num_predict": TOKENS_PER_LINE * len(lines) + 50,
-                "temperature": TEMPERATURE,
-            },
-        )
+        with llm.turn(llm.ZEILEN):
+            response = chat(
+                model=model,
+                messages=[{"role": "user", "content": prompt(lines, vorher)}],
+                think=False,
+                keep_alive=-1,
+                format=schema(len(lines)),
+                options={
+                    # The report's own context size: a different one would
+                    # make Ollama reload the model between the two requests.
+                    "num_ctx": report.CONTEXT,
+                    "num_predict": TOKENS_PER_LINE * len(lines) + 50,
+                    "temperature": TEMPERATURE,
+                },
+            )
         readings = Einschaetzungen.model_validate_json(response.message.content).zeilen
     except (ValidationError, ResponseError) as error:
         print(f"speech rating skipped: {error!r}", file=sys.stderr)

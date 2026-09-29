@@ -1,8 +1,9 @@
 """Console rendering of a SITREP."""
 
 import re
+from datetime import datetime, timedelta
 
-from sitrep import main, report
+from sitrep import chronik, lage, main, report, session
 
 ANSI_PATTERN = re.compile(r"\033\[[0-9;]*m")
 
@@ -113,9 +114,16 @@ def test_a_scene_rating_above_the_threshold_is_red():
 
 def test_footer_reports_the_source_and_the_latency(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
-    assert "3 Bilder" in block
-    assert "30.0s Ton" in block
+    assert "4 Abschnitte" in block
+    assert "12.5s wörtlich" in block
+    assert "2 Bilder" in block
     assert "Latenz 5.8s" in block
+
+
+def test_block_shows_how_the_scene_developed_before_where_it_stands(sitrep):
+    block = main.format_sitrep(sitrep, use_colour=False)
+    assert block.index("VERLAUF") < block.index("BESCHREIBUNG")
+    assert "Ruhiger Beginn" in block
 
 
 def test_block_stays_within_the_requested_width(sitrep):
@@ -161,3 +169,66 @@ def test_block_shows_the_loudness_calibration_and_a_lines_gain(sitrep):
     block = main.format_sitrep(document, use_colour=False)
     assert "Pegel normal -31 dBFS ±4" in block
     assert "[risiko +2 ×1.5, menschlichkeit -1]" in block
+
+
+# ---- the live part, as it happens -------------------------------------------------
+
+def _now():
+    return datetime(2026, 9, 29, 20, 0, 5)
+
+
+def test_a_line_shows_its_speaker_its_loudness_and_its_evidence():
+    line = report.Aeusserung(name=None, text="Raus hier!", beginn=_now(), ende=_now(),
+                             risiko=3, menschlichkeit=-2, verstaerkung=1.5,
+                             lautstaerke="geschrien")
+    shown = main.format_zeile(line, use_colour=False)
+    assert shown == " 20:00:05  (unklar) (geschrien): “Raus hier!” [risiko +3 ×1.5, menschlichkeit -2]"
+
+
+def test_the_alarm_is_shown_with_who_and_why():
+    stand = lage.Stand(_now(), {"Klara": {"risiko": lage.Wert(4, 4.0, "Drohung", _now()),
+                                          "menschlichkeit": lage.Wert(0, 0.0)}},
+                       lage.Alarm(True, 4, "Klara", "Drohung"))
+    shown = main.format_werte(stand, use_colour=False)
+    assert shown.startswith(" ALARM Klara Risiko 4: Drohung")
+    assert shown.endswith("[Klara risiko 4]")
+
+
+def test_a_recommendation_to_intervene_shows_the_measure_and_its_cause():
+    empfehlung = report.Empfehlung(zeit=_now(), anlass="Alarm: Klara, Risiko 4.", latenz_s=1.3,
+                                   urteil=report.Urteil(
+                                       lage="Klara bedroht Jakob.", empfehlung="Probe unterbrechen.",
+                                       szene=report.Szene(relevanz=8, eskalation=8, gefahr=5)))
+    shown = main.format_empfehlung(empfehlung, use_colour=False)
+    assert "EINSCHREITEN" in shown and "Probe unterbrechen." in shown
+    assert "Anlass: Alarm: Klara, Risiko 4." in shown
+
+
+def test_a_summarised_stretch_shows_its_ratings_and_its_summary():
+    abschnitt = chronik.Abschnitt(beginn=_now(), ende=_now() + timedelta(seconds=30),
+                                  zusammenfassung=chronik.Zusammenfassung(
+                                      zusammenfassung="Streit am Tisch.", tendenz="zuspitzend",
+                                      szene=report.Szene(relevanz=5, eskalation=6, gefahr=2)))
+    shown = main.format_abschnitt(abschnitt, use_colour=False)
+    assert "20:00:05–20:00:35" in shown
+    assert "eskalation 6 · gefahr 2 · zuspitzend" in shown
+    assert shown.endswith("Streit am Tisch.")
+
+
+def test_the_console_prints_the_live_values_only_when_what_they_show_changes():
+    konsole = main.Konsole(use_colour=False)
+
+    def werte(risiko):
+        return session.Werte(lage.Stand(_now(), {"Klara": {
+            "risiko": lage.Wert(risiko, float(risiko)),
+            "menschlichkeit": lage.Wert(0, 0.0)}}, lage.Alarm(False)))
+
+    assert konsole.text(werte(0)) == " WERTE alle 0"
+    assert konsole.text(werte(0)) is None
+    assert konsole.text(werte(2)) == " WERTE Klara risiko 2"
+
+
+def test_a_silent_source_is_named_with_what_to_check():
+    shown = main.format_event(session.Ton(True, "Webcam 4 (NDI Webcam Audio)"), use_colour=False)
+    assert "KEIN TON von Webcam 4 (NDI Webcam Audio)" in shown
+    assert "--audio-ndi" in shown

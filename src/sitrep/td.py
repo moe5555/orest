@@ -5,11 +5,12 @@ pixels travel as an NDI source (feed.py), and OSC carries the text. Addresses
 are namespaced beside the search results `smartsearch/td.py` sends, so one OSC
 In DAT receives both and routes on the prefix.
 
-A report is framed by a begin and an end, with one message per table row
-between them:
+A report, made when the operator asks for one, is framed by a begin and an
+end, with one message per table row between them:
 
     /orest/sitrep/begin         <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
-                                <ton_s> <latenz_s> <personen> <prognosen>
+                                <abschnitte> <latenz_s> <personen> <prognosen>
+    /orest/sitrep/verlauf       <id> <verlauf>
     /orest/sitrep/beschreibung  <id> <beschreibung>
     /orest/sitrep/gesagt        <id> <gesagt>
     /orest/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
@@ -31,7 +32,7 @@ first, `rang` 1 being the most likely. `vermutet` and `einschreiten` are 0 or
 report.SCHWELLE, and `massnahme` is empty otherwise.
 
 The roster is a second, faster stream. It is not folded into the report
-because the two move at very different rates: a report arrives once a window,
+because the two move at very different rates: a report arrives when asked for,
 while the tracker follows the room twice a second, and carrying the roster on
 the report would make "who is on stage now" lag by up to a whole window —
 exactly what presence.py exists to avoid.
@@ -44,6 +45,32 @@ exactly what presence.py exists to avoid.
 `tick` counts upward rather than being a random id: a periodic stream over UDP
 can arrive out of order, and a receiver keeps the highest tick it has seen
 complete.
+
+The fast lane (session.py) sends as things happen. The live values, whenever
+one changes as an operator would see it, framed like the roster; `alarm` is 0
+or 1, `alarm_wer` empty for a line of unknown speaker:
+
+    /orest/live/begin       <tick> <zeit> <personen> <alarm> <alarm_wert>
+                            <alarm_wer> <alarm_anlass>
+    /orest/live/person      <tick> <zeile> <name> <risiko> <menschlichkeit>
+                            <anlass_risiko> <anlass_menschlichkeit>
+    /orest/live/end         <tick>
+
+Each line as soon as it is transcribed, with `bewertet` 0, and again once it
+is rated, with `bewertet` 1; `beginn` and `text` tell which line a rating
+belongs to. `name` is empty where the speaker is not known, `risiko` and
+`menschlichkeit` are the line's evidence, -5 to +5, and 0 until rated:
+
+    /orest/live/zeile       <beginn> <ende> <name> <text> <lautstaerke>
+                            <risiko> <menschlichkeit> <bewertet>
+
+Each recommendation, and each stretch the Chronik summarised; `eskalation`
+and `gefahr` are -1 for a stretch the model could not summarise:
+
+    /orest/live/empfehlung  <nummer> <zeit> <einschreiten> <eskalation> <gefahr>
+                            <lage> <massnahme> <anlass> <latenz_s>
+    /orest/chronik/abschnitt <beginn> <ende> <eskalation> <gefahr> <tendenz>
+                            <zusammenfassung>
 """
 
 import threading
@@ -56,6 +83,7 @@ from osc import Message, Sender  # noqa: F401  (Sender is re-exported)
 from . import presence, report
 
 SITREP_BEGIN = "/orest/sitrep/begin"
+SITREP_VERLAUF = "/orest/sitrep/verlauf"
 SITREP_BESCHREIBUNG = "/orest/sitrep/beschreibung"
 SITREP_GESAGT = "/orest/sitrep/gesagt"
 SITREP_PERSON = "/orest/sitrep/person"
@@ -67,6 +95,13 @@ SITREP_END = "/orest/sitrep/end"
 PRESENCE_BEGIN = "/orest/presence/begin"
 PRESENCE_PERSON = "/orest/presence/person"
 PRESENCE_END = "/orest/presence/end"
+
+LIVE_BEGIN = "/orest/live/begin"
+LIVE_PERSON = "/orest/live/person"
+LIVE_END = "/orest/live/end"
+LIVE_ZEILE = "/orest/live/zeile"
+LIVE_EMPFEHLUNG = "/orest/live/empfehlung"
+CHRONIK_ABSCHNITT = "/orest/chronik/abschnitt"
 
 # A person's rating that was not measured.
 NICHT_GEMESSEN = -1
@@ -94,8 +129,9 @@ def messages(document: report.Sitrep, nummer: int,
 
     built = [
         (SITREP_BEGIN, [sitrep_id, nummer, _clock(zeit.beginn), _clock(zeit.ende),
-                        zeit.dauer_s, quelle.bilder, quelle.ton_s, document.latenz_s,
+                        zeit.dauer_s, quelle.bilder, quelle.abschnitte, document.latenz_s,
                         len(bericht.personen), len(bericht.prognose)]),
+        (SITREP_VERLAUF, [sitrep_id, bericht.verlauf]),
         (SITREP_BESCHREIBUNG, [sitrep_id, bericht.beschreibung]),
         # Sent even when nothing was said, so the table keeps its shape.
         (SITREP_GESAGT, [sitrep_id, document.gesagt]),
@@ -140,6 +176,45 @@ def roster_messages(roster: list[presence.Presence], tick: int,
         ]))
     built.append((PRESENCE_END, [tick]))
     return built
+
+
+def werte_messages(stand, tick: int) -> list[Message]:
+    """The live values at one moment (lage.Stand)."""
+    alarm = stand.alarm
+    built = [(LIVE_BEGIN, [tick, _clock(stand.zeit), len(stand.personen), int(alarm.aktiv),
+                           alarm.wert, alarm.wer or "", alarm.anlass])]
+    for zeile, (name, werte) in enumerate(stand.personen.items(), start=1):
+        built.append((LIVE_PERSON, [tick, zeile, name,
+                                    *(werte[rating].wert for rating in report.GEMESSEN),
+                                    *(werte[rating].anlass for rating in report.GEMESSEN)]))
+    built.append((LIVE_END, [tick]))
+    return built
+
+
+def zeilen_messages(lines: list[report.Aeusserung], bewertet: bool = True) -> list[Message]:
+    """Lines as they were transcribed or rated, one message each."""
+    return [(LIVE_ZEILE, [_clock(line.beginn), _clock(line.ende), line.name or "", line.text,
+                          line.lautstaerke, line.risiko or 0, line.menschlichkeit or 0,
+                          int(bewertet)])
+            for line in lines]
+
+
+def abschnitt_messages(abschnitt) -> list[Message]:
+    """One stretch the Chronik summarised (chronik.Abschnitt)."""
+    summary = abschnitt.zusammenfassung
+    if summary is None:
+        return [(CHRONIK_ABSCHNITT, [_clock(abschnitt.beginn), _clock(abschnitt.ende),
+                                     NICHT_GEMESSEN, NICHT_GEMESSEN, "", ""])]
+    return [(CHRONIK_ABSCHNITT, [_clock(abschnitt.beginn), _clock(abschnitt.ende),
+                                 summary.szene.eskalation, summary.szene.gefahr,
+                                 summary.tendenz, summary.zusammenfassung])]
+
+
+def empfehlung_messages(empfehlung: report.Empfehlung, nummer: int) -> list[Message]:
+    urteil = empfehlung.urteil
+    return [(LIVE_EMPFEHLUNG, [nummer, _clock(empfehlung.zeit), int(urteil.einschreiten),
+                               urteil.szene.eskalation, urteil.szene.gefahr, urteil.lage,
+                               urteil.empfehlung, empfehlung.anlass, empfehlung.latenz_s])]
 
 
 class RosterStream:

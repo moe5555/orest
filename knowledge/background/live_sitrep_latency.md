@@ -4,6 +4,10 @@ Written 2026-09-28, after the continuous recording of the same day
 (`changelog.md`). All measurements are from the production machine
 (`VSH-ARLT-5090`, RTX 5090) with `gemma4:26b`, on the test corpus.
 
+**Status 2026-09-29:** fixes 1–4 are built, with reports made only on request
+instead of every window or spike, and fix 5 is measured. See
+`live_distillation.md`.
+
 ## The problem
 
 Nothing the live SITREP measures reaches the operator until a window has

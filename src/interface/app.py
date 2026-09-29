@@ -1,9 +1,11 @@
 """HTTP routes of the operator interface.
 
     /                        operator page
-    /sitrep                  live SITREP page: camera feed, report beneath it
+    /sitrep                  live SITREP page: camera feed, live values beneath it
     POST /api/sitrep/start   begin the run (a no-op while one is under way)
     POST /api/sitrep/stop    end it
+    POST /api/sitrep/bericht     ask for a report (key R on the page)
+    POST /api/sitrep/empfehlung  ask for a recommendation (key E on the page)
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
     /api/sitrep/video        the camera as an MJPEG stream
@@ -93,6 +95,16 @@ def create_app(live: LiveSitrep) -> FastAPI:
     def stop():
         live.stop()
         return JSONResponse(live.snapshot())
+
+    @app.post("/api/sitrep/bericht")
+    def bericht():
+        angefordert = live.bericht()
+        return JSONResponse({"angefordert": angefordert, **live.snapshot()})
+
+    @app.post("/api/sitrep/empfehlung")
+    def empfehlung():
+        angefordert = live.empfehlen()
+        return JSONResponse({"angefordert": angefordert, **live.snapshot()})
 
     @app.get("/api/sitrep/state")
     def state():

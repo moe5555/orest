@@ -39,7 +39,7 @@ def timing() -> argparse.ArgumentParser:
     parser.add_argument("--interval", type=float, default=INTERVAL,
                         help=f"seconds between sampled frames (default: {INTERVAL:g})")
     parser.add_argument("--window", type=float, default=WINDOW,
-                        help=f"seconds per SITREP window (default: {WINDOW:g})")
+                        help=f"seconds per window: the stretch the Chronik summarises at a time (default: {WINDOW:g})")
     parser.add_argument("--windows", type=int, help="stop after this many windows")
     return parser
 

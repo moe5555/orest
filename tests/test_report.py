@@ -1,16 +1,14 @@
 """The SITREP document: its shape on disk and the measured/generated split."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
-from ollama import ResponseError
 from pydantic import ValidationError
 
 from action import sitrep_map
-import numpy as np
 
-from sitrep import capture, presence, report
+from sitrep import loudness, report
 
 
 def test_bewertungen_are_the_rating_fields_of_person_in_order():
@@ -57,29 +55,14 @@ def test_an_unknown_person_is_never_given_someone_elses_measurement(sitrep):
     assert document.handlung(report.UNBEKANNT) is None
 
 
-def test_the_measured_ratings_are_taken_up_to_the_end_of_the_window(monkeypatch, sitrep):
-    monkeypatch.setattr(report.transcribe, "segments", lambda audio, **kwargs: [])
-    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: sitrep.bericht)
-    asked = []
-
-    def handlungen(until, gain=None):
-        asked.append(until)
-        return sitrep.handlungen
-
-    window = window_at(0)
-    document = report.sitrep(window, handlungen=handlungen)
-    assert asked == [window.ended]
-    assert document.handlungen == sitrep.handlungen
-
-
 def test_measured_fields_stay_separate_from_the_generated_report(sitrep):
     """The model's Lagebericht is nested, so no generated field can take the
     place of a measured one however the schema grows."""
     document = json.loads(sitrep.model_dump_json())
     assert set(document) == {"zeitfenster", "quelle", "gesagt", "anwesend",
                              "handlungen", "aeusserungen", "pegel", "latenz_s", "bericht"}
-    assert set(document["bericht"]) == {"beschreibung", "personen", "szene", "prognose",
-                                        "empfehlung", "einschreiten"}
+    assert set(document["bericht"]) == {"verlauf", "beschreibung", "personen", "szene",
+                                        "prognose", "empfehlung", "einschreiten"}
 
 
 def test_the_model_is_not_asked_whether_to_intervene():
@@ -141,7 +124,7 @@ def test_a_report_carries_exactly_three_forecasts(bericht):
     for count in (2, 4):
         prognose = [report.Verlauf(verlauf="", wahrscheinlichkeit=10)] * count
         with pytest.raises(ValidationError):
-            report.Lagebericht(beschreibung="", personen=[], szene=bericht.szene,
+            report.Lagebericht(verlauf="", beschreibung="", personen=[], szene=bericht.szene,
                                prognose=prognose, empfehlung="")
 
 
@@ -183,231 +166,144 @@ def test_transcript_is_carried_verbatim(sitrep):
 
 
 def test_prompt_names_the_transcript():
-    assert "Transkript:" in report._prompt("Guten Tag")
-    assert "Guten Tag" in report._prompt("Guten Tag")
+    prompt = report._prompt(report.ANWEISUNG, "Guten Tag")
+    assert "Transkript:\nGuten Tag" in prompt
 
 
 def test_prompt_marks_silence_rather_than_leaving_it_blank():
-    assert "(keine Sprache erkannt)" in report._prompt("")
+    assert "(keine Sprache erkannt)" in report._prompt(report.ANWEISUNG, "")
 
 
 def test_prompt_lists_who_is_present_and_how_certain_the_name_is():
-    prompt = report._prompt("", [report.Anwesend(name="Klara", erkannt=True),
-                                 report.Anwesend(name="Vielleicht: Jakob", erkannt=False)])
+    prompt = report._prompt(report.ANWEISUNG, "",
+                            [report.Anwesend(name="Klara", erkannt=True),
+                             report.Anwesend(name="Vielleicht: Jakob", erkannt=False)])
     assert "- Klara (erkannt)" in prompt
     assert "- Vielleicht: Jakob (vermutet)" in prompt
 
 
 def test_prompt_tells_the_model_where_the_names_are_and_the_threshold():
-    prompt = report._prompt("")
+    prompt = report._prompt(report.ANWEISUNG, "")
     assert "Schild ueber" in prompt
     assert f"ueber {report.SCHWELLE}" in prompt
 
 
 def test_prompt_marks_an_empty_room_rather_than_leaving_it_blank():
-    assert "(niemand erfasst)" in report._prompt("")
+    assert "(niemand erfasst)" in report._prompt(report.ANWEISUNG, "")
 
 
-def test_sitrep_takes_who_is_present_from_the_tracker_for_its_own_window(
-        monkeypatch, bericht):
-    """The roster is asked for the window's own span, and every person on it
-    reaches both the model and the document."""
-    seen = []
+def test_prompt_puts_what_changes_least_first():
+    """Ollama reuses its cache for an identical opening (live_sitrep_latency.md, fix 4)."""
+    prompt = report._prompt(report.ANWEISUNG, "Klara: Raus!", [],
+                            kontext="Abschnitte:\n- 20:00:00-20:00:30 ...",
+                            werte="- Klara: risiko 4", anlass="Alarm")
+    assert prompt.startswith(report.ANWEISUNG)
+    after = len(report.ANWEISUNG)
+    order = [prompt.index(part, after) for part in ("Anwesenheitsliste:\n", "Abschnitte:\n",
+                                                    "Gemessen jetzt:\n", "Anlass:\n",
+                                                    "Transkript:\n")]
+    assert order == sorted(order)
 
-    def roster(since, until):
-        seen.append((since, until))
-        return [presence.Presence(label="Klara", name="Klara", guess="Vielleicht: Ida",
-                                  similarity=0.7, sightings=4, first_seen=since,
-                                  last_seen=until)]
 
+def test_the_report_and_the_recommendation_share_their_opening():
+    assert report.ANWEISUNG.startswith(report.QUELLEN)
+    assert report.ANWEISUNG_EMPFEHLUNG.startswith(report.QUELLEN)
+
+
+T0 = datetime(2026, 9, 29, 20, 0, 0)
+
+
+def line(text, seconds, name="Klara", **fields):
+    at = T0 + timedelta(seconds=seconds)
+    return report.Aeusserung(name=name, text=text, beginn=at, ende=at + timedelta(seconds=2),
+                             **fields)
+
+
+def test_a_report_asked_for_reads_the_chronik_and_the_last_lines(monkeypatch, bericht):
     given = {}
 
-    def analyse(frames, transcript, anwesend, model=None, vorher=""):
-        given["anwesend"] = anwesend
+    def analyse(frames, transcript, anwesend, model=None, kontext="", werte=""):
+        given.update(frames=frames, transcript=transcript, anwesend=anwesend,
+                     kontext=kontext, werte=werte)
         return bericht
 
-    monkeypatch.setattr(report.transcribe, "segments", lambda audio, **kwargs: [])
     monkeypatch.setattr(report, "analyse", analyse)
-    window = window_at(0)
+    lines = [line("Du lügst.", 10), line("Raus hier!", 20, name=None, lautstaerke="geschrien")]
+    anwesend = [report.Anwesend(name="Klara", erkannt=True)]
 
-    document = report.sitrep(window, roster=roster)
+    document = report.bericht(beginn=T0, ende=T0 + timedelta(seconds=300), frames=[b"a", b"b"],
+                              aeusserungen=lines, anwesend=anwesend,
+                              kontext="Rueckblick ...", werte="- Klara: risiko 2",
+                              abschnitte=9)
 
-    assert seen == [(window.started, window.ended)]
-    assert given["anwesend"] == [report.Anwesend(name="Klara", erkannt=True)]
-    assert document.anwesend == given["anwesend"]
-
-
-def window_at(index: int) -> capture.Window:
-    """A captured window carrying the shape the model is given."""
-    return capture.Window(
-        index=index,
-        started=datetime(2026, 9, 10, 14, 30, 0),
-        ended=datetime(2026, 9, 10, 14, 30, 30),
-        frames=[b"jpeg"],
-        audio=b"wav",
-        audio_seconds=30.0,
-    )
+    assert given == {"frames": [b"a", b"b"],
+                     "transcript": "Klara: Du lügst.\n(unklar) (geschrien): Raus hier!",
+                     "anwesend": anwesend, "kontext": "Rueckblick ...",
+                     "werte": "- Klara: risiko 2"}
+    assert document.zeitfenster.dauer_s == 300.0
+    assert document.quelle == report.Quelle(bilder=2, abschnitte=9, woertlich_s=4.0)
+    assert document.gesagt == "Du lügst. Raus hier!"
+    assert document.aeusserungen == lines
+    assert document.bericht is bericht
 
 
-def test_sitreps_streams_without_writing_anything(monkeypatch, tmp_path, sitrep):
-    """The live SITREP is streamed and not retained, so a run must leave
-    nothing behind on disk."""
-    monkeypatch.setattr(report, "_sitrep", lambda window, **kwargs: (sitrep, None))
-    monkeypatch.chdir(tmp_path)
-
-    produced = list(report.sitreps([window_at(0)]))
-
-    assert produced == [sitrep]
-    assert list(tmp_path.rglob("*")) == []
+def test_a_reports_latency_runs_from_the_request(monkeypatch, bericht):
+    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: bericht)
+    document = report.bericht(beginn=T0, ende=T0, frames=[], aeusserungen=[],
+                              started=report.time.monotonic() - 3.0)
+    assert document.latenz_s >= 3.0
 
 
-def test_a_window_whose_reply_does_not_parse_is_skipped(monkeypatch, sitrep):
-    """A truncated reply costs one window, not the session."""
-    replies = iter([ValidationError.from_exception_data("Lagebericht", []), sitrep])
-
-    def answer(window, **kwargs):
-        reply = next(replies)
-        if isinstance(reply, Exception):
-            raise reply
-        return reply, None
-
-    monkeypatch.setattr(report, "_sitrep", answer)
-    assert list(report.sitreps([window_at(0), window_at(1)])) == [sitrep]
+def test_the_report_carries_the_loudness_calibration_as_it_stands(monkeypatch, bericht):
+    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: bericht)
+    laut = loudness.Calibration(seconds=120, provisional=30)
+    laut.learn(-30.0, 40.0)
+    document = report.bericht(beginn=T0, ende=T0, frames=[], aeusserungen=[], laut=laut)
+    assert document.pegel.kalibriert and not document.pegel.endgueltig
+    assert document.pegel.gehoert_s == 40.0
 
 
-def test_a_rejected_prompt_does_not_end_the_session(monkeypatch, sitrep):
-    replies = iter([ResponseError("rejected"), sitrep])
-
-    def answer(window, **kwargs):
-        reply = next(replies)
-        if isinstance(reply, Exception):
-            raise reply
-        return reply, None
-
-    monkeypatch.setattr(report, "_sitrep", answer)
-    assert list(report.sitreps([window_at(0), window_at(1)])) == [sitrep]
+class Reply:
+    def __init__(self, content):
+        self.message = type("Message", (), {"content": content})()
 
 
-def test_the_transcript_is_made_in_the_language_asked_for(monkeypatch, sitrep):
+def test_a_recommendation_reads_the_anlass_and_follows_the_threshold(monkeypatch):
     asked = {}
 
-    def segments(audio, language):
-        asked["language"] = language
-        return []
+    def chat(**request):
+        asked.update(request)
+        return Reply(json.dumps({"lage": "Klara bedroht Jakob.",
+                                 "szene": {"relevanz": 8, "eskalation": 8, "gefahr": 5},
+                                 "empfehlung": "Probe unterbrechen."}))
 
-    monkeypatch.setattr(report.transcribe, "segments", segments)
-    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: sitrep.bericht)
-    report.sitrep(window_at(0), language="en")
-    assert asked == {"language": "en"}
+    monkeypatch.setattr(report, "chat", chat)
+    empfehlung = report.empfehlen(anlass="Alarm: Klara, Risiko 4.", frames=[b"a"],
+                                  aeusserungen=[line("Ich bring dich um.", 0)],
+                                  kontext="Abschnitte: ...", werte="- Klara: risiko 4")
 
-
-def test_the_model_reads_who_said_each_line(monkeypatch, bericht):
-    """Speakers come from measurement; the model is told them, line by line."""
-    spoken = [report.transcribe.Segment(0.0, 2.0, "Noch einmal."),
-              report.transcribe.Segment(3.0, 4.0, "Von vorne.")]
-    monkeypatch.setattr(report.transcribe, "segments", lambda audio, **kwargs: spoken)
-    given = {}
-
-    def analyse(frames, transcript, anwesend, model=None, vorher=""):
-        given["transcript"] = transcript
-        return bericht
-
-    monkeypatch.setattr(report, "analyse", analyse)
-
-    def sprecher(segmente, audio_start):
-        return [report.Aeusserung(name=name, text=segment.text,
-                                  beginn=audio_start, ende=audio_start)
-                for name, segment in zip(("Klara", None), segmente)]
-
-    window = window_at(0)
-    document = report.sitrep(window, sprecher=sprecher)
-
-    assert given["transcript"] == "Klara: Noch einmal.\n(unklar): Von vorne."
-    assert document.gesagt == "Noch einmal. Von vorne."
-    assert [line.name for line in document.aeusserungen] == ["Klara", None]
+    prompt = asked["messages"][0]["content"]
+    assert "Anlass:\nAlarm: Klara, Risiko 4." in prompt
+    assert "Klara: Ich bring dich um." in prompt
+    assert asked["options"]["num_predict"] == report.EMPFEHLUNG_TOKENS
+    assert empfehlung.urteil.einschreiten
+    assert empfehlung.urteil.empfehlung == "Probe unterbrechen."
+    assert empfehlung.anlass == "Alarm: Klara, Risiko 4."
 
 
-def test_segments_are_placed_in_time_from_the_end_of_the_window(monkeypatch, bericht):
-    """Without attribution, lines still carry when they were said."""
-    monkeypatch.setattr(report.transcribe, "segments", lambda audio, **kwargs: [
-        report.transcribe.Segment(1.0, 2.5, "Halt.")])
-    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: bericht)
-    window = window_at(0)
-    [line] = report.sitrep(window).aeusserungen
-    audio_start = window.ended - report.timedelta(seconds=window.audio_seconds)
-    assert line.name is None
-    assert line.beginn == audio_start + report.timedelta(seconds=1.0)
+def test_a_recommendation_below_the_threshold_carries_no_measure():
+    urteil = report.Urteil(lage="Ruhig.", szene=report.Szene(relevanz=2, eskalation=6, gefahr=6),
+                           empfehlung="Beobachten.")
+    assert not urteil.einschreiten
+    assert urteil.empfehlung == ""
 
 
-def test_rated_lines_reach_the_document(monkeypatch, bericht):
-    monkeypatch.setattr(report.transcribe, "segments", lambda audio, **kwargs: [
-        report.transcribe.Segment(0.0, 1.0, "Ich hasse dich.")])
-    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: bericht)
-
-    def einschaetzen(lines):
-        return [line.model_copy(update={"risiko": 3, "menschlichkeit": -3}) for line in lines]
-
-    [line] = report.sitrep(window_at(0), einschaetzen=einschaetzen).aeusserungen
-    assert (line.risiko, line.menschlichkeit) == (3, -3)
+def test_the_model_is_not_asked_whether_a_recommendation_intervenes():
+    assert "einschreiten" not in report.Urteil.model_json_schema()["properties"]
 
 
-# ---- continuity between reports -------------------------------------------------
-
-def _window(index, seconds=10.0, value=0.1):
-    at = datetime(2026, 9, 28, 20, 0, 0) + report.timedelta(seconds=index * seconds)
-    return capture.Window(index, at, at + report.timedelta(seconds=seconds), [],
-                          capture.encode_wav(np.full(int(16000 * seconds), value, dtype=np.float32),
-                                             16000), seconds)
-
-
-def test_a_line_cut_off_by_the_window_end_is_held_back_with_its_sound():
-    window = _window(0)
-    kept, carry = report._held_back([report.transcribe.Segment(1.0, 3.0, "Erst."),
-                                     report.transcribe.Segment(7.0, 9.8, "Dann wurde")], window)
-    assert [segment.text for segment in kept] == ["Erst."]
-    assert len(carry) / 16000 == pytest.approx(10.0 - 7.0 + report.CARRY_LEAD, abs=0.01)
-
-
-def test_a_finished_line_or_a_long_one_is_reported_as_it_stands():
-    window = _window(0)
-    finished = [report.transcribe.Segment(7.0, 8.0, "Fertig.")]
-    assert report._held_back(finished, window) == (finished, None)
-    monologue = [report.transcribe.Segment(2.0, 14.9, "Und so weiter")]
-    assert report._held_back(monologue, _window(0, seconds=15.0)) == (monologue, None)
-
-
-def test_the_held_back_line_is_reported_whole_with_the_next_window(monkeypatch, bericht):
-    heard = []
-
-    def segments(audio, **kwargs):
-        seconds = capture.decode_wav(audio)[0].size / 16000
-        heard.append(round(seconds, 1))
-        if len(heard) == 1:
-            return [report.transcribe.Segment(8.0, seconds - 0.1, "Ich werde dich")]
-        return [report.transcribe.Segment(0.1, 4.0, "Ich werde dich finden.")]
-
-    monkeypatch.setattr(report.transcribe, "segments", segments)
-    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: bericht)
-    first, second = report.sitreps([_window(0), _window(1)])
-    assert first.aeusserungen == []
-    assert heard == [10.0, round(10.0 + 2.0 + report.CARRY_LEAD, 1)]
-    assert [line.text for line in second.aeusserungen] == ["Ich werde dich finden."]
-
-
-def test_each_report_is_shown_the_previous_reports_last_lines(monkeypatch, bericht):
-    lines = iter([[report.transcribe.Segment(1.0, 2.0, "Du lügst.")],
-                  [report.transcribe.Segment(1.0, 2.0, "Raus hier!")]])
-    monkeypatch.setattr(report.transcribe, "segments", lambda audio, **kwargs: next(lines))
-    shown = []
-
-    def analyse(frames, transcript, anwesend, model=None, vorher=""):
-        shown.append(vorher)
-        return bericht
-
-    monkeypatch.setattr(report, "analyse", analyse)
-    list(report.sitreps([_window(0), _window(1)]))
-    assert shown == ["", "(unklar): Du lügst."]
-    assert "Zuvor gesagt:\n(unklar): Du lügst." in report._prompt("", [], shown[1])
+def test_reports_wait_behind_recommendations_and_lines_at_the_model():
+    assert report.llm.ZEILEN < report.llm.EMPFEHLUNG < report.llm.BERICHT < report.llm.CHRONIK
 
 
 def test_a_line_that_stood_out_is_marked_for_the_model():
@@ -416,3 +312,10 @@ def test_a_line_that_stood_out_is_marked_for_the_model():
                                lautstaerke="geschrien"),
              report.Aeusserung(text="Ja.", beginn=at, ende=at)]
     assert report.protokoll(lines) == "Klara (geschrien): Raus!\n(unklar): Ja."
+
+
+def test_the_schema_lists_each_person_at_most_once():
+    """Without the cap the model was seen to list "Unbekannt" until the token
+    cap cut the reply off."""
+    anwesend = [report.Anwesend(name="Klara", erkannt=True)]
+    assert report.schema(anwesend)["properties"]["personen"]["maxItems"] == 2

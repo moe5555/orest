@@ -2,20 +2,22 @@
 
 At most one run exists at a time: there is one camera, and DirectShow gives it
 to one process (sitrep/session.py). The run lives on a thread of its own,
-because a session yields a report only once per window and generation blocks,
-while the web server has to keep answering the page in the meantime.
+which follows what the session produces, while the web server keeps answering
+the page.
 
 The page is fed from a snapshot rather than from the session directly: status,
-the latest report, the action recogniser's latest readings and a version
-number that rises with every change of the run's state, so a page polling or
-streaming the state knows whether anything is new.
+the live values and alarm, the latest lines, the Chronik, the latest
+recommendation and report, the action recogniser's latest readings, and a
+version number that rises with every change of the run's state, so a page
+polling or streaming the state knows whether anything is new.
 """
 
 import threading
+from collections import deque
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sitrep import report, session
+from sitrep import chronik, lage, report, session
 
 # Run states, as the page shows them.
 IDLE, STARTING, RUNNING, STOPPING, ERROR = "idle", "starting", "running", "stopping", "error"
@@ -71,6 +73,46 @@ def aktionen(ratings) -> dict:
     }
 
 
+def zeile(line: report.Aeusserung) -> dict:
+    """A line as the page lists it."""
+    return {"zeit": line.ende.isoformat(timespec="seconds"),
+            "beginn": line.beginn.isoformat(timespec="milliseconds"), "name": line.name,
+            "text": line.text, "lautstaerke": line.lautstaerke,
+            "risiko": line.risiko, "menschlichkeit": line.menschlichkeit,
+            "verstaerkung": line.verstaerkung, "begruendung": line.begruendung}
+
+
+def werte(stand: lage.Stand) -> dict:
+    """The live values as the page shows them: whole numbers and their causes."""
+    return {
+        "zeit": stand.zeit.isoformat(timespec="seconds"),
+        "personen": [{"name": name,
+                      **{rating: wert.wert for rating, wert in ratings.items()},
+                      **{f"anlass_{rating}": wert.anlass for rating, wert in ratings.items()}}
+                     for name, ratings in stand.personen.items()],
+        "alarm": {"aktiv": stand.alarm.aktiv, "wert": stand.alarm.wert,
+                  "wer": stand.alarm.wer, "anlass": stand.alarm.anlass},
+    }
+
+
+def chronik_payload(kept: chronik.Chronik) -> dict:
+    """The Chronik as the page shows it: the Rueckblick, the Abschnitte, the Kurve."""
+    return {
+        "rueckblick": kept.rueckblick,
+        "rueckblick_bis": kept.rueckblick_bis.isoformat(timespec="seconds")
+                          if kept.rueckblick_bis else None,
+        "abschnitte": [abschnitt.model_dump(mode="json", include={
+                           "beginn", "ende", "zusammenfassung", "latenz_s"})
+                       for abschnitt in kept.abschnitte],
+        "kurve": [punkt.model_dump(mode="json") for punkt in kept.kurve],
+        "naechster": (kept.cut + timedelta(seconds=kept.laenge)).isoformat(timespec="seconds"),
+    }
+
+
+# Lines the page lists, newest last.
+ZEILEN_SHOWN = 12
+
+
 class LiveSitrep:
     """Starts, stops and observes the one live SITREP run.
 
@@ -88,6 +130,11 @@ class LiveSitrep:
         self.status = IDLE
         self.error: str | None = None
         self.report: dict | None = None
+        self.empfehlung: dict | None = None
+        self.werte: dict | None = None
+        self.zeilen: deque[dict] = deque(maxlen=ZEILEN_SHOWN)
+        # The last request that failed, until the next of its kind succeeds.
+        self.fehler: dict[str, str] = {}
         self.started: datetime | None = None
         self.version = 0
 
@@ -97,7 +144,10 @@ class LiveSitrep:
             if self.status in (STARTING, RUNNING, STOPPING):
                 return False
             self._stop = threading.Event()
-            self.status, self.error, self.report = STARTING, None, None
+            self.status, self.error = STARTING, None
+            self.report, self.empfehlung, self.werte = None, None, None
+            self.zeilen.clear()
+            self.fehler = {}
             self.started = datetime.now()
             self.version += 1
             self._thread = threading.Thread(target=self._run, args=(self._stop,),
@@ -122,11 +172,11 @@ class LiveSitrep:
             self.version += 1
 
         try:
-            for nummer, document in enumerate(run.reports(), start=1):
+            for event in run.events():
                 if stop.is_set():
                     break
                 with self._lock:
-                    self.report = payload(document, nummer)
+                    self._take(event)
                     self.version += 1
         except Exception as error:
             run.close()
@@ -134,6 +184,30 @@ class LiveSitrep:
             return
         run.close()
         self._finish(IDLE, None)
+
+    def _take(self, event):
+        """Keep what the page shows of one of the run's events."""
+        if isinstance(event, session.Zeilen):
+            # A rated line takes the place of the line as it was transcribed.
+            shown = {(held["beginn"], held["text"]): index for index, held in enumerate(self.zeilen)}
+            for line in event.zeilen:
+                row = {**zeile(line), "bewertet": event.bewertet}
+                index = shown.get((row["beginn"], row["text"]))
+                if index is None:
+                    self.zeilen.append(row)
+                else:
+                    self.zeilen[index] = row
+        elif isinstance(event, session.Werte):
+            self.werte = werte(event.stand)
+        elif isinstance(event, session.NeuerBericht):
+            self.report = payload(event.sitrep, event.nummer)
+            self.fehler.pop("bericht", None)
+        elif isinstance(event, session.NeueEmpfehlung):
+            self.empfehlung = {**event.empfehlung.model_dump(mode="json"),
+                               "nummer": event.nummer, "schwelle": report.SCHWELLE}
+            self.fehler.pop("empfehlung", None)
+        elif isinstance(event, session.Fehlgeschlagen):
+            self.fehler[event.was] = event.fehler
 
     def _finish(self, status: str, error: Exception | None):
         with self._lock:
@@ -148,9 +222,9 @@ class LiveSitrep:
     def stop(self):
         """End the run.
 
-        The camera, tracker and feeds are released at once. The run's thread
-        finishes the window it is in, since generation cannot be interrupted,
-        and a new run can start once it has.
+        The camera, tracker and feeds are released at once. A report or
+        summary being generated cannot be interrupted; it finishes on its own
+        thread and is dropped, and a new run can start meanwhile.
         """
         with self._lock:
             if self.status not in (STARTING, RUNNING):
@@ -161,6 +235,16 @@ class LiveSitrep:
             run = self.session
         if run:
             run.close()
+
+    def bericht(self) -> bool:
+        """Ask the run for a report. False when none runs, or one is being made."""
+        run = self.session
+        return run.bericht() if run is not None and self.status == RUNNING else False
+
+    def empfehlen(self) -> bool:
+        """Ask the run for a recommendation now."""
+        run = self.session
+        return run.empfehlung() if run is not None and self.status == RUNNING else False
 
     def snapshot(self) -> dict:
         """Everything the page shows, at one moment."""
@@ -174,6 +258,7 @@ class LiveSitrep:
                     "modell": run.options.model,
                     "fenster_s": run.options.window,
                     "aktionen": run.actions is not None,
+                    "auto_empfehlung": run.options.auto_empfehlung,
                     "besetzung": list(run.tracker.cast.names) if run.tracker.cast else [],
                 }
             return {
@@ -183,6 +268,14 @@ class LiveSitrep:
                 "gestartet": self.started.isoformat(timespec="seconds") if self.started else None,
                 "quelle": quelle,
                 "aktionen": aktionen(run.actions) if run is not None else None,
+                "ton": run.ton() if run is not None and run.meter is not None else None,
+                "werte": self.werte,
+                "zeilen": list(self.zeilen),
+                "chronik": (chronik_payload(run.chronik)
+                            if run is not None and run.chronik is not None else None),
+                "laeuft": run.laeuft if run is not None else {},
+                "fehler": dict(self.fehler),
+                "empfehlung": self.empfehlung,
                 "report": self.report,
             }
 

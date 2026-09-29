@@ -1,8 +1,16 @@
-"""Orest live SITREP: runs the capture and reporting loop, prints to console.
+"""Orest live SITREP: runs the live SITREP and prints it to the console.
 
 Entry point for the Realtime-SITREP of knowledge/components/02_processing.md.
-Reports are printed as they arrive and not retained; the camera feed itself is
-handled separately and is not displayed here.
+Prints each line as it is rated, the live values and the alarm, each stretch
+the Chronik summarised, and each recommendation, as they happen. A full report
+is made only when asked for:
+
+    r    Lagebericht
+    e    Empfehlung
+
+On Windows the key alone does it; elsewhere the key and Enter. Nothing is
+retained; the camera feed itself is handled separately and is not displayed
+here.
 
     orest-sitrep
     orest-sitrep --window 30 --interval 10 --audio-api WASAPI
@@ -14,12 +22,12 @@ Equivalently, without the installed entry point:
 """
 
 import argparse
-import itertools
 import pathlib
 import sys
 import textwrap
+import threading
 
-from . import cli, loudness, report, session, transcribe
+from . import chronik, cli, lage, loudness, report, session, transcribe
 
 # Label column width, sized to the longest field name.
 _LABEL = 12
@@ -141,6 +149,7 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
         _paint(_RULE * width, "dim", use_colour),
     ]
 
+    lines += _field("VERLAUF", _wrap(bericht.verlauf, value_width))
     lines += _field("BESCHREIBUNG", _wrap(bericht.beschreibung, value_width))
 
     personen = []
@@ -186,11 +195,139 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
     else:
         lines += _field("EMPFEHLUNG", [_paint("Kein Einschreiten", "dim", use_colour)])
 
-    footer = (f" {quelle.bilder} Bilder · {quelle.ton_s}s Ton · "
-              f"Latenz {document.latenz_s}s{_pegel(document.pegel)}")
+    footer = (f" {quelle.abschnitte} Abschnitte · {quelle.woertlich_s}s wörtlich · "
+              f"{quelle.bilder} Bilder · Latenz {document.latenz_s}s{_pegel(document.pegel)}")
     lines.append(_paint(_RULE * width, "dim", use_colour))
     lines.append(_paint(footer, "dim", use_colour))
     return "\n".join(lines)
+
+
+def format_zeile(line: report.Aeusserung, use_colour=True) -> str:
+    """One line as it was said, on one console line."""
+    lautstaerke = f" ({line.lautstaerke})" if line.lautstaerke else ""
+    text = (f" {line.ende:%H:%M:%S}  {line.name or report.UNKLAR}{lautstaerke}: "
+            f"“{line.text}”{_gewertet(line)}")
+    colour = _risiko_colour(line.risiko) if line.risiko and line.risiko > 1 else "dim"
+    return _paint(text, colour, use_colour)
+
+
+def format_abschnitt(abschnitt: chronik.Abschnitt, use_colour=True) -> str:
+    """One stretch the Chronik summarised."""
+    zeit = f"{abschnitt.beginn:%H:%M:%S}–{abschnitt.ende:%H:%M:%S}"
+    summary = abschnitt.zusammenfassung
+    if summary is None:
+        return _paint(f" ── CHRONIK {zeit}: ohne Zusammenfassung", "dim", use_colour)
+    szene = summary.szene
+    head = _paint(f" ── CHRONIK {zeit} · ", "accent", use_colour)
+    werte = (_paint(f"eskalation {szene.eskalation}", _szene_colour(szene.eskalation), use_colour)
+             + " · " + _paint(f"gefahr {szene.gefahr}", _szene_colour(szene.gefahr), use_colour)
+             + f" · {summary.tendenz}")
+    return f"{head}{werte}\n    {summary.zusammenfassung}"
+
+
+def format_werte(stand: lage.Stand, use_colour=True) -> str:
+    """The live values above 0 on one line, the alarm first when it is raised."""
+    people = " · ".join(
+        f"{name} " + " ".join(f"{rating} {wert.wert}" for rating, wert in werte.items() if wert.wert)
+        for name, werte in stand.personen.items()
+        if any(wert.wert for wert in werte.values())) or "alle 0"
+    if stand.alarm.aktiv:
+        wer = stand.alarm.wer or report.UNKLAR
+        return (_paint(f" ALARM {wer} Risiko {stand.alarm.wert}: {stand.alarm.anlass}",
+                       "red", use_colour)
+                + _paint(f"   [{people}]", "dim", use_colour))
+    return _paint(f" WERTE {people}", "dim", use_colour)
+
+
+def format_empfehlung(empfehlung: report.Empfehlung, width=78, use_colour=True) -> str:
+    """A recommendation as a short console block."""
+    urteil = empfehlung.urteil
+    szene = urteil.szene
+    verdict = (_paint("EINSCHREITEN", "red", use_colour) if urteil.einschreiten
+               else _paint("Kein Einschreiten", "dim", use_colour))
+    lines = [f" EMPFEHLUNG {empfehlung.zeit:%H:%M:%S}  {verdict} · eskalation {szene.eskalation}"
+             f" · gefahr {szene.gefahr} · Latenz {empfehlung.latenz_s}s"]
+    lines += [f"    {line}" for line in _wrap(urteil.lage, width - 4)]
+    lines += [f"    {_paint(line, 'red', use_colour)}"
+              for line in _wrap(urteil.empfehlung, width - 4)]
+    lines += [_paint(f"    {'Anlass: ' if index == 0 else '        '}{line}", "dim", use_colour)
+              for index, line in enumerate(_wrap(empfehlung.anlass, width - 12))]
+    return "\n".join(lines)
+
+
+def _keys(live: session.Session):
+    """Ask for a report on r and a recommendation on e, typed in the console."""
+    def press(key: str):
+        key = key.strip().lower()
+        if key == "r" and not live.bericht():
+            print(" Bericht läuft; ein weiterer folgt danach.", flush=True)
+        elif key == "e" and not live.empfehlung():
+            print(" Empfehlung läuft; eine weitere folgt danach.", flush=True)
+
+    def loop():
+        try:
+            import msvcrt
+        except ImportError:
+            for typed in sys.stdin:
+                press(typed)
+            return
+        while True:
+            press(msvcrt.getwch())
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
+class Konsole:
+    """What the console prints for each of the run's events.
+
+    The live values are printed only when what they show changed: they are
+    announced whenever any whole number changes, including a person newly
+    seen at 0, which would otherwise fill the console.
+    """
+
+    def __init__(self, use_colour=True, as_json=False):
+        self.use_colour = use_colour
+        self.as_json = as_json
+        self._werte = None
+
+    def text(self, event) -> str | None:
+        if isinstance(event, session.Werte):
+            shown = format_werte(event.stand, use_colour=False)
+            if shown == self._werte:
+                return None
+            self._werte = shown
+        return format_event(event, self.use_colour, self.as_json)
+
+
+def format_event(event, use_colour=True, as_json=False) -> str | None:
+    """What the console prints for one of the run's events, or None.
+
+    A line is printed when it is transcribed, and again once rated only if
+    its rating found something."""
+    if isinstance(event, session.Zeilen):
+        lines = [line for line in event.zeilen
+                 if not event.bewertet or line.risiko or line.menschlichkeit]
+        return "\n".join(format_zeile(line, use_colour) for line in lines) or None
+    if isinstance(event, session.Werte):
+        return format_werte(event.stand, use_colour)
+    if isinstance(event, session.Ton):
+        if event.stumm:
+            return _paint(f" KEIN TON von {event.quelle} seit {session.STUMM:g} s: ohne Ton "
+                          "keine Zeilen. Tonquelle prüfen (--audio, --audio-ndi).", "red", use_colour)
+        return _paint(f" Ton von {event.quelle} wieder da.", "dim", use_colour)
+    if isinstance(event, session.NeuerAbschnitt):
+        return format_abschnitt(event.abschnitt, use_colour)
+    if isinstance(event, session.Angefordert):
+        was = "Bericht" if event.was == "bericht" else "Empfehlung"
+        return _paint(f" {was} wird erstellt …", "dim", use_colour)
+    if isinstance(event, session.NeuerBericht):
+        return (event.sitrep.model_dump_json(indent=2) if as_json
+                else format_sitrep(event.sitrep, use_colour=use_colour))
+    if isinstance(event, session.NeueEmpfehlung):
+        return format_empfehlung(event.empfehlung, use_colour=use_colour)
+    if isinstance(event, session.Fehlgeschlagen):
+        return _paint(f" {event.was} fehlgeschlagen: {event.fehler}", "red", use_colour)
+    return None
 
 
 def main(argv=None) -> int:
@@ -211,8 +348,11 @@ def main(argv=None) -> int:
     parser.add_argument("--no-actions", action="store_true",
                         help="don't run the action recogniser; risiko and "
                              "menschlichkeit are then not measured")
+    parser.add_argument("--no-auto-empfehlung", action="store_true",
+                        help="make a recommendation only when asked for (e), not "
+                             "whenever the live values raise the alarm")
     parser.add_argument("--json", action="store_true",
-                        help="print raw report JSON instead of the console block")
+                        help="print a report as raw JSON instead of the console block")
     parser.add_argument("--no-colour", action="store_true", help="plain output")
     args = parser.parse_args(argv)
 
@@ -226,15 +366,16 @@ def main(argv=None) -> int:
     print(live.describe())
     for path in live.missing_enrolment:
         print(f"no face found in {path}", file=sys.stderr)
+    print("r: Lagebericht · e: Empfehlung · Ctrl+C: beenden", flush=True)
+    _keys(live)
+    konsole = Konsole(not args.no_colour, args.json)
 
     try:
         with live:
-            for document in itertools.islice(live.reports(), args.windows):
-                if args.json:
-                    print(document.model_dump_json(indent=2))
-                else:
-                    print(format_sitrep(document, use_colour=not args.no_colour),
-                          flush=True)
+            for event in live.events():
+                text = konsole.text(event)
+                if text:
+                    print(text, flush=True)
     except KeyboardInterrupt:
         print()
     except (ValueError, RuntimeError) as error:

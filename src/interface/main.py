@@ -48,6 +48,9 @@ def main(argv=None) -> int:
     parser.add_argument("--no-actions", action="store_true",
                         help="don't run the action recogniser; risiko and "
                              "menschlichkeit are then not measured")
+    parser.add_argument("--no-auto-empfehlung", action="store_true",
+                        help="make a recommendation only when asked for (key E), "
+                             "not whenever the live values raise the alarm")
     parser.add_argument("--host", default=HOST, help=f"address to bind (default: {HOST})")
     parser.add_argument("--port", type=int, default=PORT,
                         help=f"port to serve on (default: {PORT})")

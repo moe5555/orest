@@ -5,26 +5,35 @@ Receives the live SITREP and the presence roster from `orest-sitrep --send-td`
 and writes them into Table DATs beside this module. The wire format is
 documented in src/sitrep/td.py.
 
+A report arrives only when the operator asks for one (R). The live values,
+lines, recommendations and the Chronik arrive as they happen.
+
 Rows are buffered until their `end` message and written in one step, so a
 table never shows half of one report and half of the previous. The report id
 and the roster tick tell one reading's rows from the next.
 
-Tables written (sibling DATs of this module):
-	sitrep_meta        one row: time frame, source, latency, description,
-	                   transcript, scene ratings, recommendation
+Tables written (sibling DATs of this module); a table that does not exist is
+skipped:
+	sitrep_meta        one row: time frame, source, latency, development,
+	                   description, transcript, scene ratings, recommendation
 	sitrep_personen    one row per person in the report
 	sitrep_prognose    the three forecasts, most likely first
 	sitrep_text        the report as plain text, for a Text TOP
 	presence_meta      one row: tick, time, number present
 	presence           one row per person the tracker sees
+	live_meta          one row: tick, time, people, alarm and its cause
+	live_personen      one row per person: live risiko and menschlichkeit
+	live_zeilen        the last LIVE_ZEILEN lines said, newest last
+	live_empfehlung    one row: the latest recommendation
+	chronik            the last CHRONIK_ZEILEN summarised stretches, newest last
 
 Report names are drawn from the presence roster of the report's window, so a
 name in sitrep_personen is a label in presence. The model reads which person
 carries which name from tags drawn over the faces in its frames.
 """
 
-META_HEADER = ['id', 'nummer', 'beginn', 'ende', 'dauer_s', 'bilder', 'ton_s',
-			   'latenz_s', 'personen', 'prognosen',
+META_HEADER = ['id', 'nummer', 'beginn', 'ende', 'dauer_s', 'bilder', 'abschnitte',
+			   'latenz_s', 'personen', 'prognosen', 'verlauf',
 			   'beschreibung', 'gesagt', 'relevanz', 'eskalation', 'gefahr',
 			   'einschreiten', 'massnahme']
 
@@ -44,6 +53,24 @@ PRESENCE_META_HEADER = ['tick', 'zeit', 'anwesend']
 PRESENCE_HEADER = ['zeile', 'label', 'name', 'vermutet', 'aehnlichkeit',
 				   'sichtungen', 'seit', 'dauer_s']
 
+LIVE_META_HEADER = ['tick', 'zeit', 'personen', 'alarm', 'alarm_wert', 'alarm_wer',
+					'alarm_anlass']
+
+LIVE_PERSON_HEADER = ['zeile', 'name', 'risiko', 'menschlichkeit', 'anlass_risiko',
+					  'anlass_menschlichkeit']
+
+ZEILE_HEADER = ['beginn', 'ende', 'name', 'text', 'lautstaerke', 'risiko', 'menschlichkeit',
+				'bewertet']
+
+EMPFEHLUNG_HEADER = ['nummer', 'zeit', 'einschreiten', 'eskalation', 'gefahr', 'lage',
+					 'massnahme', 'anlass', 'latenz_s']
+
+CHRONIK_HEADER = ['beginn', 'ende', 'eskalation', 'gefahr', 'tendenz', 'zusammenfassung']
+
+# Rows kept in the tables that grow: lines said, and summarised stretches.
+LIVE_ZEILEN = 20
+CHRONIK_ZEILEN = 20
+
 # A tick this far below the last one shown means orest-sitrep restarted and
 # its first reading was lost, rather than a reading that arrived late.
 TICK_RESTART = 10
@@ -53,6 +80,8 @@ TICK_RESTART = 10
 _reports = {}
 _rosters = {}
 _last_tick = 0
+_live = {}
+_last_live = 0
 
 
 def handle(address, args):
@@ -63,6 +92,12 @@ def handle(address, args):
 	if address.startswith('/orest/presence/'):
 		_presence(address.rsplit('/', 1)[-1], list(args))
 		return True
+	if address.startswith('/orest/live/'):
+		_live_message(address.rsplit('/', 1)[-1], list(args))
+		return True
+	if address == '/orest/chronik/abschnitt':
+		_append('chronik', CHRONIK_HEADER, list(args), CHRONIK_ZEILEN)
+		return True
 	return False
 
 
@@ -71,7 +106,7 @@ def _sitrep(kind, args):
 		# Only the newest report is of interest; anything older still pending
 		# lost its end message and is dropped.
 		_reports.clear()
-		_reports[args[0]] = {'begin': args[1:], 'beschreibung': '', 'gesagt': '',
+		_reports[args[0]] = {'begin': args[1:], 'verlauf': '', 'beschreibung': '', 'gesagt': '',
 							 'personen': [], 'szene': [0, 0, 0], 'prognose': [],
 							 'empfehlung': [0, '']}
 		return
@@ -82,7 +117,9 @@ def _sitrep(kind, args):
 		# mid-report. The next report arrives within one window.
 		return
 
-	if kind == 'beschreibung':
+	if kind == 'verlauf':
+		report['verlauf'] = args[1]
+	elif kind == 'beschreibung':
 		report['beschreibung'] = args[1]
 	elif kind == 'gesagt':
 		report['gesagt'] = args[1]
@@ -99,7 +136,7 @@ def _sitrep(kind, args):
 
 
 def _write_report(report_id, report):
-	meta = [report_id, *report['begin'], report['beschreibung'], report['gesagt'],
+	meta = [report_id, *report['begin'], report['verlauf'], report['beschreibung'], report['gesagt'],
 			*report['szene'], *report['empfehlung']]
 	_fill('sitrep_meta', META_HEADER, [meta])
 	_fill('sitrep_personen', PERSON_HEADER, report['personen'])
@@ -118,6 +155,7 @@ def _as_text(report):
 	lines = ['SITREP {}   {} - {}   Latenz {:.1f} s'.format(
 				 nummer, beginn[-8:], ende[-8:], float(latenz)),
 			 '',
+			 'VERLAUF       {}'.format(report['verlauf']),
 			 'BESCHREIBUNG  {}'.format(report['beschreibung'])]
 	for zeile, name, vermutet, beschreibung, *ratings in report['personen']:
 		if int(vermutet) and name != UNBEKANNT:
@@ -165,11 +203,66 @@ def _presence(kind, args):
 		_fill('presence', PRESENCE_HEADER, roster['personen'])
 
 
-def _fill(name, header, rows):
-	"""Replace a table's contents with a header and rows."""
+def _live_message(kind, args):
+	"""The live values, framed like the roster; lines and recommendations singly."""
+	global _last_live
+	if kind == 'zeile':
+		# A line arrives as transcribed, then again once rated: the rating
+		# takes the row of the line it belongs to.
+		table = op('live_zeilen')
+		if table is not None:
+			for row in range(1, table.numRows):
+				if table[row, 'beginn'].val == args[0] and table[row, 'text'].val == args[3]:
+					table.replaceRow(row, args)
+					return
+		_append('live_zeilen', ZEILE_HEADER, args, LIVE_ZEILEN)
+		return
+	if kind == 'empfehlung':
+		_fill('live_empfehlung', EMPFEHLUNG_HEADER, [args], quiet=True)
+		return
+
+	tick = int(args[0])
+	if kind == 'begin':
+		_live[tick] = {'begin': args, 'personen': []}
+		return
+	reading = _live.get(tick)
+	if reading is None:
+		return
+	if kind == 'person':
+		reading['personen'].append(args[1:])
+	elif kind == 'end':
+		del _live[tick]
+		# A reading older than the one shown, unless Orest restarted.
+		if 1 < tick <= _last_live and tick > _last_live - TICK_RESTART:
+			return
+		_last_live = tick
+		for pending in [t for t in _live if t < tick]:
+			del _live[pending]
+		_fill('live_meta', LIVE_META_HEADER, [reading['begin']], quiet=True)
+		_fill('live_personen', LIVE_PERSON_HEADER, reading['personen'], quiet=True)
+
+
+def _append(name, header, row, keep):
+	"""Add a row to a table, keeping its header and the last `keep` rows."""
 	table = op(name)
 	if table is None:
-		debug('sitrep_osc: no Table DAT named {}'.format(name))
+		return
+	if table.numRows == 0:
+		table.appendRow(header)
+	table.appendRow(row)
+	while table.numRows > keep + 1:
+		table.deleteRow(1)
+
+
+def _fill(name, header, rows, quiet=False):
+	"""Replace a table's contents with a header and rows.
+
+	A missing table is reported, unless `quiet`: the live tables are optional
+	and update twice a second."""
+	table = op(name)
+	if table is None:
+		if not quiet:
+			debug('sitrep_osc: no Table DAT named {}'.format(name))
 		return
 	table.clear()
 	table.appendRow(header)

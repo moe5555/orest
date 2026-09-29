@@ -6,6 +6,203 @@ referenced below.
 
 ---
 
+## 2026-09-29 — NDI sound received in a child process (VSH-ARLT-5090)
+
+**Moe's observation:** with `--audio-ndi "VSH-ARLT-5090 (OBS PGM)"` the page
+reported no sound from the source for 25 s, though OBS was sending.
+
+- **Cause.** cyndilib holds Python's interpreter lock while `receive()`
+  waits for a frame (200 ms). With NDI sound received on a thread of the run,
+  every other thread woke about 207 times in 5 s instead of about 3,200. The
+  utterance cutter fell behind: 237 chunks were waiting after 15 s, the
+  meter saw nothing, and no line was made. The window recorder before today
+  barely needed to run, which is likely why this went unnoticed on
+  2026-09-28.
+- **Fix.** `ndi_audio.Receiving` runs the receiver in a child process that
+  sends mono float32 chunks over a pipe. A thread in the run reads them;
+  waiting on the pipe releases the lock.
+  - Other threads now wake as often as without NDI (5,115 in 8 s).
+  - A missing source still fails at start, naming the sources seen.
+- **Tried and dropped:**
+  - Short receive waits (0–20 ms) freed the lock but received less sound.
+  - NDI's frame sync (`capture_available_audio`, `capture_audio`) returned
+    only zeros in this cyndilib version.
+- **Not addressed:** OBS/DistroAV itself sends only about 80 % of its audio
+  frames under the present load. NDI reported 0 dropped frames, and the gaps
+  in the sender's timestamps are whole frames. OBS is the test tool, so this
+  is left.
+
+All 473 tests pass. `Receiving` has no automated test; it needs a live NDI
+source.
+
+---
+
+## 2026-09-29 — A silent sound source is reported (VSH-ARLT-5090)
+
+**Moe's observation:** no lines at all, and the Chronik wrote "Kein Beginn
+der Szene dokumentiert. Statische Situation ohne erkennbare Interaktion."
+
+- **Cause.** `orest-ui` ran without `--audio-ndi`, so it listened to the
+  default device, "Webcam 4 (NDI Webcam Audio)". That device delivers
+  digital silence (−96.7 dBFS), as noted on 2026-09-28. With no speech the
+  Chronik only had its stills to summarise. OBS's NDI output
+  (`--audio-ndi "VSH-ARLT-5090 (OBS PGM)"`) carries the sound at −40 dBFS.
+  The corpus also needs `--language en`.
+- **Fix.** The run now says when its source is silent.
+  - `loudness.Meter` records when sound was last above `STILL` (−70 dBFS).
+  - After 10 s below it (`session.STUMM`), or with no sound arriving at all,
+    the session emits `Ton(stumm=True)`, and `Ton(stumm=False)` when sound
+    returns.
+  - The console prints a red "KEIN TON" line naming the source and the flags
+    to check. The page shows the level in its header and a red panel.
+- **Checked** on this machine: the NDI Webcam device is reported silent
+  after 12 s; OBS's NDI output reads −43 dBFS and is not.
+
+5 new tests; 473 pass.
+
+---
+
+## 2026-09-29 — A run checks its model at start (VSH-ARLT-5090)
+
+**Moe's observation:** R gave "Lagebericht fehlgeschlagen: model 'gemma4:e4b'
+not found (status code: 404)".
+
+- **Cause.** The run was started without `--model`, and the default
+  (`report.MODEL`, `gemma4:e4b`) isn't installed on this machine; only
+  `gemma4:26b` is. Every request failed. Line ratings, Chronik summaries and
+  Empfehlungen failed silently, since they only print to stderr.
+- **Fix.** `llm.pruefen` asks Ollama for its models when a Session is
+  constructed, before the camera opens.
+  - A missing model names the installed ones and `--model`.
+  - Ollama not running is reported as such.
+  - `orest-sitrep` prints the message and exits; `orest-ui` shows it on the
+    page.
+- **Default model is now `gemma4:26b`** (`report.MODEL`), set by Moe: the
+  model on the production machine and the one every measurement used.
+- **The check is model-agnostic.** It compares the name given with Ollama's
+  list, reading a name without a tag as `:latest`. Its tests use invented
+  model names.
+
+5 new tests; 469 pass.
+
+---
+
+## 2026-09-29 — Live SITREP in three speeds: fast lane, Chronik, report on R (VSH-ARLT-5090)
+
+Built fixes 1–4 of `knowledge/background/live_sitrep_latency.md` and measured
+fix 5, with Moe's change: **a report is made only when the operator presses
+R**. A summary of the scene is written in the background, so a report covers
+the last minutes. The Empfehlung builds on the same infrastructure. This
+replaces step 6 of the Realtime-SITREP in `02_processing.md` ("Every x
+seconds, prompt a SITREP report"); a note there says so. Architecture:
+`knowledge/background/live_distillation.md`.
+
+**Fast lane** (fixes 1 and 2):
+- **`utterances.py`.** Silero VAD runs on the live sound chunk by chunk,
+  carrying its state; the streamed probabilities equal one pass exactly.
+  - An utterance ends after 0.5 s of silence, or at a 0.2 s pause once it has
+    run 3 s, or at 10 s.
+  - Whisper, lip attribution and loudness per utterance. The line is handed
+    out at once; the rating follows on its own thread.
+  - Lines arriving during a rating are rated together next, with the four
+    before them as context (`speech.rate(..., vorher)`).
+- **`lage.py`.** Live Risiko and Menschlichkeit per person, from action
+  readings and rated lines, computed every 0.5 s and never stored.
+  - Evidence counts half after 20 s (`HALBWERTSZEIT`).
+  - The **alarm** is a rule: a person's live Risiko, or a line of unknown
+    speaker, at 3 or more.
+- **Supporting changes.**
+  - `loudness.Meter` measures the live sound's level as it arrives.
+  - `ActionRatings.take` became `between` and `since`: readings are read,
+    not consumed, and kept 10 min.
+  - `capture.FrameRing` keeps named stills; `capture.listen` opens the sound.
+
+**Chronik** (`chronik.py`):
+- **Abschnitte.** Every `--window` seconds the stretch just passed becomes
+  an Abschnitt: its lines, action ratings, roster and two stills. The model
+  summarises it in 1–2 sentences, with Eskalation, Gefahr and a Tendenz.
+- **Rückblick.** Abschnitte older than 5 min are folded, 4 at a time, into
+  one chronological Rückblick, and their words deleted.
+- **Kurve.** Eskalation and Gefahr per Abschnitt are kept as numbers for the
+  whole run.
+
+**On request** (fix 3, changed):
+- **Lagebericht (R).** Reads the Chronik, the live values, the lines since
+  the last summarised Abschnitt word for word, and two stills from the last
+  15 s. It gains a **Verlauf**: turning points with their times.
+- **Empfehlung.** Made on the alarm's rising edge, on an Abschnitt above the
+  threshold, or on E; `--no-auto-empfehlung` leaves it to E.
+  - The rule `SCHWELLE` still decides whether to intervene.
+  - Automatic ones are at least 15 s apart.
+- **Model gate (`llm.py`).** Ollama here serves one request at a time; a 60
+  token request behind a 400 token one took 1.2 s instead of 0.23 s. The
+  gate orders Orest's requests: line ratings, Empfehlung, Lagebericht,
+  Chronik.
+- **Leaner prompts** (fix 4, partly). One fixed opening shared by report and
+  Empfehlung (`report.QUELLEN`), then roster, Chronik, live values,
+  transcript. Person descriptions and forecasts are one sentence each.
+  Streaming the report's text was not built.
+- **Removed:** `report.sitreps`, the per-window report and held-back lines,
+  and `Sitrep.quelle.ton_s`. Replaced by `quelle.abschnitte` and
+  `woertlich_s`.
+
+**Outputs:**
+- **Console.** Lines as said, live values when they change, Abschnitte,
+  Empfehlungen; R and E typed in the console.
+- **Page.** The video beside the alarm, the Empfehlung (dimmed after 60 s)
+  and the live values. Below it, the lines, the Chronik with its curve, and
+  the Lagebericht on R.
+  - Checked in headless Edge on a replayed run.
+  - Endpoints: `POST /api/sitrep/bericht` and `/empfehlung`.
+- **OSC.** `/orest/live/{begin,person,end,zeile,empfehlung}` and
+  `/orest/chronik/abschnitt`. The report's `begin` carries `abschnitte`
+  instead of `ton_s`, and adds `/orest/sitrep/verlauf`.
+  - `TouchDesigner/code/sitrep_osc.py` writes optional `live_*` and
+    `chronik` tables.
+  - **`sitrep_meta` gains `verlauf` and `abschnitte`.** The TouchDesigner
+    module must be pasted in anew.
+- **`python -m sitrep.replay FILE`** plays a recording into a run in real
+  time, without OBS, and prints the latencies against the doc's targets. It
+  works with `--send-td`.
+
+**What didn't work first:**
+- **Lines waited for their rating.** Rating in the same thread as
+  transcription let a line wait for the previous rating: p95 4.8 s. Showing
+  it unrated first gave p50 0.6 s, but p95 was still 3.5 s.
+- **Quarrels never paused for 0.5 s.** Utterances ran to 10 s and were cut
+  at a pause seconds in the past. The 0.2 s phrase-pause rule gave p95 0.8 s.
+- **Reports ran into the token cap.** Without stills, a report listed
+  "Unbekannt" until the reply was cut off. The list of people is now capped
+  at one per name.
+
+**Measured**, "Four Dogs" 0–405 s, `--window 30 --interval 5`, `gemma4:26b`:
+
+| Output | Measured | Target |
+|---|---|---|
+| Line on screen after it ends | p50 0.4 s, p95 0.9 s (60 utterances) | p95 ≤ 2.5 s |
+| Line rated | p50 1.2 s, p95 2.1 s | – |
+| Person value after a line | p50 2.0 s, p95 5.8 s | p95 ≤ 3 s, **missed** |
+| Lagebericht after R | 3.3–4.4 s (3 reports) | – |
+| Empfehlung after its trigger | p95 1.8 s (7 made, 5 alarms) | – |
+| Abschnitt summary | p50 2.0 s (14) | – |
+| GPU (fix 5) | mean 23 %, p95 85 %, max 25.0 GB of 32 | – |
+
+- **Person values miss their target.** They are measured from the end of the
+  line's Whisper segment, and a segment early in a long utterance waits for
+  it to end.
+- **The Kurve** read 1, 2, 5, 6, 6, 8, 5, 4, 7, 6, 5, 6, 5, 6, the
+  trajectory found on 2026-09-28.
+- **The report at 400 s** spanned 402 s over 13 Abschnitte, but its Verlauf
+  was generic ("Tendenz zur Eskalation"). Asked again on the same Chronik
+  with the current instruction (turning points with times), the Verlauf
+  named 12:16:18, 12:17:18, 12:18:48 and 12:20:18, twice out of two.
+- **Empfehlungen.** 4 of 7 said "Einschreiten", all for verbal quarrels.
+  The thresholds are in `todo_with_data.md`.
+
+69 new tests; 464 pass.
+
+---
+
 ## 2026-09-28 — Recording never pauses; cut lines held back; loudness marked; previous lines as context (VSH-ARLT-5090)
 
 **Moe's observation** on "Four Dogs a Bone" (test corpus), run with

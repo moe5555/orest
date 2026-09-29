@@ -102,20 +102,35 @@ def test_a_loud_moment_raises_the_risiko_of_an_action_in_it():
     assert loud.verstaerkung == 2.0 and loud.anlass_risiko.endswith("laut ×2.0")
 
 
-def test_a_report_calibrates_on_its_speech_and_records_the_state(monkeypatch, bericht):
-    monkeypatch.setattr(report.transcribe, "segments", lambda audio, **kwargs: [
-        report.transcribe.Segment(0.0, 20.0, "Lange Rede.")])
-    monkeypatch.setattr(report, "analyse", lambda *args, **kwargs: bericht)
-    window = capture.Window(0, T0, T0 + timedelta(seconds=20), [], wav((20.0, 0.1)), 20.0)
-    laut = loudness.Calibration(seconds=120, provisional=30)
+def tone(seconds: float, amplitude: float) -> np.ndarray:
+    return (amplitude * np.sin(np.linspace(0, 2 * np.pi * 220 * seconds, int(RATE * seconds)))
+            ).astype(np.float32)
 
-    document = report.sitrep(window, laut=laut)
 
-    assert document.pegel.kalibriert is False
-    assert document.pegel.gehoert_s == pytest.approx(20.0)
-    assert document.aeusserungen[0].verstaerkung == 1.0
-    # A sine's RMS is its amplitude over the square root of two.
-    assert document.aeusserungen[0].pegel_db == pytest.approx(20 * np.log10(0.1 / np.sqrt(2)), abs=0.5)
+def test_the_live_meter_measures_sound_as_it_arrives():
+    """Fed in chunks that do not line up with its steps, as a microphone delivers."""
+    meter = loudness.Meter()
+    sound = np.concatenate([tone(1.0, 0.01), tone(1.0, 0.5)])
+    for start in range(0, len(sound), 700):
+        chunk = sound[start:start + 700]
+        meter.add(chunk, RATE, T0 + timedelta(seconds=(start + len(chunk)) / RATE))
+    quiet = meter.level(T0, T0 + timedelta(seconds=1))
+    loud = meter.level(T0 + timedelta(seconds=1), T0 + timedelta(seconds=2))
+    assert loud - quiet == pytest.approx(20 * np.log10(50), abs=0.5)
+
+
+def test_the_live_meter_keeps_only_its_last_seconds():
+    meter = loudness.Meter(keep=1.0)
+    meter.add(tone(3.0, 0.1), RATE, T0 + timedelta(seconds=3))
+    assert meter.level(T0, T0 + timedelta(seconds=1)) is None
+    assert meter.level(T0 + timedelta(seconds=2), T0 + timedelta(seconds=3)) is not None
+
+
+def test_a_cleared_meter_has_no_level():
+    meter = loudness.Meter()
+    meter.add(tone(1.0, 0.1), RATE, T0 + timedelta(seconds=1))
+    meter.clear()
+    assert meter.level(T0, T0 + timedelta(seconds=1)) is None
 
 
 def test_lines_are_labelled_by_how_far_they_stand_out():
@@ -124,3 +139,17 @@ def test_lines_are_labelled_by_how_far_they_stand_out():
     assert loudness.label(subject, -25.0) == "laut"
     assert loudness.label(subject, -22.0) == "geschrien"
     assert loudness.label(loudness.Calibration(), -10.0) == ""
+
+
+def test_the_meter_tells_how_long_the_sound_has_been_silent():
+    meter = loudness.Meter()
+    assert meter.still_for(T0) is None
+    meter.add(tone(1.0, 0.1), RATE, T0 + timedelta(seconds=1))
+    meter.add(np.zeros(RATE * 5, dtype=np.float32), RATE, T0 + timedelta(seconds=6))
+    assert meter.still_for(T0 + timedelta(seconds=6)) == pytest.approx(5.0)
+
+
+def test_a_source_that_only_ever_delivered_silence_is_silent_from_its_first_sound():
+    meter = loudness.Meter()
+    meter.add(np.zeros(RATE * 3, dtype=np.float32), RATE, T0 + timedelta(seconds=3))
+    assert meter.still_for(T0 + timedelta(seconds=13)) == pytest.approx(10.0)

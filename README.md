@@ -64,25 +64,44 @@ package, so `uv sync` puts the entry point on the path:
     uv run orest-sitrep --json     # raw report JSON instead of the console block
 
 Ollama must be running with the model given by `--model` (default
-`gemma4:e4b`) pulled.
+`gemma4:26b`) pulled. A run checks at start that Ollama has it.
 
-Recording never pauses for a report. Windows are cut back to back on a thread
-of their own (`capture.Recorder`), and a report takes every window that
-finished while the previous one was being made, merged into one. A line still
-being spoken when a window ends is held back and reported whole with the next
-window. Each report's model also sees the previous report's last lines. A
-report takes 3–7 s to make with `gemma4:26b`, so windows of 10–15 s keep up;
-shorter windows are merged in pairs or more, which delays the reports.
-Stopping a run deletes at once everything it holds: waiting windows, sound
-not yet cut, face tracks, poses, mouth measurements and unreported readings. Speech is transcribed as German unless `--language` names
+A run has three speeds (`knowledge/background/live_distillation.md`):
+
+- **Live, within about a second.** Speech is cut into utterances as it
+  arrives and each line is shown ~0.5 s after it ends, its rating ~1 s later.
+  Each person's live risiko and menschlichkeit come from the action
+  recogniser and the rated lines, and fall back with a 20 s half-life. A live
+  risiko of 3 or more raises the **alarm**.
+- **The Chronik, in the background.** Every `--window` seconds the stretch
+  just passed is summarised in one or two sentences with its eskalation,
+  gefahr and tendency. Stretches older than 5 minutes are folded into a
+  running Rückblick.
+- **On request.** `r` makes a **Lagebericht** of the scene so far, from the
+  Chronik and the last lines, in 3–5 s. An **Empfehlung** (intervene or not,
+  and how) is made when the alarm is raised or a stretch passes the
+  threshold, or on `e`; `--no-auto-empfehlung` leaves it to `e`.
+
+`--interval` is how often a still is kept for the model. Stopping a run
+deletes at once everything it holds: sound, lines, the Chronik, stills, face
+tracks, poses, mouth measurements and readings. Speech is transcribed as German unless `--language` names
 another Whisper language code; the English test corpus needs `--language en`,
 or it comes out as rough German. `--audio-ndi SOURCE` takes the sound from an
 NDI source instead of a microphone, e.g. OBS's programme output with DistroAV:
 
-    uv run orest-ui --video "OBS Virtual Camera" --audio-ndi "VSH-ARLT-5090 (OBS PGM)" --language en The live SITREP records nothing: reports are streamed to
-the console and not retained, and no frame or audio clip is written to disk.
+    uv run orest-ui --video "OBS Virtual Camera" --audio-ndi "VSH-ARLT-5090 (OBS PGM)" --language en
 
-Each report carries a **Beschreibung** (what happened, who did what), the
+A recording from the corpus can be played into a run directly, in real time,
+without OBS. It prints what `orest-sitrep` prints and, at the end, the
+latencies measured against `knowledge/background/live_sitrep_latency.md`:
+
+    uv run python -m sitrep.replay "../test_data_orest/Improvised Four Dogs  a Bone with Erin Darke  Alex Dickson - FULL SCENE.mp4" --language en --model gemma4:26b --window 30 --interval 5 --bericht-bei 140 300 --gpu
+
+The live SITREP records nothing: everything is streamed to the console and
+not retained, and no frame or audio clip is written to disk.
+
+Each report carries a **Verlauf** (how the scene developed, with its turning
+points), a **Beschreibung** (the situation now), the
 **Personen** in the window, each with a short description and three 0–5
 ratings (risiko, menschlichkeit, auffaelligkeit), the
 **Szene** rated 0–10 for relevanz, eskalation and gefahr, a **Prognose** of the
@@ -140,10 +159,14 @@ and the model's frames are marked as before.
     uv run orest-ui
     uv run orest-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
 
-Open http://127.0.0.1:9680/. **Start live SITREP** opens a new tab, starts the
-run and shows the camera with the current report beneath it. The tab's
-**Stoppen** button releases the camera. Closing the tab does not stop the run.
-Reopening the page rejoins it.
+Open http://127.0.0.1:9680/. **Start live SITREP** opens a new tab and starts
+the run. Beside the camera are the alarm, the latest Empfehlung and each
+person's live values; below it the lines as they are said and the Chronik
+with its eskalation curve. **R** (or the Lagebericht button) makes a report,
+**E** an Empfehlung. The header shows the sound's level; a source that has
+delivered no sound for 10 s is flagged in red, e.g. "NDI Webcam Audio"
+without anything feeding it. The tab's **Stoppen** button releases the camera. Closing
+the tab does not stop the run. Reopening the page rejoins it.
 
 Below the camera, **Aktionserkennung · live** shows the action recogniser's
 latest classification every second: each person or pair, their most probable
@@ -178,7 +201,8 @@ In TouchDesigner, an **NDI In TOP** receives the picture — the source is named
 addresses are namespaced so one DAT can route both:
 
     /orest/sitrep/begin         <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
-                                <ton_s> <latenz_s> <personen> <prognosen>
+                                <abschnitte> <latenz_s> <personen> <prognosen>
+    /orest/sitrep/verlauf       <id> <verlauf>
     /orest/sitrep/beschreibung  <id> <beschreibung>
     /orest/sitrep/gesagt        <id> <gesagt>
     /orest/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
@@ -187,6 +211,16 @@ addresses are namespaced so one DAT can route both:
     /orest/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
     /orest/sitrep/empfehlung    <id> <einschreiten> <massnahme>
     /orest/sitrep/end           <id>
+
+A report is sent when one is asked for. The live part is sent as it happens:
+the live values whenever one changes, each line as transcribed and again once
+rated, each Empfehlung, and each stretch the Chronik summarised. The formats
+are in `src/sitrep/td.py`:
+
+    /orest/live/begin, /orest/live/person, /orest/live/end   live values and alarm
+    /orest/live/zeile                                        one line
+    /orest/live/empfehlung                                   one recommendation
+    /orest/chronik/abschnitt                                 one summarised stretch
 
 A second and faster stream reports who is in the room, about twice a second,
 framed by a rising `tick`:

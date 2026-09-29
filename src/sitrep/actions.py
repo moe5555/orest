@@ -31,8 +31,9 @@ Rating. Each rating is the peak evidence among the readings a person took part
 in, rounded and clipped to 0-5. The peak rather than the mean, because one
 blow makes a person dangerous however calm the rest of the window was.
 
-A report takes every reading made since the previous one, so nothing the
-recogniser saw falls between two reports.
+Readings are kept for KEEP seconds and read, never consumed: the live
+values (lage.py) read the last few seconds, each stretch of the scene's
+summary (chronik.py) and a report asked for read theirs.
 """
 
 import threading
@@ -58,6 +59,10 @@ FACE_MARGIN = 0.5
 HEAD = slice(0, 5)
 
 RATING_MAX = 5
+
+# Seconds of readings kept: as long as the summary of the scene may ask about
+# (chronik.py), and the same as the loudness levels kept (loudness.KEEP).
+KEEP = 600.0
 
 
 def head(body: tracking.Body) -> np.ndarray | None:
@@ -271,6 +276,8 @@ class ActionRatings:
                 self.mapping.names[top], float(reading.probabilities[top]), values))
         with self._lock:
             self._records.extend(kept)
+            while self._records and at - self._records[0].at > timedelta(seconds=KEEP):
+                self._records.pop(0)
             self.latest = seen
             self.evaluations += 1
 
@@ -282,10 +289,20 @@ class ActionRatings:
             self.latest = []
         self.recognizer.tracker.frames.clear()
 
-    def take(self, until: datetime, gain: Gain | None = None) -> list[report.Handlung]:
-        """Ratings from every reading up to `until` not yet taken, and forget them."""
+    def between(self, since: datetime, until: datetime,
+                gain: Gain | None = None) -> list[report.Handlung]:
+        """Ratings from the readings made after `since` and up to `until`."""
+        records, names = self.since(since, until)
+        return rate(records, names, gain)
+
+    def since(self, since: datetime,
+              until: datetime | None = None) -> tuple[list[Evidence], dict[int, str]]:
+        """The readings after `since` (up to `until`), and the name each body carries now.
+
+        Names are resolved when asked for, so a body named at any point is
+        rated on everything it did while it was kept.
+        """
         with self._lock:
-            taken = [record for record in self._records if record.at <= until]
-            self._records = [record for record in self._records if record.at > until]
-            names = dict(self._names)
-        return rate(taken, names, gain)
+            return ([record for record in self._records
+                     if record.at > since and (until is None or record.at <= until)],
+                    dict(self._names))

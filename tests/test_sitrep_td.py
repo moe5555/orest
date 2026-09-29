@@ -12,7 +12,7 @@ import pytest
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 
-from sitrep import presence, report
+from sitrep import chronik, lage, presence, report
 from sitrep import td as sitrep_td
 
 AT = datetime(2026, 9, 24, 19, 30, 0)
@@ -40,6 +40,73 @@ def test_begin_carries_the_window_its_material_and_the_row_counts(sitrep):
     assert arguments[5] == sitrep.quelle.bilder
     assert arguments[8] == len(sitrep.bericht.personen)
     assert arguments[9] == len(sitrep.bericht.prognose)
+
+
+def test_begin_carries_how_much_of_the_chronik_the_report_read(sitrep):
+    arguments = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_BEGIN)[0]
+    assert arguments[6] == sitrep.quelle.abschnitte
+
+
+def test_the_development_is_sent_before_the_description(sitrep):
+    built = addresses(sitrep_td.messages(sitrep, 1))
+    assert built.index(sitrep_td.SITREP_VERLAUF) < built.index(sitrep_td.SITREP_BESCHREIBUNG)
+    assert only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_VERLAUF)[0][1] == \
+        sitrep.bericht.verlauf
+
+
+def live_stand(aktiv=True):
+    return lage.Stand(AT, {"Klara": {"risiko": lage.Wert(4, 4.0, "kicking other person 0.90", AT),
+                                     "menschlichkeit": lage.Wert(0, 0.0)}},
+                      lage.Alarm(aktiv, 4 if aktiv else 0, "Klara" if aktiv else None,
+                                 "kicking other person 0.90" if aktiv else ""))
+
+
+def test_the_live_values_are_framed_by_their_tick():
+    built = sitrep_td.werte_messages(live_stand(), 12)
+    assert addresses(built) == [sitrep_td.LIVE_BEGIN, sitrep_td.LIVE_PERSON, sitrep_td.LIVE_END]
+    assert only(built, sitrep_td.LIVE_BEGIN)[0][2:] == [1, 1, 4, "Klara",
+                                                         "kicking other person 0.90"]
+    assert only(built, sitrep_td.LIVE_PERSON)[0] == [12, 1, "Klara", 4, 0,
+                                                      "kicking other person 0.90", ""]
+
+
+def test_no_alarm_is_sent_as_zero_with_nobody_named():
+    begin = only(sitrep_td.werte_messages(live_stand(aktiv=False), 1), sitrep_td.LIVE_BEGIN)[0]
+    assert begin[3:6] == [0, 0, ""]
+
+
+def test_each_line_is_sent_as_transcribed_and_again_once_rated():
+    lines = [report.Aeusserung(name=None, text="Raus!", beginn=AT, ende=AT, risiko=3,
+                               menschlichkeit=-2, lautstaerke="geschrien"),
+             report.Aeusserung(name="Klara", text="Ja.", beginn=AT, ende=AT)]
+    built = sitrep_td.zeilen_messages(lines)
+    assert only(built, sitrep_td.LIVE_ZEILE) == [
+        ["2026-09-24T19:30:00", "2026-09-24T19:30:00", "", "Raus!", "geschrien", 3, -2, 1],
+        ["2026-09-24T19:30:00", "2026-09-24T19:30:00", "Klara", "Ja.", "", 0, 0, 1]]
+    unrated = only(sitrep_td.zeilen_messages(lines[1:], bewertet=False), sitrep_td.LIVE_ZEILE)
+    assert unrated[0][-1] == 0
+
+
+def test_a_summarised_stretch_is_one_message():
+    abschnitt = chronik.Abschnitt(beginn=AT, ende=AT + timedelta(seconds=30),
+                                  zusammenfassung=chronik.Zusammenfassung(
+                                      zusammenfassung="Streit.", tendenz="zuspitzend",
+                                      szene=report.Szene(relevanz=5, eskalation=6, gefahr=2)))
+    [(address, arguments)] = sitrep_td.abschnitt_messages(abschnitt)
+    assert address == sitrep_td.CHRONIK_ABSCHNITT
+    assert arguments[2:] == [6, 2, "zuspitzend", "Streit."]
+    unsummarised = abschnitt.model_copy(update={"zusammenfassung": None})
+    assert sitrep_td.abschnitt_messages(unsummarised)[0][1][2:4] == [-1, -1]
+
+
+def test_a_recommendation_is_one_message_with_its_flag():
+    empfehlung = report.Empfehlung(zeit=AT, anlass="Alarm", latenz_s=1.2, urteil=report.Urteil(
+        lage="Drohung.", empfehlung="Probe unterbrechen.",
+        szene=report.Szene(relevanz=8, eskalation=8, gefahr=4)))
+    [(address, arguments)] = sitrep_td.empfehlung_messages(empfehlung, 3)
+    assert address == sitrep_td.LIVE_EMPFEHLUNG
+    assert arguments == [3, "2026-09-24T19:30:00", 1, 8, 4, "Drohung.", "Probe unterbrechen.",
+                         "Alarm", 1.2]
 
 
 def test_every_person_and_every_forecast_becomes_one_row(sitrep):

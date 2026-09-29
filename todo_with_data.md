@@ -5,6 +5,25 @@ sample corpus (`../test_data_orest`) now, and nice-to-have work that becomes
 possible only when enough rehearsal footage has been recorded. Nothing here
 blocks the current system.
 
+## Tune the live SITREP on the production's footage
+
+Since 2026-09-29 the live SITREP shows lines and live values within about a
+second, keeps a Chronik in the background and makes a report on R
+(`knowledge/background/live_distillation.md`). The constants were set on the
+test corpus. `python -m sitrep.replay FILE --gpu` measures a recording.
+
+**To do**
+- **Decay.** How long should a threat keep someone's Risiko up?
+  `lage.HALBWERTSZEIT` is 20 s.
+- **Alarm and Empfehlung thresholds.** `lage.ALARM` is 3 and `report.SCHWELLE`
+  is 6. On "Four Dogs", 4 of 7 Empfehlungen said "Einschreiten", all for
+  verbal quarrels.
+- **Utterance cuts.** `utterances.LONG_UTTERANCE` (3 s) and `PHRASE_PAUSE`
+  (0.2 s) on the production's microphones, and whether lines come out whole.
+- **Chronik length.** `--window` sets the Abschnitt; 30 s was measured.
+- **Combined GPU load with the production's camera.** 25 GB of 32 on the
+  replay of 1080p footage at 60 fps.
+
 ## Test the action ratings on sample data
 
 Since 2026-09-28 the live SITREP measures `risiko` and `menschlichkeit` from

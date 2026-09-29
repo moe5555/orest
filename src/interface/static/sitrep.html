@@ -10,48 +10,87 @@
   <header class="bar">
     <div class="brand">OREST <span>/</span> LIVE SITREP</div>
     <div class="status" id="status" data-status="idle">Bereit</div>
+    <div class="ton num" id="ton" hidden></div>
     <div class="meta" id="meta"></div>
+    <button id="ask-empfehlung" type="button" title="Empfehlung anfordern"><kbd>E</kbd> Empfehlung</button>
+    <button id="ask-bericht" type="button" title="Lagebericht anfordern"><kbd>R</kbd> Lagebericht</button>
     <button id="toggle" type="button">Stoppen</button>
   </header>
 
   <main class="wrap">
-    <section class="feed" aria-label="Kamerabild">
-      <img id="video" alt="Live-Kamerabild">
-      <div class="feed-empty" id="feed-empty">Kamera wird geöffnet …</div>
-      <div class="feed-tag" id="feed-tag" hidden><span class="dot"></span><span id="clock" class="num"></span></div>
-    </section>
-
     <section class="panel" id="error" hidden>
       <span class="label">Fehler</span>
       <p class="error-text" id="error-text"></p>
     </section>
 
-    <div class="waiting" id="waiting">Warte auf den ersten Bericht …</div>
+    <!-- Without sound there are no lines; a silent source must not go unnoticed. -->
+    <section class="panel stumm" id="stumm" hidden>
+      <span class="label">Kein Ton</span>
+      <p class="error-text" id="stumm-text"></p>
+    </section>
 
-    <section class="stack" id="report" hidden>
-        <div class="report-head" id="report-head"></div>
+    <!-- What an operator must see at once: the picture, and beside it the
+         alarm, the recommendation and each person's live values. -->
+    <div class="top">
+      <section class="feed" aria-label="Kamerabild">
+        <img id="video" alt="Live-Kamerabild">
+        <div class="feed-empty" id="feed-empty">Kamera wird geöffnet …</div>
+        <div class="feed-tag" id="feed-tag" hidden><span class="dot"></span><span id="clock" class="num"></span></div>
+      </section>
 
-        <article class="panel empfehlung" id="empfehlung">
-          <span class="verdict" id="verdict"></span>
-          <span class="massnahme" id="massnahme"></span>
-          <span class="grund" id="grund"></span>
+      <aside class="stack live">
+        <article class="panel alarm" id="alarm" data-aktiv="false">
+          <span class="verdict" id="alarm-verdict">Ruhig</span>
+          <span class="grund" id="alarm-grund"></span>
         </article>
 
-        <!-- The people and their ratings come first: they are what an operator
-             watches from window to window. -->
+        <article class="panel empfehlung" id="empfehlung">
+          <div class="empfehlung-kopf">
+            <span class="verdict" id="verdict">Keine Empfehlung</span>
+            <span class="grund num" id="empfehlung-zeit"></span>
+          </div>
+          <span class="massnahme" id="massnahme"></span>
+          <span class="lage-satz" id="lage-satz"></span>
+          <span class="anlass-zeile" id="empfehlung-anlass"></span>
+        </article>
+
+        <article class="panel">
+          <span class="label">Personen · live · 0–5</span>
+          <div class="people compact" id="live-personen"></div>
+        </article>
+      </aside>
+    </div>
+
+    <!-- The report is made only on request (R), and stays until the next. -->
+    <section class="stack" id="report-bereich" hidden>
+      <div class="report-head" id="report-head"></div>
+      <p class="hinweis" id="report-status" hidden></p>
+
+      <div class="stack" id="report" hidden>
+        <article class="panel">
+          <span class="label">Verlauf</span>
+          <p class="beschreibung" id="verlauf"></p>
+        </article>
+
+        <article class="panel empfehlung" id="report-empfehlung">
+          <span class="verdict" id="report-verdict"></span>
+          <span class="massnahme" id="report-massnahme"></span>
+          <span class="grund" id="report-grund"></span>
+        </article>
+
         <article class="panel">
           <span class="label">Personen</span>
           <div class="people" id="personen"></div>
         </article>
 
         <article class="panel">
-          <span class="label">Gemessen · Aktionserkennung · 0–5</span>
+          <span class="label">Gemessen · seit dem letzten Abschnitt · 0–5</span>
           <div class="people" id="gemessen"></div>
         </article>
 
         <div class="grid">
           <article class="panel">
-            <span class="label">Beschreibung</span>
+            <span class="label">Lage jetzt</span>
             <p class="beschreibung" id="beschreibung"></p>
             <blockquote class="gesagt" id="gesagt"></blockquote>
           </article>
@@ -65,9 +104,23 @@
           <span class="label">Prognose</span>
           <div class="prognose" id="prognose"></div>
         </article>
+      </div>
     </section>
 
-    <!-- After the report, so that the report keeps its place on the first screen. -->
+    <div class="grid">
+      <section class="panel">
+        <span class="label">Gesagt · live</span>
+        <div class="gesagt live-zeilen" id="zeilen"></div>
+      </section>
+
+      <section class="panel">
+        <span class="label">Chronik</span>
+        <div class="kurve" id="kurve"></div>
+        <div class="abschnitte" id="abschnitte"></div>
+        <p class="rueckblick" id="rueckblick" hidden></p>
+      </section>
+    </div>
+
     <section class="panel" id="aktionen" hidden>
       <span class="label">Aktionserkennung · live</span>
       <p class="hinweis" id="aktionen-hinweis"></p>

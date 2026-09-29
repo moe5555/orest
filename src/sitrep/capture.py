@@ -161,6 +161,96 @@ class AudioBuffer:
             return sum(len(chunk) for chunk in self._chunks)
 
 
+def listen(audio: devices.AudioDevice | ndi_audio.NdiAudio, on_audio: Callable[[np.ndarray], None]):
+    """A microphone or an NDI source's sound, handing each chunk of mono float
+    samples to `on_audio` as it arrives. A context manager: sound flows while
+    it is entered.
+
+    A source that delivers its sound itself, such as a recording replayed
+    (replay.py), provides `receiving(on_audio)`."""
+    if isinstance(audio, ndi_audio.NdiAudio):
+        return ndi_audio.Receiving(audio, on_audio)
+    if hasattr(audio, "receiving"):
+        return audio.receiving(on_audio)
+
+    def callback(indata, frames, time_info, status):
+        # Status flags mean dropped samples, which nothing downstream can see.
+        if status:
+            print(f"audio status: {status}", file=sys.stderr)
+        on_audio(indata[:, 0].copy())
+
+    return sd.InputStream(device=audio.index, channels=1,
+                          samplerate=int(audio.samplerate), callback=callback)
+
+
+@dataclass(frozen=True)
+class Still:
+    """One sampled frame, encoded for the model, and when it was taken."""
+
+    at: datetime
+    jpeg: bytes
+
+
+class FrameRing:
+    """Frames sampled every interval and kept for the last `keep` seconds.
+
+    The stills the model is shown come from here: the summary of each stretch
+    of the scene (chronik.py) and a report asked for (session.py) take the
+    ones taken during the time they cover. `annotate` marks each frame before
+    it is encoded, which is how the names of the people in it reach the model
+    (annotate.py). Nothing is written to disk.
+    """
+
+    def __init__(self, stream: VideoStream, *, interval: float, keep: float,
+                 annotate: Callable[[np.ndarray], np.ndarray] | None = None):
+        self._stream = stream
+        self._interval = interval
+        self._keep = timedelta(seconds=keep)
+        self._annotate = annotate
+        self._stills: deque[Still] = deque()
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self) -> "FrameRing":
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+        return self
+
+    def _loop(self):
+        while not self._stop.is_set():
+            started = time.monotonic()
+            self.sample()
+            self._stop.wait(max(0.0, self._interval - (time.monotonic() - started)))
+
+    def sample(self, at: datetime | None = None):
+        """Take one still now. Public, so a caller can step the ring by hand."""
+        frame = self._stream.latest()
+        still = Still(at or datetime.now(),
+                      encode_jpeg(self._annotate(frame) if self._annotate else frame))
+        with self._lock:
+            self._stills.append(still)
+            while self._stills and still.at - self._stills[0].at > self._keep:
+                self._stills.popleft()
+
+    def between(self, begins: datetime, ends: datetime, count: int) -> list[bytes]:
+        """At most `count` stills taken in a stretch, spread evenly, the last one included."""
+        with self._lock:
+            found = [still.jpeg for still in self._stills if begins <= still.at <= ends]
+        if len(found) <= count:
+            return found
+        return [found[round(position)] for position in np.linspace(0, len(found) - 1, count)]
+
+    def clear(self):
+        with self._lock:
+            self._stills.clear()
+
+    def close(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=5.0)
+
+
 def frames_per_window(window: float, interval: float) -> int:
     """How many frames run() samples in one window.
 
@@ -286,23 +376,9 @@ class Recorder:
         self._thread.start()
         return self
 
-    def _listen(self):
-        """A microphone, or an NDI source's sound: both fill the same buffer."""
-        if isinstance(self._audio, ndi_audio.NdiAudio):
-            return ndi_audio.Receiving(self._audio, self._buffer.add)
-
-        def on_audio(indata, frames, time_info, status):
-            # Status flags mean dropped samples, which nothing downstream can see.
-            if status:
-                print(f"audio status: {status}", file=sys.stderr)
-            self._buffer.add(indata[:, 0].copy())
-
-        return sd.InputStream(device=self._audio.index, channels=1,
-                              samplerate=self._samplerate, callback=on_audio)
-
     def _loop(self):
         try:
-            with self._listen():
+            with listen(self._audio, self._buffer.add):
                 for index in itertools.count():
                     captured = self._record(index)
                     if captured is None:

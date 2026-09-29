@@ -14,6 +14,7 @@ from sitrep import actions
 MAPPING = sitrep_map.load()
 CLASSES = {name: index for index, name in enumerate(MAPPING.names)}
 T0 = datetime(2026, 9, 28, 20, 0, 0)
+EARLIER = T0 - timedelta(seconds=1)
 
 
 def body(head_x: float, head_y: float, head_visible: bool = True) -> tracking.Body:
@@ -85,7 +86,7 @@ def test_a_rating_is_the_peak_over_the_window_clipped_to_zero_to_five(ratings):
     ratings.record([reading(1, hugging_other_person=0.9)], T0 + timedelta(seconds=1))
     ratings.record([reading(1)], T0 + timedelta(seconds=2))
 
-    [klara] = ratings.take(T0 + timedelta(seconds=2))
+    [klara] = ratings.between(EARLIER, T0 + timedelta(seconds=2))
     assert (klara.name, klara.risiko, klara.menschlichkeit, klara.lesungen) == ("Klara", 0, 4, 3)
     assert klara.anlass_menschlichkeit == "hugging other person 0.90"
     assert klara.anlass_risiko == ""
@@ -94,7 +95,7 @@ def test_a_rating_is_the_peak_over_the_window_clipped_to_zero_to_five(ratings):
 def test_negative_evidence_floors_a_rating_at_zero(ratings):
     ratings.name(tracking.Frame(0.0, {1: body(100, 100)}), [face(100, 100, "Klara")])
     ratings.record([reading(1, kicking_other_person=1.0)], T0)
-    [klara] = ratings.take(T0)
+    [klara] = ratings.between(EARLIER, T0)
     assert (klara.risiko, klara.menschlichkeit) == (5, 0)
 
 
@@ -102,13 +103,13 @@ def test_a_pair_reading_counts_for_both_people(ratings):
     frame = tracking.Frame(0.0, {1: body(100, 100), 2: body(400, 100)})
     ratings.name(frame, [face(100, 100, "Klara"), face(400, 100, "Jakob")])
     ratings.record([reading(1, 2, pushing_other_person=1.0)], T0)
-    assert {handlung.name: handlung.risiko for handlung in ratings.take(T0)} == {
+    assert {handlung.name: handlung.risiko for handlung in ratings.between(EARLIER, T0)} == {
         "Klara": 3, "Jakob": 3}
 
 
 def test_an_unnamed_body_is_not_rated(ratings):
     ratings.record([reading(7, kicking_other_person=1.0)], T0)
-    assert ratings.take(T0) == []
+    assert ratings.between(EARLIER, T0) == []
 
 
 def test_a_name_seen_on_a_second_body_in_view_leaves_the_first(ratings):
@@ -116,7 +117,7 @@ def test_a_name_seen_on_a_second_body_in_view_leaves_the_first(ratings):
     ratings.name(tracking.Frame(1.0, {1: body(100, 100), 2: body(400, 100)}),
                  [face(400, 100, "Klara")])
     ratings.record([reading(1, kicking_other_person=1.0), reading(2)], T0)
-    [klara] = ratings.take(T0)
+    [klara] = ratings.between(EARLIER, T0)
     assert (klara.risiko, klara.lesungen) == (0, 1)
 
 
@@ -125,21 +126,30 @@ def test_a_body_that_left_keeps_its_name_for_what_it_did(ratings):
     ratings.name(tracking.Frame(0.0, {1: body(100, 100)}), [face(100, 100, "Klara")])
     ratings.name(tracking.Frame(1.0, {2: body(400, 100)}), [face(400, 100, "Klara")])
     ratings.record([reading(1, kicking_other_person=1.0), reading(2)], T0)
-    [klara] = ratings.take(T0)
+    [klara] = ratings.between(EARLIER, T0)
     assert (klara.risiko, klara.lesungen) == (5, 2)
 
 
-def test_a_report_takes_its_readings_once_and_leaves_later_ones(ratings):
-    """Readings made while a report is generated belong to the next report."""
+def test_a_stretch_is_rated_on_its_own_readings_and_leaves_them_for_others(ratings):
+    """The Chronik's Abschnitt, a report and the live values read the same readings."""
     ratings.name(tracking.Frame(0.0, {1: body(100, 100)}), [face(100, 100, "Klara")])
     ratings.record([reading(1, kicking_other_person=1.0)], T0)
     ratings.record([reading(1, hugging_other_person=1.0)], T0 + timedelta(seconds=40))
 
-    [first] = ratings.take(T0 + timedelta(seconds=30))
+    [first] = ratings.between(EARLIER, T0 + timedelta(seconds=30))
     assert (first.risiko, first.menschlichkeit) == (5, 0)
-    assert ratings.take(T0 + timedelta(seconds=30)) == []
-    [second] = ratings.take(T0 + timedelta(seconds=60))
+    [again] = ratings.between(EARLIER, T0 + timedelta(seconds=30))
+    assert again == first
+    [second] = ratings.between(T0 + timedelta(seconds=30), T0 + timedelta(seconds=60))
     assert (second.risiko, second.menschlichkeit) == (0, 4)
+
+
+def test_readings_older_than_keep_are_deleted(ratings):
+    ratings.name(tracking.Frame(0.0, {1: body(100, 100)}), [face(100, 100, "Klara")])
+    ratings.record([reading(1, kicking_other_person=1.0)], T0)
+    ratings.record([reading(1)], T0 + timedelta(seconds=actions.KEEP + 1))
+    records, _ = ratings.since(EARLIER)
+    assert [record.at for record in records] == [T0 + timedelta(seconds=actions.KEEP + 1)]
 
 
 def test_the_live_view_keeps_every_body_and_labels_the_unnamed(ratings):
@@ -156,5 +166,5 @@ def test_readings_made_before_a_body_is_named_count_once_it_is(ratings):
     ratings.record([reading(1, kicking_other_person=1.0)], T0)
     ratings.name(tracking.Frame(1.0, {1: body(100, 100)}), [face(100, 100, "Klara")])
     ratings.record([reading(1)], T0 + timedelta(seconds=1))
-    [klara] = ratings.take(T0 + timedelta(seconds=1))
+    [klara] = ratings.between(EARLIER, T0 + timedelta(seconds=1))
     assert (klara.name, klara.risiko, klara.lesungen) == ("Klara", 5, 2)

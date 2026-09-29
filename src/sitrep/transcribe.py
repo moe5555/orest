@@ -2,7 +2,7 @@
 
 Implements step 4 of the Realtime-SITREP implementation steps in
 knowledge/components/02_processing.md ("Transcribe everything that is said,
-speaker diarisation eventually"). Diarisation is not yet implemented.
+speaker diarisation eventually"). Speakers are told apart by speakers.py.
 
 report.py gives the model this transcript instead of the recording and writes
 it into the report verbatim, so speech in a SITREP is always what Whisper
@@ -56,6 +56,12 @@ def _add_cublas_to_path():
 def _model() -> WhisperModel:
     _add_cublas_to_path()
     return WhisperModel(MODEL, device="cuda", compute_type=COMPUTE_TYPE)
+
+
+def load():
+    """Load Whisper now rather than on the first line: the first load takes
+    about 3 s, which the first line would otherwise wait for."""
+    _model()
 
 
 @dataclass(frozen=True)

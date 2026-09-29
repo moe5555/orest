@@ -7,6 +7,7 @@ run's life cycle is exercised as the page drives it without any hardware.
 import asyncio
 import threading
 import time
+from datetime import datetime
 
 import numpy as np
 import pytest
@@ -16,7 +17,7 @@ from interface import app as app_module
 from interface import live as live_module
 from interface.app import create_app
 from interface.live import LiveSitrep
-from sitrep import actions, devices, report, session
+from sitrep import actions, devices, lage, report, session
 
 
 def wait_for(predicate, timeout=5.0):
@@ -41,7 +42,11 @@ class FakeTracker:
 
 
 class FakeSession:
-    """Yields the given reports, one per release of its gate, until closed."""
+    """Yields the given events, one per release of its gate, until closed.
+
+    A report is made when asked for: `bericht()` queues the next of the given
+    documents as a new report.
+    """
 
     def __init__(self, documents):
         self.options = session.Options(model="gemma4:26b", window=15.0)
@@ -49,17 +54,37 @@ class FakeSession:
         self.stream = FakeStream()
         self.tracker = FakeTracker()
         self.actions = None
+        self.chronik = None
+        self.meter = None
+        self.laeuft = {"bericht": False, "empfehlung": False}
         self.gate = threading.Semaphore(0)
         self.closed = threading.Event()
-        self._documents = documents
+        self._documents = list(documents)
+        self._pending = []
+        self.asked = []
 
-    def reports(self):
-        for document in self._documents:
+    def bericht(self):
+        self.asked.append("bericht")
+        nummer = len(self.asked)
+        self._pending.append(session.NeuerBericht(self._documents[(nummer - 1) % len(self._documents)],
+                                                  nummer))
+        self.gate.release()
+        return True
+
+    def empfehlung(self):
+        self.asked.append("empfehlung")
+        return True
+
+    def emit(self, event):
+        self._pending.append(event)
+        self.gate.release()
+
+    def events(self):
+        while True:
             while not self.gate.acquire(timeout=0.05):
                 if self.closed.is_set():
                     return
-            yield document
-        self.closed.wait()
+            yield self._pending.pop(0)
 
     def overlay(self, frame):
         return frame
@@ -99,18 +124,58 @@ def test_the_sitrep_page_is_served_with_its_script(client):
     assert client.get("/static/sitrep.js").status_code == 200
 
 
-def test_a_run_starts_and_each_report_reaches_the_snapshot(client, live, run):
+def test_a_report_is_made_when_asked_for_and_reaches_the_snapshot(client, live, run):
     assert client.post("/api/sitrep/start").json()["started"]
     assert wait_for(lambda: live.status == live_module.RUNNING)
     assert live.snapshot()["quelle"]["kamera"] == "Fake Camera"
     assert live.snapshot()["report"] is None
 
-    run.gate.release()
+    assert client.post("/api/sitrep/bericht").json()["angefordert"]
     assert wait_for(lambda: live.report is not None)
     assert client.get("/api/sitrep/state").json()["report"]["nummer"] == 1
 
-    run.gate.release()
+    client.post("/api/sitrep/bericht")
     assert wait_for(lambda: live.report["nummer"] == 2)
+    assert run.asked == ["bericht", "bericht"]
+
+
+def test_a_recommendation_is_asked_for_through_the_page(client, live, run):
+    client.post("/api/sitrep/start")
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    assert client.post("/api/sitrep/empfehlung").json()["angefordert"]
+    assert run.asked == ["empfehlung"]
+
+
+def test_nothing_is_asked_for_while_no_run_is_live(client):
+    assert not client.post("/api/sitrep/bericht").json()["angefordert"]
+    assert not client.post("/api/sitrep/empfehlung").json()["angefordert"]
+
+
+def test_lines_live_values_and_recommendations_reach_the_snapshot(live, run):
+    live.start()
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    now = datetime(2026, 9, 29, 20, 0, 5)
+    line = report.Aeusserung(name="Klara", text="Raus hier!", beginn=now, ende=now, risiko=4,
+                             menschlichkeit=0, lautstaerke="geschrien")
+    run.emit(session.Zeilen([line]))
+    run.emit(session.Werte(lage.Stand(now, {"Klara": {
+        "risiko": lage.Wert(4, 4.0, "„Raus hier!“: Drohung.", now),
+        "menschlichkeit": lage.Wert(0, 0.0)}}, lage.Alarm(True, 4, "Klara", "„Raus hier!“"))))
+    run.emit(session.NeueEmpfehlung(report.Empfehlung(
+        zeit=now, anlass="Alarm", latenz_s=1.1, urteil=report.Urteil(
+            lage="Drohung.", empfehlung="Probe unterbrechen.",
+            szene=report.Szene(relevanz=8, eskalation=8, gefahr=7))), 1))
+    assert wait_for(lambda: live.empfehlung is not None)
+
+    snapshot = live.snapshot()
+    assert snapshot["zeilen"][0]["text"] == "Raus hier!"
+    assert snapshot["zeilen"][0]["lautstaerke"] == "geschrien"
+    assert snapshot["werte"]["personen"] == [{"name": "Klara", "risiko": 4, "menschlichkeit": 0,
+                                              "anlass_risiko": "„Raus hier!“: Drohung.",
+                                              "anlass_menschlichkeit": ""}]
+    assert snapshot["werte"]["alarm"]["aktiv"]
+    assert snapshot["empfehlung"]["urteil"]["einschreiten"]
+    assert snapshot["empfehlung"]["nummer"] == 1
 
 
 def test_starting_twice_does_not_open_a_second_run(client, live):
@@ -123,7 +188,7 @@ def test_every_change_raises_the_version(live, run):
     live.start()
     assert wait_for(lambda: live.status == live_module.RUNNING)
     running = live.version
-    run.gate.release()
+    run.bericht()
     assert wait_for(lambda: live.report is not None)
     assert before < running < live.version
 
@@ -131,7 +196,7 @@ def test_every_change_raises_the_version(live, run):
 def test_stopping_releases_the_session_and_keeps_the_last_report(client, live, run):
     client.post("/api/sitrep/start")
     assert wait_for(lambda: live.status == live_module.RUNNING)
-    run.gate.release()
+    client.post("/api/sitrep/bericht")
     assert wait_for(lambda: live.report is not None)
 
     client.post("/api/sitrep/stop")
@@ -277,3 +342,15 @@ def test_the_page_and_its_script_are_revalidated_on_every_load(client):
     """A cached page paired with a newer script renders nothing."""
     for path in ("/", "/sitrep", "/static/sitrep.js", "/static/style.css"):
         assert client.get(path).headers["cache-control"] == "no-cache"
+
+
+def test_a_rated_line_takes_the_place_of_the_line_as_transcribed(live, run):
+    live.start()
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    now = datetime(2026, 9, 29, 20, 0, 5)
+    line = report.Aeusserung(name=None, text="Raus hier!", beginn=now, ende=now)
+    run.emit(session.Zeilen([line], bewertet=False))
+    run.emit(session.Zeilen([line.model_copy(update={"risiko": 3, "menschlichkeit": -2})]))
+    assert wait_for(lambda: live.zeilen and live.zeilen[-1]["bewertet"])
+    [shown] = live.snapshot()["zeilen"]
+    assert (shown["risiko"], shown["bewertet"]) == (3, True)

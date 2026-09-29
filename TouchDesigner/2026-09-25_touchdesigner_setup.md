@@ -120,16 +120,22 @@ The source name can be changed with `--ndi-name`.
 2. Add these operators next to it and rename each one to exactly the name
    given. Don't enter anything into them. The module finds each table by its
    name, clears it and writes the header row and the data whenever a report
-   arrives. The Contents column describes what it will write.
+   arrives. A report arrives when the operator asks for one (R); the optional
+   `live_` and `chronik` tables fill as the run goes on. The Contents column describes what it will write.
 
    | Operator | Name | Contents |
    |---|---|---|
-   | Table DAT | `sitrep_meta` | One row: `id nummer beginn ende dauer_s bilder ton_s latenz_s personen prognosen beschreibung gesagt relevanz eskalation gefahr einschreiten massnahme` |
+   | Table DAT | `sitrep_meta` | One row: `id nummer beginn ende dauer_s bilder abschnitte latenz_s personen prognosen verlauf beschreibung gesagt relevanz eskalation gefahr einschreiten massnahme` |
    | Table DAT | `sitrep_personen` | One row per person: `zeile name vermutet beschreibung risiko menschlichkeit auffaelligkeit` |
    | Table DAT | `sitrep_prognose` | The three forecasts, most likely first: `rang wahrscheinlichkeit verlauf` |
    | Text DAT | `sitrep_text` | The whole report as readable text |
    | Table DAT | `presence_meta` | One row: `tick zeit anwesend` |
    | Table DAT | `presence` | One row per person present: `zeile label name vermutet aehnlichkeit sichtungen seit dauer_s` |
+   | Table DAT | `live_meta` | Optional. One row, whenever a live value changes: `tick zeit personen alarm alarm_wert alarm_wer alarm_anlass` |
+   | Table DAT | `live_personen` | Optional. One row per person: `zeile name risiko menschlichkeit anlass_risiko anlass_menschlichkeit` |
+   | Table DAT | `live_zeilen` | Optional. The last 20 lines, newest last: `beginn ende name text lautstaerke risiko menschlichkeit bewertet`; a line arrives with `bewertet` 0 and is replaced once rated |
+   | Table DAT | `live_empfehlung` | Optional. The latest recommendation: `nummer zeit einschreiten eskalation gefahr lage massnahme anlass latenz_s` |
+   | Table DAT | `chronik` | Optional. The last 20 summarised stretches: `beginn ende eskalation gefahr tendenz zusammenfassung` |
 
 **Check the wiring without Orest**
 
@@ -139,7 +145,8 @@ they are, without indentation.
 
 ```python
 m = op('/project1/sitrep/sitrep_osc').module
-m.handle('/orest/sitrep/begin', ['t1', 1, '2026-09-25T12:00:00', '2026-09-25T12:00:15', 15.0, 3, 15.0, 4.2, 1, 3])
+m.handle('/orest/sitrep/begin', ['t1', 1, '2026-09-25T12:00:00', '2026-09-25T12:00:15', 15.0, 3, 4, 4.2, 1, 3])
+m.handle('/orest/sitrep/verlauf', ['t1', 'Ruhiger Beginn, seit 12:00 Streit.'])
 m.handle('/orest/sitrep/beschreibung', ['t1', 'Testbericht.'])
 m.handle('/orest/sitrep/gesagt', ['t1', ''])
 m.handle('/orest/sitrep/person', ['t1', 1, 'Vielleicht: Jakob', 1, 'Steht mittig.', 3, 4, 2, 3, 0])

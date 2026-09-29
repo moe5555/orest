@@ -64,6 +64,26 @@ MIN_SPREAD = 3.0
 SILENCE_DB = -120.0
 
 
+def _levels(samples: np.ndarray, rate: int) -> np.ndarray:
+    """dBFS of each whole FRAME step of the samples; a remainder is left out."""
+    step = max(1, int(rate * FRAME))
+    count = len(samples) // step
+    if not count:
+        return np.zeros(0)
+    frames = samples[:count * step].reshape(count, step)
+    rms = np.sqrt((frames ** 2).mean(axis=1))
+    return 20 * np.log10(np.maximum(rms, 10 ** (SILENCE_DB / 20)))
+
+
+def _level(levels: np.ndarray, start: datetime, begins: datetime, ends: datetime) -> float | None:
+    first = int(np.floor((begins - start).total_seconds() / FRAME))
+    last = int(np.ceil((ends - start).total_seconds() / FRAME))
+    steps = levels[max(0, first):max(0, min(last, len(levels)))]
+    if len(steps) < MIN_FRAMES:
+        return None
+    return float(np.percentile(steps, PERCENTILE))
+
+
 class Timeline:
     """The level of one window's audio over time."""
 
@@ -71,22 +91,93 @@ class Timeline:
         with wave.open(io.BytesIO(wav)) as handle:
             rate = handle.getframerate()
             samples = np.frombuffer(handle.readframes(handle.getnframes()), dtype=np.int16)
-        samples = samples.astype(np.float32) / 32768
-        step = max(1, int(rate * FRAME))
-        count = len(samples) // step
-        frames = samples[:count * step].reshape(count, step) if count else np.zeros((0, step))
-        rms = np.sqrt((frames ** 2).mean(axis=1)) if count else np.zeros(0)
         self.start = start
-        self.levels = 20 * np.log10(np.maximum(rms, 10 ** (SILENCE_DB / 20)))
+        self.levels = _levels(samples.astype(np.float32) / 32768, rate)
 
     def level(self, begins: datetime, ends: datetime) -> float | None:
         """The level of a stretch in dBFS, or None if the audio does not cover it."""
-        first = int(np.floor((begins - self.start).total_seconds() / FRAME))
-        last = int(np.ceil((ends - self.start).total_seconds() / FRAME))
-        steps = self.levels[max(0, first):max(0, min(last, len(self.levels)))]
-        if len(steps) < MIN_FRAMES:
-            return None
-        return float(np.percentile(steps, PERCENTILE))
+        return _level(self.levels, self.start, begins, ends)
+
+
+# Below this, sound is taken for no signal at all rather than a quiet room. An
+# unfed audio device measured -96.7 dBFS; the test corpus's quiet opening
+# through OBS's NDI output, -38.8 (2026-09-28).
+STILL = -70.0
+
+# Seconds of levels a Meter keeps: longer than the stretch any report or
+# summary of the scene asks about (chronik.py).
+KEEP = 600.0
+
+
+class Meter:
+    """The level of the live sound over time, measured as it arrives.
+
+    Fed continuously by the sound's reader (utterances.py) and read by
+    whatever needs the loudness of a moment: a line's, or the four seconds an
+    action reading covers. Keeps the last KEEP seconds, as levels only: no
+    sound is kept.
+    """
+
+    def __init__(self, keep: float = KEEP):
+        self._keep = int(keep / FRAME)
+        self._levels = np.zeros(0)
+        self._start: datetime | None = None
+        self._rest = np.zeros(0, dtype=np.float32)
+        self._lock = threading.Lock()
+        # When sound first arrived, and when it was last above STILL.
+        self.first_sound: datetime | None = None
+        self.last_sound: datetime | None = None
+
+    def add(self, samples: np.ndarray, rate: int, ends: datetime):
+        """Measure sound whose last sample was recorded at `ends`."""
+        with self._lock:
+            joined = np.concatenate([self._rest, samples])
+            levels = _levels(joined, rate)
+            step = max(1, int(rate * FRAME))
+            self._rest = joined[len(levels) * step:]
+            self.first_sound = self.first_sound or ends
+            if not len(levels):
+                return
+            if levels.max() > STILL:
+                self.last_sound = ends
+            # The steps end where the kept remainder begins.
+            last_ends = ends - timedelta(seconds=len(self._rest) / rate)
+            start = last_ends - timedelta(seconds=len(levels) * FRAME)
+            if self._start is None:
+                self._start = start
+                self._levels = levels
+            else:
+                self._levels = np.concatenate([self._levels, levels])
+            # Anchored on the newest sound, so dropped samples do not shift
+            # every later level.
+            self._start = last_ends - timedelta(seconds=len(self._levels) * FRAME)
+            if len(self._levels) > self._keep:
+                self._levels = self._levels[-self._keep:]
+                self._start = last_ends - timedelta(seconds=len(self._levels) * FRAME)
+
+    def level(self, begins: datetime, ends: datetime) -> float | None:
+        """The level of a stretch in dBFS, or None if the levels kept do not cover it."""
+        with self._lock:
+            if self._start is None:
+                return None
+            return _level(self._levels, self._start, begins, ends)
+
+    def still_for(self, now: datetime) -> float | None:
+        """Seconds the sound has been below STILL, or None before any sound arrived.
+
+        A source that delivers only silence, such as an audio device nothing
+        feeds, is otherwise indistinguishable from a quiet room."""
+        with self._lock:
+            if self.first_sound is None:
+                return None
+            return max(0.0, (now - (self.last_sound or self.first_sound)).total_seconds())
+
+    def clear(self):
+        with self._lock:
+            self._levels = np.zeros(0)
+            self._start = None
+            self._rest = np.zeros(0, dtype=np.float32)
+            self.first_sound = self.last_sound = None
 
 
 class Calibration:
@@ -161,7 +252,7 @@ def amplified(evidence: float, gain: float) -> float:
     return evidence * gain if evidence > 0 else evidence
 
 
-def gain_over(timeline: Timeline | None, calibration: Calibration | None,
+def gain_over(timeline: "Timeline | Meter | None", calibration: Calibration | None,
               begins: datetime, ends: datetime) -> float:
     """The gain for a stretch of time, 1 where there is no audio or no calibration."""
     if timeline is None or calibration is None:

@@ -1,5 +1,7 @@
-// Live SITREP page: starts the run on opening, follows its state over
-// server-sent events and renders each report beneath the camera feed.
+// Live SITREP page: starts the run on opening and follows its state over
+// server-sent events. The live values, lines and Chronik update as they
+// change; a report is made only when asked for (R), a recommendation when the
+// alarm is raised or when asked for (E).
 // Report text is set with textContent only, so model output cannot inject markup.
 "use strict";
 
@@ -18,6 +20,12 @@ const FEED_TEXT = {
 };
 
 const PERSON_RATINGS = ["risiko", "menschlichkeit", "auffaelligkeit"];
+const LIVE_RATINGS = ["risiko", "menschlichkeit"];
+
+// A recommendation older than this is shown dimmed.
+const EMPFEHLUNG_FRISCH_MS = 60000;
+
+const TENDENZ = { zuspitzend: "↗", gleichbleibend: "→", beruhigend: "↘" };
 
 let current = null;
 let feedOpen = false;
@@ -44,7 +52,9 @@ function personLevel(name, value) {
 
 const clock = (iso) => (iso ? iso.slice(11, 19) : "");
 
-// Evidence from the action table, signed, one decimal.
+const ago = (iso) => (iso ? `vor ${Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000))} s` : "");
+
+// Evidence, signed, one decimal.
 const signed = (value) => (value > 0 ? `+${value.toFixed(1)}` : value < 0 ? `−${(-value).toFixed(1)}` : "0");
 
 function meter(name, value, max, levelName, tickAt) {
@@ -65,36 +75,214 @@ function meter(name, value, max, levelName, tickAt) {
   return row;
 }
 
-function personCard(person) {
-  const card = el("div", "person");
-  const title = el("h3", null, person.name);
-  if (person.vermutet) title.append(el("span", "guess", "vermutet"));
-  card.append(title);
-  if (person.beschreibung) card.append(el("p", null, person.beschreibung));
-
-  const ratings = el("div", "ratings");
-  for (const name of PERSON_RATINGS) {
-    const value = person[name];
-    const row = el("div", "rating");
-    const pips = el("span", "pips");
-    // null: the action recogniser read nothing of this person.
-    if (value === null) {
-      row.dataset.level = "calm";
-      pips.append(el("span", "unmeasured", "nicht gemessen"));
-      pips.title = "nicht gemessen";
-    } else {
-      row.dataset.level = personLevel(name, value);
-      for (let i = 1; i <= 5; i++) pips.append(el("span", i <= value ? "pip on" : "pip"));
-      pips.title = `${value} / 5`;
-    }
-    // The number as well as the pips: a 0 shows as empty pips alone.
-    row.append(el("span", null, name), pips, el("span", "value num", value === null ? "–" : String(value)));
-    ratings.append(row);
+// One rating as pips and its number; null means not measured.
+function ratingRow(name, value) {
+  const row = el("div", "rating");
+  const pips = el("span", "pips");
+  if (value === null || value === undefined) {
+    row.dataset.level = "calm";
+    pips.append(el("span", "unmeasured", "nicht gemessen"));
+    pips.title = "nicht gemessen";
+  } else {
+    row.dataset.level = personLevel(name, value);
+    for (let i = 1; i <= 5; i++) pips.append(el("span", i <= value ? "pip on" : "pip"));
+    pips.title = `${value} / 5`;
   }
-  card.append(ratings);
-  if (person.anlass.length) card.append(el("p", "anlass", person.anlass.join(" · ")));
-  return card;
+  // The number as well as the pips: a 0 shows as empty pips alone.
+  row.append(el("span", null, name), pips,
+             el("span", "value num", value === null || value === undefined ? "–" : String(value)));
+  return row;
 }
+
+// ---- Live lane ------------------------------------------------------------
+
+// The sound's level in the header; a silent source as a warning above all.
+function renderTon(ton, running) {
+  const level = $("ton");
+  level.hidden = !running || !ton;
+  $("stumm").hidden = !running || !ton?.stumm;
+  if (level.hidden) return;
+  level.dataset.stumm = String(ton.stumm);
+  level.textContent = ton.pegel_db === null ? "Ton –" : `Ton ${Math.round(ton.pegel_db)} dBFS`;
+  $("stumm-text").textContent =
+    `Von „${ton.quelle}“ kommt seit ${Math.round(ton.still_s)} s kein Ton. Ohne Ton entstehen ` +
+    "keine Zeilen, und die Chronik sieht nur Standbilder. Tonquelle prüfen: --audio oder " +
+    "--audio-ndi, z. B. --audio-ndi \"VSH-ARLT-5090 (OBS PGM)\".";
+}
+
+function renderAlarm(werte, laeuft) {
+  const panel = $("alarm");
+  const alarm = werte?.alarm;
+  const aktiv = Boolean(alarm?.aktiv);
+  panel.dataset.aktiv = String(aktiv);
+  $("alarm-verdict").textContent = aktiv
+    ? `Alarm · ${alarm.wer ?? "Sprecher unklar"} · Risiko ${alarm.wert}`
+    : "Ruhig";
+  $("alarm-grund").textContent = aktiv
+    ? alarm.anlass + (laeuft?.empfehlung ? " · Empfehlung wird erstellt …" : "")
+    : (werte ? `Kein Messwert über Risiko 2 · Stand ${clock(werte.zeit)}` : "Noch keine Messwerte.");
+}
+
+function renderEmpfehlung(empfehlung, laeuft, fehler) {
+  const panel = $("empfehlung");
+  const urteil = empfehlung?.urteil;
+  panel.classList.toggle("alarm", Boolean(urteil?.einschreiten));
+  panel.dataset.laeuft = String(Boolean(laeuft?.empfehlung));
+  if (!empfehlung) {
+    $("verdict").textContent = laeuft?.empfehlung ? "Empfehlung wird erstellt …" : "Keine Empfehlung";
+    $("empfehlung-zeit").textContent = "";
+    $("massnahme").textContent = "";
+    $("lage-satz").textContent = fehler?.empfehlung
+      ? `Fehlgeschlagen: ${fehler.empfehlung}`
+      : "Entsteht bei Alarm oder mit E.";
+    $("empfehlung-anlass").textContent = "";
+    return;
+  }
+  $("verdict").textContent = (urteil.einschreiten ? "Einschreiten" : "Kein Einschreiten") +
+    (laeuft?.empfehlung ? " · neue wird erstellt …" : "");
+  $("empfehlung-zeit").dataset.zeit = empfehlung.zeit;
+  $("empfehlung-zeit").textContent =
+    `${clock(empfehlung.zeit)} · ${ago(empfehlung.zeit)} · Eskalation ${urteil.szene.eskalation} · ` +
+    `Gefahr ${urteil.szene.gefahr}`;
+  $("massnahme").textContent = urteil.empfehlung;
+  $("lage-satz").textContent = urteil.lage;
+  $("empfehlung-anlass").textContent = `Anlass: ${empfehlung.anlass}`;
+}
+
+// Strongest first; people measured at 0 on everything share one line, since
+// on footage without a cast the same performer can appear under several
+// guessed names.
+function renderLivePersonen(werte) {
+  const list = $("live-personen");
+  const strength = (person) => Math.max(...LIVE_RATINGS.map((name) => person[name] ?? 0));
+  const personen = (werte?.personen ?? []).slice().sort((a, b) => strength(b) - strength(a));
+  const ruhig = personen.filter((person) => strength(person) === 0);
+  list.replaceChildren(...personen.filter((person) => strength(person) > 0).map((person) => {
+    const card = el("div", "person");
+    card.append(el("h3", null, person.name));
+    const ratings = el("div", "ratings");
+    for (const name of LIVE_RATINGS) ratings.append(ratingRow(name, person[name]));
+    card.append(ratings);
+    const anlass = LIVE_RATINGS.filter((name) => person[`anlass_${name}`])
+      .map((name) => `${name}: ${person[`anlass_${name}`]}`);
+    if (anlass.length) {
+      const text = el("p", "anlass", anlass.join(" · "));
+      text.title = text.textContent;
+      card.append(text);
+    }
+    return card;
+  }));
+  if (ruhig.length) {
+    list.append(el("p", "ruhig", `Ohne Befund: ${ruhig.map((person) => person.name).join(", ")}`));
+  }
+  if (!personen.length) {
+    list.append(el("div", "waiting", current?.quelle?.aktionen === false
+      ? "Aktionserkennung aus; nur Zeilen mit Sprecher werden gemessen."
+      : "Niemand gemessen."));
+  }
+}
+
+function zeileRow(line) {
+  const row = el("div", "zeile");
+  const text = el("span", null, `„${line.text}“`);
+  const evidence = LIVE_RATINGS
+    .filter((name) => line[name])
+    .map((name) => `${name} ${signed(line[name])}` +
+         (name === "risiko" && line.verstaerkung > 1 ? ` ×${line.verstaerkung.toFixed(1)}` : ""));
+  if (evidence.length) {
+    const tag = el("span", "gewertet", evidence.join(" · "));
+    tag.dataset.level = line.risiko >= 3 ? "red" : line.risiko >= 1 ? "amber" : "calm";
+    text.append(" ", tag);
+  } else if (line.bewertet === false) {
+    // Transcribed; its rating follows within about a second.
+    text.append(" ", el("span", "gewertet", "…"));
+  }
+  if (line.lautstaerke) text.append(" ", el("span", "gewertet", line.lautstaerke));
+  if (line.begruendung) text.title = line.begruendung;
+  const wer = el("span", line.name ? "sprecher" : "sprecher unklar", line.name ?? "unklar");
+  if (line.zeit) wer.title = clock(line.zeit);
+  row.append(wer, text);
+  return row;
+}
+
+function renderZeilen(zeilen) {
+  const list = $("zeilen");
+  list.replaceChildren(...zeilen.map(zeileRow).reverse());
+  if (!zeilen.length) list.append(el("div", "waiting", "Noch nichts gesagt."));
+}
+
+// ---- Chronik --------------------------------------------------------------
+
+const SVG = "http://www.w3.org/2000/svg";
+
+function svg(tag, attributes) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  return node;
+}
+
+// Eskalation and Gefahr per Abschnitt, 0-10, with the intervention threshold.
+function renderKurve(kurve, schwelle) {
+  const box = $("kurve");
+  if (kurve.length < 2) {
+    box.replaceChildren(el("div", "hinweis", "Die Kurve entsteht ab dem zweiten Abschnitt."));
+    return;
+  }
+  const width = 600, height = 64, pad = 4;
+  const x = (i) => pad + (i * (width - 2 * pad)) / (kurve.length - 1);
+  const y = (v) => height - pad - (v * (height - 2 * pad)) / 10;
+  const chart = svg("svg", { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "none",
+                             role: "img", "aria-label": "Eskalation und Gefahr je Abschnitt" });
+  chart.append(svg("line", { x1: 0, x2: width, y1: y(schwelle), y2: y(schwelle), class: "schwelle" }));
+  for (const [name, cls] of [["gefahr", "gefahr"], ["eskalation", "eskalation"]]) {
+    chart.append(svg("polyline", {
+      points: kurve.map((punkt, i) => `${x(i)},${y(punkt[name])}`).join(" "),
+      class: cls, "vector-effect": "non-scaling-stroke",
+    }));
+  }
+  const legend = el("div", "kurve-legende num",
+    `${clock(kurve[0].ende)} – ${clock(kurve[kurve.length - 1].ende)} · `);
+  legend.append(el("span", "eskalation", "Eskalation"), " · ", el("span", "gefahr", "Gefahr"),
+                ` · Schwelle ${schwelle}`);
+  box.replaceChildren(chart, legend);
+}
+
+function renderChronik(chronik, schwelle) {
+  if (!chronik) {
+    $("kurve").replaceChildren();
+    $("abschnitte").replaceChildren();
+    $("rueckblick").hidden = true;
+    return;
+  }
+  renderKurve(chronik.kurve, schwelle);
+  const list = $("abschnitte");
+  // Newest first: the Chronik is read from the present backwards.
+  list.replaceChildren(...chronik.abschnitte.slice().reverse().map((abschnitt) => {
+    const row = el("div", "abschnitt");
+    const summary = abschnitt.zusammenfassung;
+    const head = el("span", "wann num", `${clock(abschnitt.beginn)}–${clock(abschnitt.ende)}`);
+    if (!summary) {
+      row.append(head, el("span", "text dim", "ohne Zusammenfassung"));
+      return row;
+    }
+    const szene = summary.szene;
+    const level = sceneLevel(Math.max(szene.eskalation, szene.gefahr), schwelle);
+    const werte = el("span", "werte num",
+      `E ${szene.eskalation} · G ${szene.gefahr} ${TENDENZ[summary.tendenz] ?? ""}`);
+    werte.dataset.level = level;
+    werte.title = summary.tendenz;
+    row.append(head, werte, el("span", "text", summary.zusammenfassung));
+    return row;
+  }));
+  const hinweis = el("div", "hinweis", `Nächster Abschnitt ${clock(chronik.naechster)}.`);
+  list.prepend(hinweis);
+  const rueckblick = $("rueckblick");
+  rueckblick.hidden = !chronik.rueckblick;
+  rueckblick.textContent = chronik.rueckblick
+    ? `Rückblick bis ${clock(chronik.rueckblick_bis)}: ${chronik.rueckblick}` : "";
+}
+
+// ---- Report, on request ---------------------------------------------------
 
 // One card per person the action recogniser measured, including anyone the
 // model left out of its list of people.
@@ -105,50 +293,35 @@ function gemessenCard(handlung) {
   card.append(title,
     meter("risiko", handlung.risiko, 5, personLevel("risiko", handlung.risiko)),
     meter("menschlichkeit", handlung.menschlichkeit, 5, "calm"));
-  const anlass = ["risiko", "menschlichkeit"]
+  const anlass = LIVE_RATINGS
     .filter((name) => handlung[`anlass_${name}`])
     .map((name) => `${name}: ${handlung[`anlass_${name}`]}`);
   if (anlass.length) card.append(el("p", "anlass", anlass.join(" · ")));
   return card;
 }
 
-// The recogniser's last classification, refreshed every second between reports.
-function renderAktionen(aktionen, status) {
-  const panel = $("aktionen");
-  panel.hidden = !aktionen || status !== "running";
-  if (panel.hidden) return;
+function personCard(person) {
+  const card = el("div", "person");
+  const title = el("h3", null, person.name);
+  if (person.vermutet) title.append(el("span", "guess", "vermutet"));
+  card.append(title);
+  if (person.beschreibung) card.append(el("p", null, person.beschreibung));
+  const ratings = el("div", "ratings");
+  for (const name of PERSON_RATINGS) ratings.append(ratingRow(name, person[name]));
+  card.append(ratings);
+  if (person.anlass.length) card.append(el("p", "anlass", person.anlass.join(" · ")));
+  return card;
+}
 
-  const hinweis = $("aktionen-hinweis");
-  const liste = $("aktionen-liste");
-  hinweis.dataset.level = "calm";
-  if (!aktionen.aktiv) {
-    hinweis.textContent = "Aus: Risiko und Menschlichkeit werden nicht gemessen.";
-    liste.replaceChildren();
-    return;
-  }
-  if (aktionen.fehler) {
-    hinweis.dataset.level = "red";
-    hinweis.textContent = `Gestoppt: ${aktionen.fehler}`;
-    liste.replaceChildren();
-    return;
-  }
-  hinweis.textContent = aktionen.stand
-    ? `Klassifikation ${aktionen.stand} · jede Sekunde, über die letzten 4 s · ` +
-      "Körper ohne Namen gehen nicht in den Bericht ein."
-    : "Erste Klassifikation nach 4 s …";
-
-  liste.replaceChildren(...aktionen.lesungen.map((lesung) => {
-    const row = el("div", "aktion");
-    row.dataset.level = lesung.risiko >= 3 ? "red" : lesung.risiko >= 1.5 ? "amber" : "calm";
-    row.append(
-      el("span", "wer", lesung.wer.join(" + ")),
-      el("span", "handlung", `${lesung.handlung} ${Math.round(100 * lesung.wahrscheinlichkeit)} %`),
-      el("span", "evidenz num risiko", `risiko ${signed(lesung.risiko)}`),
-      el("span", "evidenz num", `menschlichkeit ${signed(lesung.menschlichkeit)}`),
-    );
-    return row;
-  }));
-  if (!aktionen.lesungen.length) liste.append(el("div", "waiting", "Niemand im Bild erkannt."));
+function renderReportStatus(snapshot) {
+  const status = $("report-status");
+  const laeuft = snapshot.laeuft?.bericht;
+  const fehler = snapshot.fehler?.bericht;
+  status.hidden = !laeuft && !fehler;
+  status.dataset.level = fehler && !laeuft ? "red" : "calm";
+  status.textContent = laeuft ? "Lagebericht wird erstellt …"
+    : fehler ? `Lagebericht fehlgeschlagen: ${fehler}` : "";
+  $("report-bereich").hidden = !snapshot.report && status.hidden;
 }
 
 function renderReport(report) {
@@ -159,9 +332,10 @@ function renderReport(report) {
 
   const head = $("report-head");
   head.replaceChildren(
-    el("strong", null, `SITREP ${report.nummer}`),
+    el("strong", null, `LAGEBERICHT ${report.nummer}`),
     el("span", "num", `${clock(zeit.beginn)} – ${clock(zeit.ende)}`),
-    el("span", "num", `${report.quelle.bilder} Bilder · ${report.quelle.ton_s} s Ton`),
+    el("span", "num", `${report.quelle.abschnitte} Abschnitte · ${report.quelle.woertlich_s} s wörtlich · ` +
+                      `${report.quelle.bilder} Bilder`),
     el("span", "num", `Latenz ${report.latenz_s} s`),
   );
   // Loudness: calibrating on the first speech, then the session's normal level.
@@ -177,35 +351,20 @@ function renderReport(report) {
   head.append(age);
   updateAge();
 
-  const empfehlung = $("empfehlung");
+  $("verlauf").textContent = bericht.verlauf || "—";
+
+  const empfehlung = $("report-empfehlung");
   empfehlung.classList.toggle("alarm", bericht.einschreiten);
-  $("verdict").textContent = bericht.einschreiten ? "Einschreiten" : "Kein Einschreiten";
-  $("massnahme").textContent = bericht.einschreiten
+  $("report-verdict").textContent = bericht.einschreiten ? "Einschreiten" : "Kein Einschreiten";
+  $("report-massnahme").textContent = bericht.einschreiten
     ? (bericht.empfehlung || "Keine Maßnahme angegeben.")
     : "";
-  $("grund").textContent = `Eskalation ${szene.eskalation} · Gefahr ${szene.gefahr} · Schwelle ${schwelle}`;
+  $("report-grund").textContent = `Eskalation ${szene.eskalation} · Gefahr ${szene.gefahr} · Schwelle ${schwelle}`;
 
   $("beschreibung").textContent = bericht.beschreibung || "—";
-  // One line per segment, with its speaker where the lips showed who it was.
   const gesagt = $("gesagt");
   if (report.aeusserungen.length) {
-    gesagt.replaceChildren(...report.aeusserungen.map((line) => {
-      const row = el("div", "zeile");
-      const text = el("span", null, `„${line.text}“`);
-      // A line's evidence, where the model read any, with its reason on hover.
-      const evidence = ["risiko", "menschlichkeit"]
-        .filter((name) => line[name])
-        .map((name) => `${name} ${signed(line[name])}` +
-             (name === "risiko" && line.verstaerkung > 1 ? ` ×${line.verstaerkung.toFixed(1)}` : ""));
-      if (evidence.length) {
-        const tag = el("span", "gewertet", evidence.join(" · "));
-        tag.dataset.level = line.risiko >= 3 ? "red" : line.risiko >= 1 ? "amber" : "calm";
-        text.append(" ", tag);
-      }
-      if (line.begruendung) text.title = line.begruendung;
-      row.append(el("span", line.name ? "sprecher" : "sprecher unklar", line.name ?? "unklar"), text);
-      return row;
-    }));
+    gesagt.replaceChildren(...report.aeusserungen.map((line) => zeileRow({ ...line, zeit: line.ende })));
   } else {
     gesagt.textContent = report.gesagt ? `„${report.gesagt}“` : "";
   }
@@ -239,62 +398,142 @@ function renderReport(report) {
   }));
 }
 
+// ---- Action recogniser ----------------------------------------------------
+
+// The recogniser's last classification, refreshed every second.
+function renderAktionen(aktionen, status) {
+  const panel = $("aktionen");
+  panel.hidden = !aktionen || status !== "running";
+  if (panel.hidden) return;
+
+  const hinweis = $("aktionen-hinweis");
+  const liste = $("aktionen-liste");
+  hinweis.dataset.level = "calm";
+  if (!aktionen.aktiv) {
+    hinweis.textContent = "Aus: Risiko und Menschlichkeit werden nicht gemessen.";
+    liste.replaceChildren();
+    return;
+  }
+  if (aktionen.fehler) {
+    hinweis.dataset.level = "red";
+    hinweis.textContent = `Gestoppt: ${aktionen.fehler}`;
+    liste.replaceChildren();
+    return;
+  }
+  hinweis.textContent = aktionen.stand
+    ? `Klassifikation ${aktionen.stand} · jede Sekunde, über die letzten 4 s · ` +
+      "Körper ohne Namen gehen nicht in die Werte ein."
+    : "Erste Klassifikation nach 4 s …";
+
+  liste.replaceChildren(...aktionen.lesungen.map((lesung) => {
+    const row = el("div", "aktion");
+    row.dataset.level = lesung.risiko >= 3 ? "red" : lesung.risiko >= 1.5 ? "amber" : "calm";
+    row.append(
+      el("span", "wer", lesung.wer.join(" + ")),
+      el("span", "handlung", `${lesung.handlung} ${Math.round(100 * lesung.wahrscheinlichkeit)} %`),
+      el("span", "evidenz num risiko", `risiko ${signed(lesung.risiko)}`),
+      el("span", "evidenz num", `menschlichkeit ${signed(lesung.menschlichkeit)}`),
+    );
+    return row;
+  }));
+  if (!aktionen.lesungen.length) liste.append(el("div", "waiting", "Niemand im Bild erkannt."));
+}
+
+// ---- The whole page -------------------------------------------------------
+
+// Parts are redrawn only when their data changed: a report or the Chronik
+// redrawn every second would reset a reader's selection.
+const drawn = {};
+
+function changed(part, data) {
+  const key = JSON.stringify(data ?? null);
+  if (drawn[part] === key) return false;
+  drawn[part] = key;
+  return true;
+}
+
 function render(snapshot) {
   current = snapshot;
   const status = snapshot.status;
   const quelle = snapshot.quelle;
+  const running = status === "running";
 
   $("status").dataset.status = status;
   $("status").textContent = STATUS_TEXT[status] ?? status;
   $("meta").textContent = quelle
-    ? [quelle.kamera, quelle.mikrofon, quelle.modell, `Fenster ${quelle.fenster_s} s`,
+    ? [quelle.kamera, quelle.mikrofon, quelle.modell, `Abschnitt ${quelle.fenster_s} s`,
        quelle.aktionen ? "Aktionserkennung an" : "Aktionserkennung aus",
+       quelle.auto_empfehlung ? "Empfehlung bei Alarm" : "Empfehlung nur auf E",
        quelle.besetzung.length ? `Besetzung: ${quelle.besetzung.join(", ")}`
                                : "ohne Besetzung, Namen vermutet"].join(" · ")
     : "";
 
-  const active = status === "running" || status === "starting";
+  const active = running || status === "starting";
   $("toggle").textContent = active ? "Stoppen" : "Neu starten";
   $("toggle").disabled = status === "stopping";
+  $("ask-bericht").disabled = !running || Boolean(snapshot.laeuft?.bericht);
+  $("ask-empfehlung").disabled = !running || Boolean(snapshot.laeuft?.empfehlung);
 
-  if (status === "running" && !feedOpen) {
+  if (running && !feedOpen) {
     $("video").src = `/api/sitrep/video?t=${Date.now()}`;
     feedOpen = true;
-  } else if (status !== "running" && feedOpen) {
+  } else if (!running && feedOpen) {
     $("video").removeAttribute("src");
     feedOpen = false;
   }
-  $("feed-empty").hidden = status === "running";
+  $("feed-empty").hidden = running;
   $("feed-empty").textContent = FEED_TEXT[status] ?? "";
-  $("feed-tag").hidden = status !== "running";
-
-  renderAktionen(snapshot.aktionen, status);
+  $("feed-tag").hidden = !running;
 
   $("error").hidden = status !== "error";
   $("error-text").textContent = snapshot.error ?? "";
 
-  // The last report stays on screen after a stop; a new run clears it.
-  const report = snapshot.report;
-  $("report").hidden = !report;
-  $("waiting").hidden = Boolean(report) || status !== "running";
-  if (quelle) {
-    $("waiting").textContent =
-      `Warte auf den ersten Bericht … ein Fenster dauert ${quelle.fenster_s} s, danach rechnet das Modell.`;
+  renderTon(snapshot.ton, running);
+  renderAlarm(snapshot.werte, snapshot.laeuft);
+  if (changed("empfehlung", [snapshot.empfehlung, snapshot.laeuft?.empfehlung, snapshot.fehler?.empfehlung])) {
+    renderEmpfehlung(snapshot.empfehlung, snapshot.laeuft, snapshot.fehler);
   }
-  if (report) renderReport(report);
+  if (changed("werte", snapshot.werte?.personen)) renderLivePersonen(snapshot.werte);
+  if (changed("zeilen", snapshot.zeilen)) renderZeilen(snapshot.zeilen);
+  const schwelle = snapshot.report?.schwelle ?? snapshot.empfehlung?.schwelle ?? 6;
+  if (changed("chronik", snapshot.chronik)) renderChronik(snapshot.chronik, schwelle);
+  renderAktionen(snapshot.aktionen, status);
+
+  // The last report stays on screen after a stop; a new run clears it.
+  renderReportStatus(snapshot);
+  $("report").hidden = !snapshot.report;
+  if (snapshot.report && changed("report", snapshot.report)) renderReport(snapshot.report);
 }
 
 function updateAge() {
   const age = $("age");
   const ende = current?.report?.zeitfenster?.ende;
-  if (!age || !ende) return;
-  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(ende)) / 1000));
-  age.textContent = `vor ${seconds} s`;
+  if (age && ende) age.textContent = ago(ende);
+  const empfehlung = current?.empfehlung;
+  if (empfehlung) {
+    const urteil = empfehlung.urteil;
+    // A recommendation describes a moment; once it is old, it no longer
+    // claims the operator's attention.
+    const alt = Date.now() - Date.parse(empfehlung.zeit) > EMPFEHLUNG_FRISCH_MS;
+    $("empfehlung").classList.toggle("alt", alt);
+    $("empfehlung").classList.toggle("alarm", Boolean(urteil.einschreiten) && !alt);
+    $("empfehlung-zeit").textContent =
+      `${clock(empfehlung.zeit)} · ${ago(empfehlung.zeit)} · Eskalation ${urteil.szene.eskalation} · ` +
+      `Gefahr ${urteil.szene.gefahr}`;
+  }
 }
 
 async function post(path) {
   const response = await fetch(path, { method: "POST" });
   render(await response.json());
+}
+
+function askBericht() {
+  if (current?.status === "running") post("/api/sitrep/bericht");
+}
+
+function askEmpfehlung() {
+  if (current?.status === "running") post("/api/sitrep/empfehlung");
 }
 
 // A feed that drops while the run continues (a server restart, a network
@@ -309,6 +548,20 @@ $("video").addEventListener("error", () => {
 $("toggle").addEventListener("click", () => {
   const active = current && (current.status === "running" || current.status === "starting");
   post(active ? "/api/sitrep/stop" : "/api/sitrep/start");
+});
+$("ask-bericht").addEventListener("click", askBericht);
+$("ask-empfehlung").addEventListener("click", askEmpfehlung);
+
+// R asks for a report, E for a recommendation; not while typing, and not with
+// a modifier, so the browser's own shortcuts keep working.
+document.addEventListener("keydown", (event) => {
+  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  const key = event.key.toLowerCase();
+  if (key === "r") askBericht();
+  else if (key === "e") askEmpfehlung();
+  else return;
+  event.preventDefault();
 });
 
 function tick() {
