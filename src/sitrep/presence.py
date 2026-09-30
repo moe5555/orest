@@ -9,11 +9,13 @@ frames to the model every five or ten seconds, which is far too sparse to
 follow a person across; this reads the camera several times a second, so an
 actor only has to face it once to be named for as long as their track lives.
 
-Tracks are linked by the face embedding itself rather than by box position.
-Across two hours of stage footage no two different people ever exceeded 0.35
-cosine similarity, while the same person across that whole span sat at a median
-of 0.60, so an embedding is a stronger association cue than proximity and costs
-nothing extra: the vector is already computed in order to identify the face.
+Tracks are linked by the face embedding first. Across two hours of stage
+footage no two different people ever exceeded 0.35 cosine similarity, while the
+same person across that whole span sat at a median of 0.60, so an embedding is
+a stronger association cue than proximity and costs nothing extra: the vector
+is already computed in order to identify the face. Box position links only the
+faces the embedding leaves unplaced, which are the turned, covered and badly
+lit views where the embedding is weakest.
 
 A track that matches the enrolled cast carries that name. Everyone else is
 guessed at: the system accounts for every person in the room, so an
@@ -42,6 +44,7 @@ from datetime import datetime, timedelta
 import cv2
 import numpy as np
 
+from action import tracking
 from face import detect, embed, gallery
 
 from . import capture, cli, devices
@@ -61,6 +64,15 @@ MIN_FACE = 30.0
 # (0.35) and well below what the same face scores half a second apart.
 LINK = 0.45
 
+# A face that no track's embedding claims continues the track whose latest box
+# it overlaps by at least PLACE_LINK (intersection over union), provided that
+# track was sighted within PLACE_AGE seconds: two passes. A turned head or a
+# covered face scores low against the person's own stored faces, but a face
+# in the place another face was half a second ago is almost always the same
+# person.
+PLACE_LINK = 0.3
+PLACE_AGE = 2 * INTERVAL
+
 # A track with no sighting for this long is closed. Matches the default SITREP
 # window, so a person seen at the start of a window is still on its roster
 # after turning away for the rest of it.
@@ -71,6 +83,12 @@ FORGET = 30.0
 # lasts only as long as the track — the same face seen again after an absence
 # is guessed at afresh.
 UNSURE = "Vielleicht:"
+
+
+def guessed(label: str) -> bool:
+    """Whether a label is a guess at an unrecognised person rather than a cast name."""
+    return label.startswith(UNSURE)
+
 
 NAMES = (
     "Alma", "Anton", "Antonia", "Bastian", "Carla", "Elias", "Elisa", "Emil",
@@ -249,14 +267,14 @@ class PresenceTracker:
         with self._lock:
             self._tracks = []
 
-    def faces(self, within: float) -> list[tuple[np.ndarray, str]]:
-        """The face box and name of every track sighted in the last `within` seconds.
+    def faces(self, within: float, at: datetime | None = None) -> list[tuple[np.ndarray, str]]:
+        """The face box and name of every track sighted in the `within` seconds before `at`.
 
         Reads the boxes of past passes without running one, for a reader that
         needs to know where each named person is but cannot afford a pass of
-        its own.
+        its own. `at` defaults to now; a replay passes its footage time.
         """
-        cutoff = datetime.now() - timedelta(seconds=within)
+        cutoff = (at or datetime.now()) - timedelta(seconds=within)
         with self._lock:
             return [(track.box, track.label) for track in self._tracks
                     if track.box is not None and track.last_seen >= cutoff]
@@ -268,8 +286,8 @@ class PresenceTracker:
     def _link(self, faces, vectors, matches, at: datetime) -> list[Track]:
         """Attach each face to a track, starting a new one where none fits.
 
-        Two cues, strongest first. A face close enough to a track's own stored
-        faces joins it; assignment is greedy on similarity, so the most
+        Three cues, strongest first. A face close enough to a track's own
+        stored faces joins it; assignment is greedy on similarity, so the most
         confident pairing is taken first and both sides leave the pool.
 
         A face the cast gallery names then joins whichever live track already
@@ -278,6 +296,12 @@ class PresenceTracker:
         threshold, since the same person across a long stretch of footage drops
         to 0.39 at the fifth percentile, while the gallery holds several angles
         of them and recognises both.
+
+        A face neither cue placed then continues the recently sighted track
+        whose box it overlaps most (PLACE_LINK), unless the gallery names the
+        face as someone other than that track. This covers the views neither
+        the track's stored faces nor the gallery recognise: a profile, a hand
+        across the face, a change of light.
         """
         assigned = {}
         claimed = set()
@@ -302,6 +326,27 @@ class PresenceTracker:
                 column = named.pop(matches[row].name, None)
                 if column is not None:
                     assigned[row] = self._tracks[column]
+                    claimed.add(column)
+
+        recent = at - timedelta(seconds=PLACE_AGE)
+        candidates = []
+        for row, face in enumerate(faces):
+            if row in assigned:
+                continue
+            face_name = matches[row].name if matches and matches[row].known else None
+            for column, track in enumerate(self._tracks):
+                if (column in claimed or track.box is None or track.last_seen < recent
+                        or (face_name is not None and track.name not in (None, face_name))):
+                    continue
+                overlap = tracking.overlap(np.asarray(face.bbox, dtype=float),
+                                           np.asarray(track.box, dtype=float))
+                if overlap >= PLACE_LINK:
+                    candidates.append((overlap, row, column))
+        for _, row, column in sorted(candidates, reverse=True):
+            if row in assigned or column in claimed:
+                continue
+            assigned[row] = self._tracks[column]
+            claimed.add(column)
 
         touched = []
         for row, (face, vector) in enumerate(zip(faces, vectors)):

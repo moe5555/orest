@@ -112,13 +112,57 @@ def test_an_unnamed_body_is_not_rated(ratings):
     assert ratings.between(EARLIER, T0) == []
 
 
-def test_a_name_seen_on_a_second_body_in_view_leaves_the_first(ratings):
+def test_a_name_seen_steadily_on_a_second_body_in_view_leaves_the_first(ratings):
     ratings.name(tracking.Frame(0.0, {1: body(100, 100)}), [face(100, 100, "Klara")])
-    ratings.name(tracking.Frame(1.0, {1: body(100, 100), 2: body(400, 100)}),
-                 [face(400, 100, "Klara")])
+    for second in range(1, 5):
+        ratings.name(tracking.Frame(float(second), {1: body(100, 100), 2: body(400, 100)}),
+                     [face(400, 100, "Klara")])
     ratings.record([reading(1, kicking_other_person=1.0), reading(2)], T0)
     [klara] = ratings.between(EARLIER, T0)
     assert (klara.risiko, klara.lesungen) == (0, 1)
+    assert 1 not in ratings.names()
+
+
+def test_a_name_held_steadily_is_not_taken_by_one_sighting_on_another_body(ratings):
+    """A duplicate detection or a misplaced face box must not move a name."""
+    for second in range(4):
+        ratings.name(tracking.Frame(float(second), {1: body(100, 100)}),
+                     [face(100, 100, "Klara")])
+    ratings.name(tracking.Frame(4.0, {1: body(100, 100), 2: body(400, 100)}),
+                 [face(400, 100, "Klara")])
+    assert ratings.names() == {1: "Klara"}
+
+
+def names_after(ratings, sightings: list[str], track: int = 1) -> list[str]:
+    """The name a body carries after each of a series of face sightings, one a second."""
+    shown = []
+    for second, label in enumerate(sightings):
+        ratings.name(tracking.Frame(float(second), {track: body(100, 100)}),
+                     [face(100, 100, label)])
+        shown.append(ratings.names().get(track))
+    return shown
+
+
+def test_a_body_named_by_the_cast_is_not_renamed_by_a_single_other_name(ratings):
+    shown = names_after(ratings, ["Klara"] * 4 + ["Jakob"] + ["Klara"] * 2)
+    assert set(shown) == {"Klara"}
+
+
+def test_a_guess_does_not_replace_a_cast_name(ratings):
+    shown = names_after(ratings, ["Klara", "Vielleicht: Theo", "Vielleicht: Rosa"])
+    assert shown == ["Klara"] * 3
+
+
+def test_a_guess_names_a_body_the_cast_has_not(ratings):
+    shown = names_after(ratings, ["Vielleicht: Theo", "Vielleicht: Rosa", "Klara"])
+    assert shown == ["Vielleicht: Theo", "Vielleicht: Rosa", "Klara"]
+
+
+def test_a_body_seen_steadily_as_someone_else_is_renamed(ratings):
+    """The body tracker can carry one person's track over to another."""
+    shown = names_after(ratings, ["Klara"] * 5 + ["Jakob"] * 8)
+    assert shown[5] == "Klara"
+    assert shown[-1] == "Jakob"
 
 
 def test_a_body_that_left_keeps_its_name_for_what_it_did(ratings):

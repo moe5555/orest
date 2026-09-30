@@ -129,6 +129,65 @@ def test_old_frames_are_dropped():
     assert tracker.frames[0].at >= tracker.frames[-1].at - 1.0
 
 
+# ---- ghosts -------------------------------------------------------------------
+
+# Kneeling upright: torso as standing, knees on the floor, shins behind.
+KNEELING = STANDING.copy()
+KNEELING[:13, 1] += 0.35
+KNEELING[13:15] = [[-0.09, -0.02], [0.09, -0.02]]
+KNEELING[15:17] = [[-0.30, -0.02], [-0.12, -0.02]]
+
+
+def bodies_after(*people):
+    """The bodies the tracker follows, given (keypoints, mean score, visible joints) per detection."""
+    keypoints = np.stack([points for points, _, _ in people])
+    scores = np.zeros(keypoints.shape[:2], dtype=np.float32)
+    for row, (_, score, visible) in enumerate(people):
+        scores[row, visible] = score
+    return list(tracking.BodyTracker().update(keypoints, scores, at=0.0).bodies.values())
+
+
+def shadow_of(points: np.ndarray, shift: float = 100.0, scale: float = 1.1) -> np.ndarray:
+    """A person's pose cast onto a wall behind them: shifted aside and enlarged."""
+    centre = points[:13].mean(axis=0)
+    return (points - centre) * scale + centre + [shift, -20.0]
+
+
+ALL = slice(None)
+UPPER = slice(0, 13)
+
+
+def test_one_person_boxed_twice_is_followed_once():
+    person = figure(500)
+    found = bodies_after((person, 0.95, ALL), (person + 4.0, 0.85, ALL))
+    assert len(found) == 1
+    assert found[0].confidence == pytest.approx(0.95)
+
+
+def test_a_shadow_beside_a_person_is_not_followed():
+    person = figure(500)
+    found = bodies_after((person, 0.95, ALL), (shadow_of(person), 0.68, UPPER))
+    assert len(found) == 1
+
+
+def test_a_shadow_read_as_seen_from_behind_is_not_followed():
+    person = figure(500)
+    mirrored = shadow_of(person)[tracking.MIRRORED]
+    assert len(bodies_after((person, 0.95, ALL), (mirrored, 0.68, UPPER))) == 1
+
+
+def test_someone_kneeling_beside_a_standing_person_is_followed():
+    """Overlapping and as unsure as a shadow, but in a pose of their own."""
+    standing = figure(500)
+    kneeling = KNEELING * 500 + [560, 900]
+    assert len(bodies_after((standing, 0.95, ALL), (kneeling, 0.7, ALL))) == 2
+
+
+def test_a_confident_person_overlapping_another_is_followed():
+    person = figure(500)
+    assert len(bodies_after((person, 0.95, ALL), (shadow_of(person), 0.9, ALL))) == 2
+
+
 # ---- grouping -----------------------------------------------------------------
 
 def track(frames_of_figures, fps=25.0):

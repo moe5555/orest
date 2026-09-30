@@ -30,6 +30,12 @@ const TENDENZ = { zuspitzend: "↗", gleichbleibend: "→", beruhigend: "↘" };
 let current = null;
 let feedOpen = false;
 
+// Views over the same snapshot, by the name their tab carries. A view may
+// define render(snapshot), taste(key) returning true for a key it handles in
+// place of the page's own, and verlassen() when another tab is chosen.
+// Prototype scripts add themselves here.
+const ANSICHTEN = { uebersicht: {} };
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -503,7 +509,30 @@ function render(snapshot) {
   renderReportStatus(snapshot);
   $("report").hidden = !snapshot.report;
   if (snapshot.report && changed("report", snapshot.report)) renderReport(snapshot.report);
+
+  for (const view of Object.values(ANSICHTEN)) view.render?.(snapshot);
 }
+
+// ---- Views ----------------------------------------------------------------
+
+const TABS = [...document.querySelectorAll(".ansichten [data-ansicht]")];
+
+// The chosen view is kept in the address (#p1), so a reload stays on it.
+function setAnsicht(name) {
+  if (!TABS.some((tab) => tab.dataset.ansicht === name)) name = "uebersicht";
+  const previous = document.body.dataset.ansicht;
+  if (previous !== name) ANSICHTEN[previous]?.verlassen?.();
+  document.body.dataset.ansicht = name;
+  for (const tab of TABS) {
+    if (tab.dataset.ansicht === name) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
+  }
+  history.replaceState(null, "", name === "uebersicht" ? location.pathname : `#${name}`);
+  if (current) render(current);
+}
+
+for (const tab of TABS) tab.addEventListener("click", () => setAnsicht(tab.dataset.ansicht));
+setAnsicht(location.hash.slice(1));
 
 function updateAge() {
   const age = $("age");
@@ -558,6 +587,10 @@ document.addEventListener("keydown", (event) => {
   if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
   const key = event.key.toLowerCase();
+  if (ANSICHTEN[document.body.dataset.ansicht]?.taste?.(key)) {
+    event.preventDefault();
+    return;
+  }
   if (key === "r") askBericht();
   else if (key === "e") askEmpfehlung();
   else return;

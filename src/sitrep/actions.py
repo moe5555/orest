@@ -10,11 +10,18 @@ Three steps turn readings into ratings:
 
 Naming. The recogniser follows bodies, while the report names people by face.
 Each time the recogniser classifies, every body whose head joints lie in a
-face box the presence tracker saw within FACE_AGE seconds takes that face's
-name. A name belongs to one body in view: seen on a second body in the same
-frame, it leaves the first. A body that has left the frame keeps its name for
-what it did while it was there, so a camera cut or a lost track does not
-unname its earlier readings. Readings are kept
+face box the presence tracker saw within FACE_AGE seconds is sighted as that
+face's name. A body's cast name is weighed on its sightings rather than taken
+from the latest: each sighting is a vote, votes fade with VOTE_HALF_LIFE, and
+another cast name replaces the one a body carries only once it leads by SWITCH
+votes. A single wrong face, a face track split by a turned head, or a guess
+at an unrecognised face therefore does not rename a body the cast gallery
+has named; a body the tracker has confused with another person is renamed
+within a few seconds. A guess names a body only while no cast name does.
+A cast name belongs to one body in view, the one that holds it unless
+another leads it by SWITCH votes for that name. A body that has left the
+frame keeps its name for what it did while it was there, so a camera cut or a
+lost track does not unname its earlier readings. Readings are kept
 under the body and named only when a report takes them, so a body named at
 any point before then is rated on all its readings, including those made
 before its face was seen. A body that never shows its face is not rated.
@@ -54,6 +61,19 @@ FACE_AGE = 2 * presence.INTERVAL
 # How far a head may lie outside a face box, as a share of the box's size, and
 # still be named by it. The box can be FACE_AGE old, and a person moves.
 FACE_MARGIN = 0.5
+
+# Seconds in which a body's votes for a cast name halve. At one sighting a
+# naming step, a steadily named body settles at about five votes, which a
+# contrary name overtakes by SWITCH only after five or six sightings in a row.
+VOTE_HALF_LIFE = 3.0
+
+# Votes by which another cast name must lead the one a body carries to take
+# its place, on that body or on another body in view.
+SWITCH = 2.0
+
+# Seconds a body's votes are kept after its last sighting in view. Longer than
+# the body tracker's own FORGET, after which the track cannot return.
+VOTES_KEPT = 10.0
 
 # COCO-17 joints of the head: nose, eyes, ears.
 HEAD = slice(0, 5)
@@ -188,6 +208,13 @@ class ActionRatings:
         self.mapping = mapping or sitrep_map.load()
         self._faces = faces
         self._names: dict[int, str] = {}
+        # Per body, in recogniser time: votes for each cast name, when they
+        # were last faded, the latest guess a face sighting made, and when a
+        # face was last sighted on it.
+        self._votes: dict[int, dict[str, float]] = {}
+        self._voted_at: dict[int, float] = {}
+        self._guesses: dict[int, str] = {}
+        self._sighted_at: dict[int, float] = {}
         self._records: list[Evidence] = []
         self._lock = threading.Lock()
         # The last classification, every body included, and how many there
@@ -252,15 +279,79 @@ class ActionRatings:
 
     def name(self, frame: tracking.Frame, faces: list[tuple[np.ndarray, str]]):
         """Name the bodies in a frame from the faces seen around it."""
-        named = name_bodies(frame, faces)
+        sighted = name_bodies(frame, faces)
         with self._lock:
-            for track, label in named.items():
-                # A name belongs to one body in view: seen on this one, it
-                # leaves any other body in the same frame.
-                for other in [other for other, held in self._names.items()
-                              if held == label and other != track and other in frame.bodies]:
-                    del self._names[other]
-                self._names[track] = label
+            for track in frame.bodies:
+                if track in self._votes:
+                    self._fade(track, frame.at)
+            for track, label in sighted.items():
+                self._sighted_at[track] = frame.at
+                if presence.guessed(label):
+                    self._guesses[track] = label
+                    continue
+                if track not in self._votes:
+                    self._votes[track] = {}
+                    self._voted_at[track] = frame.at
+                votes = self._votes[track]
+                votes[label] = votes.get(label, 0.0) + 1.0
+
+            chosen = {track: self._choose(track) for track in frame.bodies
+                      if track in self._votes}
+            self._one_body_per_name(chosen)
+
+            for track in frame.bodies:
+                cast = chosen.get(track)
+                if cast is not None:
+                    self._names[track] = cast
+                elif track in self._guesses:
+                    self._names[track] = self._guesses[track]
+                elif track in self._votes:
+                    # Its cast name went to another body in view.
+                    self._names.pop(track, None)
+            self._drop_stale_votes(frame)
+
+    def _fade(self, track: int, at: float):
+        """Fade a body's votes to recogniser time `at`."""
+        factor = 0.5 ** (max(0.0, at - self._voted_at[track]) / VOTE_HALF_LIFE)
+        self._votes[track] = {name: votes * factor for name, votes in self._votes[track].items()}
+        self._voted_at[track] = at
+
+    def _choose(self, track: int) -> str | None:
+        """The cast name a body's votes give it, keeping the one it carries until overtaken."""
+        votes = self._votes[track]
+        if not votes:
+            return None
+        leader = max(votes, key=votes.get)
+        held = self._names.get(track)
+        if held in votes and votes[leader] < votes[held] + SWITCH:
+            return held
+        return leader
+
+    def _one_body_per_name(self, chosen: dict[int, str | None]):
+        """Leave each cast name on one body in view, unnaming the others in `chosen`."""
+        claimants: dict[str, list[int]] = {}
+        for track, cast in chosen.items():
+            if cast is not None:
+                claimants.setdefault(cast, []).append(track)
+        for cast, tracks in claimants.items():
+            if len(tracks) < 2:
+                continue
+            strongest = max(tracks, key=lambda track: self._votes[track][cast])
+            holder = next((track for track in tracks if self._names.get(track) == cast), None)
+            keeper = strongest
+            if (holder is not None and self._votes[strongest][cast]
+                    < self._votes[holder][cast] + SWITCH):
+                keeper = holder
+            for track in tracks:
+                if track != keeper:
+                    chosen[track] = None
+
+    def _drop_stale_votes(self, frame: tracking.Frame):
+        """Forget the votes and guess of bodies unsighted and out of view for VOTES_KEPT."""
+        for track in [track for track, at in self._sighted_at.items()
+                      if track not in frame.bodies and frame.at - at > VOTES_KEPT]:
+            for kept in (self._sighted_at, self._votes, self._voted_at, self._guesses):
+                kept.pop(track, None)
 
     def record(self, readings: list[recognizer.Reading], at: datetime):
         """Weigh readings and keep them under the bodies they are of."""
@@ -286,6 +377,10 @@ class ActionRatings:
         with self._lock:
             self._records = []
             self._names = {}
+            self._votes = {}
+            self._voted_at = {}
+            self._guesses = {}
+            self._sighted_at = {}
             self.latest = []
         self.recognizer.tracker.frames.clear()
 

@@ -6,6 +6,183 @@ referenced below.
 
 ---
 
+## 2026-09-30 — Prototype 1 laid out for a landscape projection (VSH-ARLT-5090)
+
+Set by Moe, since the display is projected in landscape
+(`knowledge/components/03_render.md`, Prototype 1): the picture on the left,
+two thirds of the width at 16:9; on the right the two people in view, one
+above the other, the left-most on top, with the alarm directly beneath them.
+The whole is centred vertically. Errors and a silent sound source span both
+columns above. Einschreiten and the report on R are unchanged.
+
+The people and the alarm share one column container (`.p1-seite`), so the
+alarm follows the people rather than a grid row stretched to the picture's
+height. The rating bars narrow on smaller screens so the labels stay whole.
+
+**Verified** in headless Edge at 1920×1080 and 1280×720 against a stand-in run
+with fixed data, with and without the alarm. Headless Edge does not draw the
+MJPEG feed, so the picture itself was not checked. 490 tests pass.
+
+---
+
+## 2026-09-30 — Ghost bodies removed: duplicates and shadows (VSH-ARLT-5090)
+
+The pose model reported people who were not there, and the body tracker
+followed, named and classified them as someone beside the real person. On the
+Probebühne camera with Lena alone, 78% of frames held a second or third body:
+**her shadow on the projection screen** behind her, read as an upper body
+overlapping hers. On the test footage, **the same person boxed twice**. Both
+took names from the real person, produced pair readings ("pat on back",
+"touch other person's pocket") with her, and pushed real people out of the
+two tallest bodies that are rated and shown.
+
+`action.tracking.without_ghosts` drops them before linking. A detection is
+measured against every more confident one in the same frame:
+
+- **Duplicate:** its joints lie on the other's, on average under 6% of body
+  height away (`DUPLICATE_APART`). Measured: duplicates ≤ 0.05, a second person
+  overlapping another ≥ 0.36.
+- **Shadow:** at least 15% of its box inside the other's, joints averaging
+  under 0.80, and its pose the other's own, shifted and scaled, to within 10%
+  of body height (`SHADOW_*`), sides as labelled or exchanged. Measured: Lena's
+  shadow scored 0.61–0.82 and fitted within 0.02–0.14 (p95 0.07).
+
+**Confidence alone does not separate them.** In "Fool for Love" an actress
+kneeling beside a standing actor overlaps his box at 0.63–0.79, as unsure as a
+shadow; her own pose fits his no better than 0.13. The copy fit keeps her.
+
+**Measured:**
+
+| | before | after |
+|---|---|---|
+| Lena alone, frames with more than one body (615 frames) | 78% | 2% |
+| "Fool for Love" 0–120 s, real overlapping people kept | 16 of 16 | 16 of 16 |
+| "Four Dogs" 120–300 s, body label changes (`sitrep.namecheck`) | 11 | 2 |
+
+Of the two remaining changes one is the camera cut described in the entry
+below. 5 new tests; 490 pass.
+
+---
+
+## 2026-09-30 — Names hold: body names are voted, face tracks also link by place (VSH-ARLT-5090)
+
+"Who is in the scene" (`knowledge/components/02_processing.md`, Realtime-SITREP)
+lost correct names within seconds: Moe saw a person alone on stage, rightly
+named, shown as someone else a few frames later. Two causes, both measured:
+
+- **A face track split whenever the embedding dipped.** A turned head, a hand
+  or a change of light scored below the link threshold against the person's own
+  track and below the naming threshold against the cast, so a new track began
+  with a guessed name in the very place the named one had just been.
+- **A body took whichever name the latest face gave it.** One split face track
+  was enough to rename the body on the operator's video, guess over cast name.
+
+**Face tracks link by place as a third cue** (`presence.PLACE_LINK`,
+`PLACE_AGE`). A face no embedding cue claims continues the track sighted within
+the last two passes whose box it overlaps by IoU ≥ 0.3, unless the cast gallery
+names the face as someone other than that track.
+
+**Body names are weighed on their sightings** (`actions.ActionRatings.name`).
+Each face sighting of a cast name is a vote on the body; votes halve every 3 s
+(`VOTE_HALF_LIFE`); another cast name replaces the one a body carries only once
+it leads by two votes (`SWITCH`), about five sightings in a row. The same
+margin decides which body in view keeps a name two of them claim. A guess names
+a body only while no cast name does, set by Moe: a person the cast has
+recognised should keep that name.
+
+**Replay check: `python -m sitrep.namecheck`.** Walks a recording through the
+face tracker and body naming on the footage's own clock, as a live run wires
+them, and prints every name made, lost or changed, then a summary: how close
+faces score to the naming threshold, how many face tracks split off a live one,
+and body label changes by kind.
+
+**Measured** on "Four Dogs a Bone", 120–300 s, two actors enrolled from the
+scene's first 90 s (not in the repository):
+
+| | before | after |
+|---|---|---|
+| face tracks started | 23 | 13 |
+| of them split off a live track | 13 | 3 |
+| body label changes | 27 (9.0/min) | 11 (3.7/min) |
+| of them cast name → guess | 5 | 0 |
+| body-seconds under a cast name | 89% | 93% |
+
+The one cast → cast change is a camera cut the body tracker carried from one
+actor to the other; it is now corrected after 4 s instead of 1 s, which is the
+price of names that hold. The remaining changes are a cast name passing between
+**two bodies pose detection places on one person**, overlapping boxes around the
+same actor (seen at 226 s). The duplicate also pushes the other actor out of
+the two tallest bodies. Suppressing overlapping bodies in `action.tracking` is
+the next step. Enrolment from the same footage flatters recognition; the
+cast's phone photographs (`data/cast`) against the rehearsal camera are
+unmeasured.
+
+9 new tests, one rewritten for the new rule; 485 pass.
+
+**Live check**, AVMATRIX camera, Lena enrolled from phone photographs, the
+operator page's state read twice a second for 90 s:
+
+- **Lena alone (16–90 s): named in 99% of samples, never under another name**,
+  including while crouched with her face to the floor.
+- **A second body beside her in 17% of samples**, shown as `Körper <id>`
+  over her upper body: her shadow on the projection screen. Removed in the
+  entry above.
+- **Alessa passing behind Lena, back to the camera (0–16 s)**, was guessed at
+  as three different names in turn and recognised as Alessa for about 1.5 s.
+  Moe keeps the guesses as they are: a guess that stuck to the body would keep
+  a wrong name as well as a right one. For 1 s two bodies both showed "Lena":
+  the one-body-per-name rule runs only at the next naming step, and a body
+  missing from that step's frame keeps its name.
+
+---
+
+## 2026-09-29 — Live SITREP display, Prototype 1, as a tab of the operator page (VSH-ARLT-5090)
+
+The first display prototype of `knowledge/components/03_render.md` ("Live
+SITREP", Prototype 1) is a second view of `/sitrep`, beside the existing one.
+Faint tabs at the top switch between "Übersicht" and "Prototyp 1"; the choice
+is kept in the address (`/sitrep#p1`). Both views read the same snapshot, so
+the run, its readers and the existing view are unchanged.
+
+- **Picture on the top third**, boxes and names as the overlay already draws
+  them: each name on a tag at the box's top-left corner.
+- **Beneath it, the two people in view**, left and right as they stand, with
+  their live Risiko and Menschlichkeit. A person in view without evidence reads 0.
+- **Beneath them, the live alarm** while it is raised, set by Moe: who, their
+  Risiko and the cause, as the overview's alarm panel words it. Nothing while
+  it is not. Nothing else of the run is shown; an error or a silent sound
+  source still is.
+- **Einschreiten** fills the page in red while the latest Empfehlung
+  recommends it, until the next Empfehlung says otherwise, set by Moe. E still
+  asks for a new one. Beneath the word, set by Moe: why (the Empfehlung's
+  `lage`, the model's sentence on what is happening) and what to do (its
+  `empfehlung`).
+- **R** shows the Lagebericht alone, centred, and asks for a new one; R again
+  returns. The report takes precedence over Einschreiten, since it was asked for.
+- **Szene values left out**, set by Moe: no source produces them continuously
+  (Chronik, Empfehlung and Lagebericht each have their own rhythm).
+
+**One addition to the snapshot:** `im_bild`, the names on the video's boxes
+ordered left to right (`interface.live.im_bild`), read from the same
+`ActionRatings.visible()` the overlay draws. The live values alone cannot
+serve: they hold everyone with evidence in the last ~80 s, including people who
+have left the frame.
+
+Each prototype is its own script (`static/prototyp1.js`) that registers with
+`ANSICHTEN` in `sitrep.js`: a render function, the keys it takes over, and what
+to reset when its tab is left.
+
+**Verified** in headless Edge against a stand-in run with fixed data: the
+normal view with two people placed by position, the full-page Einschreiten, and
+the report on R. 3 new tests; 476 pass.
+
+**Open:** on the test footage the two tallest bodies are shown, audience
+included, as `Körper <id>` until a face names them. Moe intends to show only
+people in the cast; that needs the cast enrolment in `data/cast`
+(`progress_tracker.md`, cast recognition).
+
+---
+
 ## 2026-09-29 — Decision: QLab owns the final output and projection
 
 **Decided by Moe.** QLab owns the outputs (mapping, blending, cue timeline);

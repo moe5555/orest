@@ -5,9 +5,19 @@ Overview: pipeline.md
 How will the live SITREP be displayed? Let's create a new tab on localhost for each prototype UI. 
 
 ### Prototype 1
+Video feed displayed on the top third of the page, with bounding boxes and names of the characters attached top left on the bounding box. 
 
+> Changed 30.09.26 (Moe): the display is projected in landscape. The video is on the left, the two characters in view on the right, one above the other, with the alarm beneath them.
 
+Below video feed: Szenen Werte and color coded categorisation word (currently it is often "Ruhig").
 
+Below that, to the left and to the right, the two names of the two characters currently in view (names here match the names over the bounding boxes) and there respective SITREP values, updating continously. 
+
+If an Einschreiten is recommended, place this warning large, in red and as the only element of the page in the center. Once the value changes, go back to the regular view. 
+
+We do not see any of the other values, even if they are all still being recorded. 
+
+Press "R" once and the Reportbericht is displayed center of the page, no other elements visible. Press "R" again and we go back to the regular view. 
 
 ---
 

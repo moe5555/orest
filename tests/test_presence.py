@@ -33,6 +33,10 @@ class Face:
         self.bbox = np.array(bbox, dtype=np.float32)
 
 
+# A face box far from the default one, for a second person in the frame.
+ELSEWHERE = (300.0, 20.0, 380.0, 100.0)
+
+
 def tracker(cast=None) -> presence.PresenceTracker:
     """A tracker with no source; passes are driven through `_link` directly."""
     return presence.PresenceTracker(source=None, cast=cast)
@@ -135,9 +139,45 @@ def test_a_different_face_does_not_join_an_existing_track():
     subject = tracker()
     pass_of(subject, [unit((0, 1.0))])
     first = subject._tracks[0]
-    second = pass_of(subject, [unit((3, 1.0))], at=START + timedelta(seconds=1))[0]
+    second = pass_of(subject, [unit((3, 1.0))], faces=[Face(bbox=ELSEWHERE)],
+                     at=START + timedelta(seconds=1))[0]
     assert second is not first
     assert second.sightings == 1
+
+
+def test_a_face_where_a_track_just_was_continues_it():
+    """A turned head can score below the link threshold against its own track."""
+    subject = tracker()
+    first = pass_of(subject, [unit((0, 1.0))])[0]
+    turned = pass_of(subject, [unit((3, 1.0))], faces=[Face(bbox=(14.0, 22.0, 94.0, 102.0))],
+                     at=START + timedelta(seconds=presence.INTERVAL))[0]
+    assert turned is first
+    assert len(subject._tracks) == 1
+
+
+def test_a_face_in_a_place_left_long_ago_starts_its_own_track():
+    subject = tracker()
+    first = pass_of(subject, [unit((0, 1.0))])[0]
+    later = START + timedelta(seconds=presence.PLACE_AGE + 1)
+    assert pass_of(subject, [unit((3, 1.0))], at=later)[0] is not first
+
+
+def test_a_face_the_gallery_names_otherwise_does_not_continue_a_track_by_place():
+    subject = tracker(cast_of("klara", "moritz"))
+    klara = pass_of(subject, [unit((0, 1.0))])[0]
+    moritz = pass_of(subject, [unit((1, 1.0))],
+                     at=START + timedelta(seconds=presence.INTERVAL))[0]
+    assert moritz is not klara
+    assert (klara.name, moritz.name) == ("klara", "moritz")
+
+
+def test_an_unnamed_face_in_a_named_track_place_keeps_the_name():
+    subject = tracker(cast_of("klara"))
+    klara = pass_of(subject, [unit((0, 1.0))])[0]
+    turned = pass_of(subject, [unit((5, 1.0))],
+                     at=START + timedelta(seconds=presence.INTERVAL))[0]
+    assert turned is klara
+    assert turned.label == "klara"
 
 
 def test_two_people_are_not_swapped_when_both_are_present():
@@ -287,7 +327,8 @@ def test_a_name_reunites_a_person_whose_track_was_split():
 def test_two_tracks_that_turn_out_to_be_one_person_are_merged():
     subject = tracker()
     first = pass_of(subject, [unit((0, 1.0))], faces=[Face(40.0)])[0]
-    second = pass_of(subject, [unit((4, 1.0))], at=START + timedelta(seconds=1))[0]
+    second = pass_of(subject, [unit((4, 1.0))], faces=[Face(bbox=ELSEWHERE)],
+                     at=START + timedelta(seconds=1))[0]
     assert len(subject._tracks) == 2
 
     # Both tracks turn out to be the same cast member once the gallery is known.
@@ -309,7 +350,7 @@ def test_two_tracks_that_turn_out_to_be_one_person_are_merged():
 def test_merging_keeps_the_absorbed_track_faces():
     subject = tracker()
     first = pass_of(subject, [unit((0, 1.0))], faces=[Face(40.0)])[0]
-    second = pass_of(subject, [unit((4, 1.0))], faces=[Face(90.0)],
+    second = pass_of(subject, [unit((4, 1.0))], faces=[Face(90.0, ELSEWHERE)],
                      at=START + timedelta(seconds=1))[0]
     first.name = second.name = "klara"
     with subject._lock:

@@ -7,7 +7,8 @@ the page.
 
 The page is fed from a snapshot rather than from the session directly: status,
 the live values and alarm, the latest lines, the Chronik, the latest
-recommendation and report, the action recogniser's latest readings, and a
+recommendation and report, the action recogniser's latest readings, the names
+of the people boxed on the video, and a
 version number that rises with every change of the run's state, so a page
 polling or streaming the state knows whether anything is new.
 """
@@ -93,6 +94,15 @@ def werte(stand: lage.Stand) -> dict:
         "alarm": {"aktiv": stand.alarm.aktiv, "wert": stand.alarm.wert,
                   "wer": stand.alarm.wer, "anlass": stand.alarm.anlass},
     }
+
+
+def im_bild(visible: list[tuple]) -> list[str]:
+    """The names on the video's boxes, ordered left to right by box centre.
+
+    Takes what `actions.ActionRatings.visible()` returns, the same boxes and labels
+    the overlay draws, so a page can place each person where they stand.
+    """
+    return [name for box, name in sorted(visible, key=lambda seen: float(seen[0][0] + seen[0][2]))]
 
 
 def chronik_payload(kept: chronik.Chronik) -> dict:
@@ -268,6 +278,8 @@ class LiveSitrep:
                 "gestartet": self.started.isoformat(timespec="seconds") if self.started else None,
                 "quelle": quelle,
                 "aktionen": aktionen(run.actions) if run is not None else None,
+                "im_bild": (im_bild(run.actions.visible())
+                            if run is not None and run.actions is not None else []),
                 "ton": run.ton() if run is not None and run.meter is not None else None,
                 "werte": self.werte,
                 "zeilen": list(self.zeilen),

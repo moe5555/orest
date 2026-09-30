@@ -124,6 +124,26 @@ def test_the_sitrep_page_is_served_with_its_script(client):
     assert client.get("/static/sitrep.js").status_code == 200
 
 
+def test_the_sitrep_page_offers_prototype_1_as_a_tab(client):
+    page = client.get("/sitrep").text
+    assert 'data-ansicht="uebersicht"' in page and 'data-ansicht="p1"' in page
+    assert "/static/prototyp1.js" in page
+    assert client.get("/static/prototyp1.js").status_code == 200
+
+
+def test_the_people_in_view_are_named_left_to_right():
+    visible = [(np.array([400, 10, 500, 300]), "Klara"),
+               (np.array([20, 40, 120, 310]), "Körper 3")]
+    assert live_module.im_bild(visible) == ["Körper 3", "Klara"]
+    assert live_module.im_bild([]) == []
+
+
+def test_nobody_is_in_view_without_action_recognition(live, run):
+    live.start()
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    assert live.snapshot()["im_bild"] == []
+
+
 def test_a_report_is_made_when_asked_for_and_reaches_the_snapshot(client, live, run):
     assert client.post("/api/sitrep/start").json()["started"]
     assert wait_for(lambda: live.status == live_module.RUNNING)
@@ -340,7 +360,7 @@ def test_a_stopped_recogniser_reports_its_error():
 
 def test_the_page_and_its_script_are_revalidated_on_every_load(client):
     """A cached page paired with a newer script renders nothing."""
-    for path in ("/", "/sitrep", "/static/sitrep.js", "/static/style.css"):
+    for path in ("/", "/sitrep", "/static/sitrep.js", "/static/prototyp1.js", "/static/style.css"):
         assert client.get(path).headers["cache-control"] == "no-cache"
 
 
