@@ -413,6 +413,16 @@ body[data-ansicht="p1"] .top .feed { height: auto; aspect-ratio: 16 / 9; max-hei
 .p1-zeile { display: grid; gap: 10px; max-width: 1100px; text-align: center; }
 .p1-zeile .label { color: var(--red); opacity: 0.8; }
 .p1-zeile p { margin: 0; color: var(--text); font: 500 clamp(20px, 2.4vw, 36px)/1.35 var(--sans); }
+.p1-override {
+  margin-top: 8px;
+  padding: 12px 28px;
+  font: 600 18px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-dim); background: transparent;
+  border: 1px solid #6a2a2e; border-radius: var(--radius);
+  cursor: pointer;
+}
+.p1-override:hover, .p1-override:focus-visible { color: var(--text); border-color: var(--red); }
+.p1-override kbd { margin-right: 10px; font-size: 13px; }
 body[data-ansicht="p1"][data-p1="einschreiten"] .ansichten,
 body[data-ansicht="p1"][data-p1="einschreiten"] .wrap > :not(.p1-einschreiten) { display: none; }
 body:not([data-p1="einschreiten"]) .p1-einschreiten { display: none; }

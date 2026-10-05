@@ -5,7 +5,8 @@
 // alarm while it is raised. Nothing else of the run is shown.
 //
 // Two states replace the whole page. A recommendation to intervene shows
-// alone, with its reason and measure, until the next recommendation; R shows the report alone, and R again
+// alone, with its reason and measure, until the next recommendation or until
+// the operator overrides it (X); R shows the report alone, and R again
 // returns. The report takes precedence, since it was asked for.
 //
 // Draws from sitrep.js: the snapshot, its helpers and the report's markup.
@@ -72,9 +73,22 @@
     }
   }
 
+  // Override sets the shown recommendation aside on the server, which returns
+  // every view to its regular state. It names the recommendation by number,
+  // so one that arrived meanwhile is not set aside unseen.
+  function override() {
+    if (!current || modus(current) !== "einschreiten") return;
+    post(`/api/sitrep/override?nummer=${current.empfehlung.nummer}`);
+  }
+
   // R shows the report and asks for a new one while the run is live; with no
-  // run and no earlier report there is nothing to show.
+  // run and no earlier report there is nothing to show. X overrides a
+  // recommendation to intervene while it is on screen.
   function taste(key) {
+    if (key === "x" && current && modus(current) === "einschreiten") {
+      override();
+      return true;
+    }
     if (key !== "r") return false;
     if (bericht) {
       bericht = false;
@@ -90,6 +104,8 @@
     bericht = false;
     document.body.dataset.p1 = "normal";
   }
+
+  $("p1-override").addEventListener("click", override);
 
   ANSICHTEN.p1 = { render, taste, verlassen };
   if (current) render(current);

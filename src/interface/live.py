@@ -256,6 +256,22 @@ class LiveSitrep:
         run = self.session
         return run.empfehlung() if run is not None and self.status == RUNNING else False
 
+    def uebergehen(self, nummer: int | None = None) -> bool:
+        """Set the recommendation aside, so the page returns to its regular view.
+
+        With `nummer`, only that recommendation is set aside: one that arrived
+        after the operator decided stays on screen. The run is not told; the
+        next recommendation shows as usual.
+        """
+        with self._lock:
+            if self.empfehlung is None:
+                return False
+            if nummer is not None and self.empfehlung["nummer"] != nummer:
+                return False
+            self.empfehlung = None
+            self.version += 1
+            return True
+
     def snapshot(self) -> dict:
         """Everything the page shows, at one moment."""
         with self._lock:

@@ -198,6 +198,47 @@ def test_lines_live_values_and_recommendations_reach_the_snapshot(live, run):
     assert snapshot["empfehlung"]["nummer"] == 1
 
 
+def _empfehlung(nummer):
+    now = datetime(2026, 9, 29, 20, 0, 5)
+    return session.NeueEmpfehlung(report.Empfehlung(
+        zeit=now, anlass="Alarm", latenz_s=1.1, urteil=report.Urteil(
+            lage="Drohung.", empfehlung="Probe unterbrechen.",
+            szene=report.Szene(relevanz=8, eskalation=8, gefahr=7))), nummer)
+
+
+def test_an_override_sets_the_recommendation_aside(client, live, run):
+    client.post("/api/sitrep/start")
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    run.emit(_empfehlung(1))
+    assert wait_for(lambda: live.empfehlung is not None)
+    version = live.version
+
+    answer = client.post("/api/sitrep/override", params={"nummer": 1}).json()
+    assert answer["uebergangen"]
+    assert answer["empfehlung"] is None
+    assert live.version > version
+    assert not client.post("/api/sitrep/override").json()["uebergangen"]
+
+
+def test_an_override_keeps_a_recommendation_that_arrived_meanwhile(client, live, run):
+    client.post("/api/sitrep/start")
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    run.emit(_empfehlung(1))
+    run.emit(_empfehlung(2))
+    assert wait_for(lambda: live.empfehlung is not None and live.empfehlung["nummer"] == 2)
+
+    answer = client.post("/api/sitrep/override", params={"nummer": 1}).json()
+    assert not answer["uebergangen"]
+    assert answer["empfehlung"]["nummer"] == 2
+
+
+def test_prototype_1_offers_the_override_on_x(client):
+    page = client.get("/sitrep").text
+    assert 'id="p1-override"' in page and "<kbd>X</kbd> Override" in page
+    script = client.get("/static/prototyp1.js").text
+    assert "/api/sitrep/override?nummer=" in script and 'key === "x"' in script
+
+
 def test_starting_twice_does_not_open_a_second_run(client, live):
     assert client.post("/api/sitrep/start").json()["started"]
     assert not client.post("/api/sitrep/start").json()["started"]

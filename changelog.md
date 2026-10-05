@@ -6,6 +6,26 @@ referenced below.
 
 ---
 
+## 2026-10-01 — Prototype 1: Override for a recommendation to intervene
+
+Requested by Moe (`knowledge/components/03_render.md`, Prototype 1,
+Einschreiten): the Einschreiten screen has an **Override** button. Clicking it
+or pressing **X** sets the recommendation aside and the page returns to its
+regular view. Before this, the screen stayed up until the next recommendation.
+
+`POST /api/sitrep/override?nummer=N` (`LiveSitrep.uebergehen`) clears the
+recommendation on the server, so the Übersicht shows "Keine Empfehlung" as
+well. The page sends the number of the recommendation on screen, so a newer
+one that arrived in the meantime stays visible. The run itself is not told:
+the next automatic or requested recommendation appears as usual, and
+TouchDesigner gets no OSC message for an override.
+
+**Verified** by tests for the endpoint (clear, stale number, nothing to clear)
+and for the markup and key binding. 493 tests pass. Not yet checked in a
+browser.
+
+---
+
 ## 2026-09-30 — Prototype 1 laid out for a landscape projection (VSH-ARLT-5090)
 
 Set by Moe, since the display is projected in landscape

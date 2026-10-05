@@ -6,6 +6,8 @@
     POST /api/sitrep/stop    end it
     POST /api/sitrep/bericht     ask for a report (key R on the page)
     POST /api/sitrep/empfehlung  ask for a recommendation (key E on the page)
+    POST /api/sitrep/override    set the recommendation aside (key X on the page);
+                                 ?nummer=N only if it is still recommendation N
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
     /api/sitrep/video        the camera as an MJPEG stream
@@ -105,6 +107,11 @@ def create_app(live: LiveSitrep) -> FastAPI:
     def empfehlung():
         angefordert = live.empfehlen()
         return JSONResponse({"angefordert": angefordert, **live.snapshot()})
+
+    @app.post("/api/sitrep/override")
+    def override(nummer: int | None = None):
+        uebergangen = live.uebergehen(nummer)
+        return JSONResponse({"uebergangen": uebergangen, **live.snapshot()})
 
     @app.get("/api/sitrep/state")
     def state():

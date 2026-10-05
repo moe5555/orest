@@ -13,7 +13,7 @@ Below video feed: Szenen Werte and color coded categorisation word (currently it
 
 Below that, to the left and to the right, the two names of the two characters currently in view (names here match the names over the bounding boxes) and there respective SITREP values, updating continously. 
 
-If an Einschreiten is recommended, place this warning large, in red and as the only element of the page in the center. Once the value changes, go back to the regular view. 
+If an Einschreiten is recommended, place this warning large, in red and as the only element of the page in the center. Once the value changes or the operator presses X, go back to the regular view. 
 
 We do not see any of the other values, even if they are all still being recorded. 
 
