@@ -21,7 +21,7 @@ Overview: components/pipeline.md
   - prediction of what might happen next. 
   - whether to interfere, if so, what to do. 
 - prioritises low latency over accuracy 
-- the system should be able to understand, when it is spoken to. If the system is directly spoken to e.g. via "System" or "Apollon". 
+- the system should be able to understand when it is spoken to. If the system is directly spoken to, e.g. via "System" or "Apollon", it should be able to react. 
 
 Implementation Steps: 
 1. Install Gemma-4b and deploy via Ollama

@@ -186,6 +186,26 @@ Source playing a recording, then **Start Virtual Camera**, then
 `--video "OBS Virtual Camera"`. OBS sends no audio this way, so `gesagt` stays
 empty.
 
+**Recording in OBS while the SITREP watches.** A capture device such as
+`SandbergCapture` can be opened by one application at a time, so OBS and the
+SITREP cannot both open it. Let OBS hold it and pass the picture on:
+
+1. In OBS, add `SandbergCapture` as a Video Capture Device source and record
+   as usual.
+2. Set **Settings → Video → Output (Scaled) Resolution** to the camera's
+   resolution, e.g. 1920×1080. The virtual camera sends at this size and
+   otherwise defaults to a smaller one.
+3. Click **Start Virtual Camera**. Its gear icon can set the output type to
+   **Source → SandbergCapture**, which sends the camera alone, without the
+   rest of the scene.
+4. Run the SITREP from the virtual camera, with sound from OBS's NDI output
+   (DistroAV) or from the capture card's audio device:
+
+       uv run apollon-ui --video "OBS Virtual Camera" --audio-ndi "VSH-ARLT-5090 (OBS PGM)"
+
+Until the virtual camera is started, it sends an OBS logo, and the SITREP
+analyses that logo as if it were the stage.
+
 ### Sending the live SITREP to TouchDesigner
 
 Two channels, turned on separately — pixels and messages travel differently

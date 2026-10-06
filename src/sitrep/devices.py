@@ -197,10 +197,19 @@ def open_video(device: VideoDevice, width=None, height=None) -> cv2.VideoCapture
     Cameras silently fall back to a supported mode when the requested
     resolution is unavailable, so read the actual size back from the capture
     rather than assuming the request was honoured.
+
+    DirectShow hands a capture device to one application at a time. A device
+    that OBS records from is read through OBS's virtual camera instead, which
+    any number of readers can open while OBS keeps the device.
     """
     capture = cv2.VideoCapture(device.index, cv2.CAP_DSHOW)
     if not capture.isOpened():
-        raise RuntimeError(f"Could not open video device [{device.index}] {device.name!r}.")
+        raise RuntimeError(
+            f"Could not open video device [{device.index}] {device.name!r}. "
+            "It may be in use by another application: a device can be opened "
+            "by one application at a time. If OBS is capturing it, start OBS's "
+            "virtual camera and select \"OBS Virtual Camera\" here instead."
+        )
     if width:
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     if height:

@@ -6,6 +6,34 @@ referenced below.
 
 ---
 
+## 2026-10-06 — Recording in OBS while the live SITREP watches the same camera (VSH-ARLT-5090)
+
+**Moe's observation:** with OBS recording `SandbergCapture`, the live SITREP
+reported "Could not open video device [5] 'SandbergCapture'." and the camera
+stream in OBS froze.
+
+- **Cause.** DirectShow opens a capture device for one application at a
+  time. OBS held it, and the SITREP's attempt to open it failed and
+  interrupted OBS's stream. No change in Apollon lets both open the device.
+- **Setup.** OBS holds the device and records. Its virtual camera passes the
+  picture on, and the SITREP reads `--video "OBS Virtual Camera"`. The steps
+  are in the README ("Recording in OBS while the SITREP watches"). OBS is
+  then the Recorder of `pipeline.md` (CAPTURE, `REC`) and the SITREP one
+  reader of its stream.
+- **`devices.open_video`**: the error now says that the device may be held by
+  another application and names the virtual camera as the way through.
+
+**Checked** on this machine with OBS running: `OBS Virtual Camera` [17] opens
+alongside OBS and delivers frames (77 in 3 s). The virtual camera wasn't
+started, so it sent OBS's placeholder logo at 640×480. A run started in that
+state analyses the logo. 55 tests in the capture, session and NDI audio
+modules pass.
+
+**Still to do:** start the virtual camera with the Sandberg source and raise
+OBS's output resolution, then run the SITREP once while OBS records.
+
+---
+
 ## 2026-10-06 — System renamed from Orest to Apollon
 
 Set by Moe. The name changes everywhere in the repository, including earlier
