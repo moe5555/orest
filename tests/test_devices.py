@@ -42,7 +42,12 @@ def test_unknown_name_lists_what_is_available():
 
 def test_ambiguous_fragment_is_refused_rather_than_guessed():
     with pytest.raises(ValueError, match="matches 2 video devices"):
-        select("Meta Quest 3")
+        select("Meta Quest")
+
+
+def test_full_name_selects_its_device_beside_a_longer_name():
+    assert select("Meta Quest 3") is CAMERAS[2]
+    assert select("meta quest 3s") is CAMERAS[3]
 
 
 def test_empty_device_list_is_an_error():

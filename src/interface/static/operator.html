@@ -10,9 +10,21 @@
   <main class="operator-card">
     <h1 class="wordmark">APOLLON</h1>
     <span class="label">Operator</span>
+    <div class="sources">
+      <label class="field">
+        <span class="label">Kamera</span>
+        <select id="camera" disabled><option>Wird geladen …</option></select>
+      </label>
+      <label class="field">
+        <span class="label">Ton</span>
+        <select id="sound" disabled><option>Wird geladen …</option></select>
+      </label>
+      <p class="notice" id="notice" role="status"></p>
+    </div>
     <a class="button primary" href="/sitrep" target="_blank" rel="noopener">
       <span class="dot" aria-hidden="true"></span>Start live SITREP
     </a>
   </main>
+  <script src="/static/operator.js"></script>
 </body>
 </html>

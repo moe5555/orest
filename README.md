@@ -157,10 +157,15 @@ and the model's frames are marked as before.
 `src/interface/` serves the operator page on the loopback interface:
 
     uv run apollon-ui
-    uv run apollon-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
+    uv run apollon-ui --model gemma4:26b --window 15 --interval 5
 
-Open http://127.0.0.1:9680/. **Start live SITREP** opens a new tab and starts
-the run. Beside the camera are the alarm, the latest Empfehlung and each
+Open http://127.0.0.1:9680/. Choose the **Kamera** and the **Ton** from the
+dropdowns: every camera on the machine, NDI sources on the network (found
+after about two seconds), and every microphone, grouped by host API. The
+choice is saved to `data/interface/sources.json` (override:
+`APOLLON_UI_SOURCES`) and is still selected after a restart. A choice made
+during a run applies from the next start. **Start live SITREP** opens a new
+tab and starts the run. Beside the camera are the alarm, the latest Empfehlung and each
 person's live values; below it the lines as they are said and the Chronik
 with its eskalation curve. **R** (or the Lagebericht button) makes a report,
 **E** an Empfehlung. The header shows the sound's level; a source that has
@@ -175,9 +180,10 @@ recognised face appear as `Körper <id>` and don't count toward the report. In
 each report, **Gemessen** lists everyone the recogniser rated, with the action
 behind each rating.
 
-`apollon-ui` takes the same camera, microphone, window, `--cast`, `--send-td`
-and `--send-ndi` options as `apollon-sitrep`, and applies them to every run
-started from the page. Devices are resolved when a run starts, so a device
+`apollon-ui` takes the same window, `--cast`, `--send-td` and `--send-ndi`
+options as `apollon-sitrep`, and applies them to every run started from the
+page. `--video`, `--audio`, `--audio-api` and `--audio-ndi` preselect the
+sources and replace the saved choice. Devices are resolved when a run starts, so a device
 error appears on the page. Only one run can hold the camera at a time.
 Overrides: `APOLLON_UI_HOST`, `APOLLON_UI_PORT`.
 
@@ -198,10 +204,9 @@ SITREP cannot both open it. Let OBS hold it and pass the picture on:
 3. Click **Start Virtual Camera**. Its gear icon can set the output type to
    **Source → SandbergCapture**, which sends the camera alone, without the
    rest of the scene.
-4. Run the SITREP from the virtual camera, with sound from OBS's NDI output
-   (DistroAV) or from the capture card's audio device:
-
-       uv run apollon-ui --video "OBS Virtual Camera" --audio-ndi "VSH-ARLT-5090 (OBS PGM)"
+4. On the operator page, choose **OBS Virtual Camera** as the Kamera, and as
+   the Ton either OBS's NDI output (DistroAV, `VSH-ARLT-5090 (OBS PGM)`) or the
+   capture card's audio device.
 
 Until the virtual camera is started, it sends an OBS logo, and the SITREP
 analyses that logo as if it were the stage.

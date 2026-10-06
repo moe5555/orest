@@ -29,6 +29,9 @@ SAMPLERATE = 48000
 # machine takes one to two seconds.
 FIND_TIMEOUT = 10.0
 
+# Seconds to listen when listing the sources on the network.
+DISCOVER_SECONDS = 2.0
+
 # Milliseconds one receive call waits for a frame, and so how quickly the
 # receiving process notices it has been asked to stop. With this wait NDI
 # reported no dropped frame (2026-09-29); waits of 1-20 ms received fewer.
@@ -49,6 +52,24 @@ class NdiAudio:
     @property
     def name(self) -> str:
         return f"NDI {self.source}"
+
+
+def sources(seconds: float = DISCOVER_SECONDS) -> list[str]:
+    """Names of the NDI sources announced on the network, sorted.
+
+    Listens for `seconds` in full, since sources announce themselves one by
+    one. Runs in the calling process: the finder holds the interpreter lock
+    only for millisecond waits, unlike a receiver (`Receiving`).
+    """
+    from cyndilib.finder import Finder
+
+    finder = Finder()
+    finder.open()
+    try:
+        time.sleep(seconds)
+        return sorted(finder.get_source_names())
+    finally:
+        finder.close()
 
 
 def mono(data: np.ndarray, rate: int) -> np.ndarray:

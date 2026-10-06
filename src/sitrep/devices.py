@@ -117,6 +117,12 @@ def _select(spec, devices, kind, describe):
                 return device
         raise ValueError(f"No {kind} device with index {index}. Available:\n{describe(devices)}")
 
+    # A full name selects its device even where it is part of a longer name,
+    # e.g. "vMix Video External 3" beside "vMix Video External 3 YV12".
+    exact = [d for d in devices if d.name.casefold() == text.casefold()]
+    if len(exact) == 1:
+        return exact[0]
+
     matches = [d for d in devices if text.casefold() in d.name.casefold()]
     if not matches:
         raise ValueError(f"No {kind} device matching {text!r}. Available:\n{describe(devices)}")

@@ -11,6 +11,9 @@
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
     /api/sitrep/video        the camera as an MJPEG stream
+    /api/sources             the cameras and microphones on offer, and the selection
+    POST /api/sources        select the camera and sound source of the next run
+    /api/sources/ndi         the NDI sources on the network (takes two seconds)
 
 The camera travels as MJPEG because a browser plays it in a plain <img> with
 no script or codec, and on the loopback interface its bandwidth costs
@@ -24,11 +27,14 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import cv2
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from sitrep import ndi_audio
+
 from .live import LiveSitrep
+from .sources import Selection, Sources, available, resolved
 
 STATIC = Path(__file__).parent / "static"
 
@@ -66,7 +72,12 @@ async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]]):
         await asyncio.sleep(1 / VIDEO_FPS)
 
 
-def create_app(live: LiveSitrep) -> FastAPI:
+def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
+    """The routes, around one run and the selection of the sources it opens.
+
+    Without `selection`, the selection is kept in memory only.
+    """
+    selection = selection or Selection()
     app = FastAPI(title="Apollon", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -138,5 +149,22 @@ def create_app(live: LiveSitrep) -> FastAPI:
         return StreamingResponse(mjpeg(live, request.is_disconnected),
                                  media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-store"})
+
+    # Device enumeration blocks, so these are plain functions, which FastAPI
+    # runs on its thread pool.
+    @app.get("/api/sources")
+    def sources():
+        return JSONResponse({**available(), "selection": resolved(selection.sources)})
+
+    @app.post("/api/sources")
+    def choose(chosen: Sources):
+        try:
+            return JSONResponse({"selection": selection.choose(chosen)})
+        except (ValueError, RuntimeError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.get("/api/sources/ndi")
+    def ndi_sources():
+        return JSONResponse({"sources": ndi_audio.sources()})
 
     return app

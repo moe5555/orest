@@ -6,9 +6,11 @@
     uv run apollon-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
 
 Takes the same camera, microphone, window and output options as apollon-sitrep;
-they apply to every live SITREP started from the page. Devices are resolved
-when a run starts, not here, so a camera plugged in after the server started
-is found.
+they apply to every live SITREP started from the page. The camera and sound
+source are chosen on the operator page and remembered (interface/sources.py);
+--video, --audio, --audio-api and --audio-ndi preselect them. Devices are
+resolved when a run starts, not here, so a camera plugged in after the server
+started is found.
 
 Binds 127.0.0.1 by default. The page shows unreleased footage of identifiable
 people, as the WISE server does (smartsearch/config.py, HOST).
@@ -25,6 +27,7 @@ from sitrep import cli, report, session, transcribe
 
 from .app import create_app
 from .live import LiveSitrep
+from .sources import SOURCES_FILE, Selection, Sources
 
 HOST = os.environ.get("APOLLON_UI_HOST", "127.0.0.1")
 PORT = int(os.environ.get("APOLLON_UI_PORT", "9680"))
@@ -56,8 +59,10 @@ def main(argv=None) -> int:
                         help=f"port to serve on (default: {PORT})")
     args = parser.parse_args(argv)
 
+    selection = Selection.load(SOURCES_FILE, Sources.from_args(args))
+
     def open_session() -> session.Session:
-        video, audio = session.resolve_sources(args)
+        video, audio = session.resolve_sources(selection.sources)
         run = session.Session(video, audio, session.Options.from_args(args))
         for path in run.missing_enrolment:
             print(f"no face found in {path}", file=sys.stderr)
@@ -66,7 +71,7 @@ def main(argv=None) -> int:
     live = LiveSitrep(open_session)
     print(f"Apollon operator page: http://{args.host}:{args.port}/", flush=True)
     try:
-        uvicorn.run(create_app(live), host=args.host, port=args.port,
+        uvicorn.run(create_app(live, selection), host=args.host, port=args.port,
                     log_level="warning", timeout_graceful_shutdown=2)
     finally:
         live.stop()

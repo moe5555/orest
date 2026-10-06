@@ -6,6 +6,53 @@ referenced below.
 
 ---
 
+## 2026-10-06 — Camera and sound chosen on the operator page (VSH-ARLT-5090)
+
+Requested by Moe: the operator page has two dropdowns, **Kamera** and **Ton**,
+so the sources no longer have to be given on the command line. This is step 2
+of the Realtime-SITREP in `knowledge/components/02_processing.md` ("select
+video and audio source"), moved into the localhost interface.
+
+- **What is offered.** Every DirectShow camera; every microphone, grouped by
+  host API, since one microphone appears under each; and the NDI sources on
+  the network. NDI sources come from a separate request,
+  `GET /api/sources/ndi`, because the search takes two seconds
+  (`ndi_audio.sources`). Cameras and microphones appear at once.
+- **The server keeps the selection** (`interface/sources.py`, `Selection`),
+  not the page. A run started from any tab, or restarted from the SITREP page, opens
+  the same sources. `POST /api/sources` checks that the camera and microphone
+  exist and refuses the choice otherwise; the page shows why and returns to
+  the previous choice. An NDI source is checked when the run starts.
+- **Saved** to `data/interface/sources.json` (`APOLLON_UI_SOURCES`), so the
+  choice survives a restart of `apollon-ui`. `--video`, `--audio`,
+  `--audio-api` and `--audio-ndi` still work and replace the saved choice.
+  The sound is replaced as a whole: a microphone given on the command line
+  ends a saved NDI source.
+- **Devices are kept by full name**, as before (`devices.py`). `_select` now
+  takes a full name as that device even where it is part of a longer one:
+  "vMix Video External 3" was refused as ambiguous beside "vMix Video
+  External 3 YV12". A fragment that matches several devices is still refused.
+- A choice made during a run applies from the next start, and the page says
+  so.
+- **Code in English, interface text in German** (set by Moe). The new module,
+  routes, JSON fields, element ids and CSS classes are English; what the page
+  shows ("Kamera", "Ton", its notices) is German. Code written before this
+  still carries German names (e.g. `/api/sitrep/bericht`, the snapshot's
+  `quelle`).
+
+**Verified** on this machine with `apollon-ui` on a spare port, without
+starting a run: the page listed 18 cameras and 35 microphones under four host
+APIs and marked the selection given by `--video`. A choice was saved and
+reloaded, and an unknown camera was refused with the device list. Headless
+Edge rendered the page. No NDI source was on the network (OBS's NDI output
+was off), so a saved NDI source showed as "nicht gefunden". 9 new tests; 503
+pass.
+
+**Not yet checked:** a run started from the page with a choice made there,
+and the NDI list with OBS's NDI output on.
+
+---
+
 ## 2026-10-06 — Recording in OBS while the live SITREP watches the same camera (VSH-ARLT-5090)
 
 **Moe's observation:** with OBS recording `SandbergCapture`, the live SITREP
