@@ -67,7 +67,7 @@ async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]]):
 
 
 def create_app(live: LiveSitrep) -> FastAPI:
-    app = FastAPI(title="Orest", docs_url=None, redoc_url=None)
+    app = FastAPI(title="Apollon", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     @app.middleware("http")

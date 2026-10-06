@@ -3,7 +3,7 @@
 RTMO is one-stage: a frame goes in and every body's keypoints come out, with no
 separate person detector to run first. That keeps the pipeline to a single ONNX
 model, which matters because the same model has to run inside WISE's conda
-environment and inside Orest's, and the two hold incompatible numpy versions.
+environment and inside Apollon's, and the two hold incompatible numpy versions.
 An ONNX model is the only form that installs cleanly into both without dragging
 a second torch stack behind it.
 
@@ -48,7 +48,7 @@ def _add_cuda_libraries_to_path():
 
     Where torch is installed, as in WISE's environment, its complete CUDA 12
     runtime is used, avoiding a second multi-gigabyte copy. Elsewhere the
-    runtime comes from NVIDIA's pip packages (nvidia-*-cu12), which Orest's
+    runtime comes from NVIDIA's pip packages (nvidia-*-cu12), which Apollon's
     environment installs with onnxruntime-gpu. Their folders go on PATH rather
     than being preloaded, because cuDNN loads its sub-libraries by name on
     first use, which only a search path satisfies.
@@ -74,7 +74,7 @@ def device() -> str:
     session creation if the matching CUDA runtime is missing. What was actually
     used is reported by `active_provider()` after loading.
     """
-    override = os.environ.get("OREST_POSE_DEVICE")
+    override = os.environ.get("APOLLON_POSE_DEVICE")
     if override:
         return override
 

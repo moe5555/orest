@@ -1,10 +1,10 @@
 # Claude's Concerns
 
-Open questions and risks I have flagged while building Orest, with the evidence
+Open questions and risks I have flagged while building Apollon, with the evidence
 behind them. Written for Moe to decide on — I have not acted on any of these
 beyond what is already in the code. Newest first.
 
-**Anything that depends on which machine Orest runs on lives in
+**Anything that depends on which machine Apollon runs on lives in
 `hardware_issues.md`**, to be worked through in one pass once the production
 hardware is settled. Concerns here that have a hardware dimension cross-
 reference it rather than repeating the measurements.

@@ -1,12 +1,12 @@
 ---
-title: "Orest — Architecture Notes: Time, Cameras, Hindsight-SITREP, WISE Integration"
+title: "Apollon — Architecture Notes: Time, Cameras, Hindsight-SITREP, WISE Integration"
 date: 2026-08-28
 status: session notes, not implementation
 author: Claude
 project: "Human in the Loop"
 ---
 
-# Orest — Architecture Notes
+# Apollon — Architecture Notes
 
 Dated 2026-08-28. Results of a working session on the time model, camera
 setup, post-processing and search integration. Open items at the end.

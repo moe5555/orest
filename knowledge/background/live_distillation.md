@@ -19,7 +19,7 @@ Real surveillance systems separate three speeds (`live_sitrep_latency.md`,
 3. **Heavy analysis runs on request, or when an event triggers it**, and reads
    the log instead of the raw footage.
 
-Orest had only the third, run every window. Now it has all three:
+Apollon had only the third, run every window. Now it has all three:
 
 ```mermaid
 graph LR;
@@ -111,7 +111,7 @@ word, and stills from the last 15 s. Both share one fixed prompt opening
     running one is answered once after it.
   - `--no-auto-empfehlung` leaves it to E.
 - **Priority at the model.** Ollama serves one request at a time (measured),
-  so `llm.Gate` orders Orest's requests: line ratings, then Empfehlung, then
+  so `llm.Gate` orders Apollon's requests: line ratings, then Empfehlung, then
   Lagebericht, then the Chronik.
 
 ## Measured (Four Dogs, 0–405 s, `python -m sitrep.replay`)

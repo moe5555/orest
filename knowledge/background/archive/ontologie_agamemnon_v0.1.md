@@ -148,7 +148,7 @@ Typ zuordnen und verliert dabei genau die Doppelung, die die Figur ausmacht.
 ### 3.2 `Akteur` — Bewertungsschicht *(optional, Prognoseschicht)*
 
 Nicht aus dem Text ableitbar, sondern **erzeugt**. Übernimmt die sechs
-Dimensionen des laufenden Systems, damit Ontologie und Orest dieselbe
+Dimensionen des laufenden Systems, damit Ontologie und Apollon dieselbe
 Objektstruktur teilen. Wertebereich 0–100, jeweils mit `konfidenz` und
 `erzeugt_von`.
 
@@ -719,7 +719,7 @@ angenommen.
 Menelaos ist die einzige unauflösbare Stelle. Der Herold meldet den
 Seesturm, meldet ihn als vermisst, und die Trilogie kommt nicht darauf
 zurück. Ein Objekt mit dauerhaft undefiniertem Zustandsfeld, das kein
-System jemals schließt. Wenn Orest im Abend einen `status`-Wert erzwingen
+System jemals schließt. Wenn Apollon im Abend einen `status`-Wert erzwingen
 muss, ist das die Stelle, an der er konfabulieren wird.
 
 ---
@@ -767,15 +767,15 @@ Fluchlogik in Maschinenform, und sie terminiert aus demselben Grund nicht.
 
 ---
 
-## 14. Anbindung an Orest
+## 14. Anbindung an Apollon
 
 Vorschlag, falls die Ontologie nicht nur Analysewerkzeug bleiben soll.
 
-Orest schreibt bereits Beobachtungen mit `observed_at` / `judged_at` und
+Apollon schreibt bereits Beobachtungen mit `observed_at` / `judged_at` und
 sechs Bewertungsdimensionen. Dieselbe Objektstruktur, dieselben zwei
 Zeitachsen. Damit ist eine Kopplung möglich:
 
-1. **Textontologie als Referenzschema.** Orests Personenobjekte erben von
+1. **Textontologie als Referenzschema.** Apollons Personenobjekte erben von
    `Akteur`. Die Darsteller bekommen im Systemgraph dieselben
    Eigenschaftsfelder wie die Figuren.
 2. **`SCHULDET_BLUT` als Live-Kante.** Wenn eine Bewertung eine Schwelle

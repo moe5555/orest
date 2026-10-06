@@ -21,7 +21,7 @@ The source is read through WISE's media route rather than from disk. WISE keeps
 the source location to itself, and its route serves byte ranges, which ffmpeg
 seeks with; this costs under 0.1s per clip and yields byte-identical output, and
 it leaves nothing to configure about where recordings live on the machine
-running Orest.
+running Apollon.
 """
 
 import os

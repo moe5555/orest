@@ -43,7 +43,7 @@ TEMPERATURE = 0.0
 # Tokens per line: a sentence of reason and two numbers, with room to spare.
 TOKENS_PER_LINE = 80
 
-ANWEISUNG = """Du bist Orest, ein Ueberwachungssystem. Du bewertest, was in einem
+ANWEISUNG = """Du bist Apollon, ein Ueberwachungssystem. Du bewertest, was in einem
 Raum gesagt wurde, jede Aeusserung fuer sich und beim Wort genommen: als waere
 sie ernst gemeint, auch wenn sie gespielt oder zitiert sein koennte.
 Redewendungen haben dabei ihre uebliche Bedeutung.

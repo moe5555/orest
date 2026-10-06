@@ -113,7 +113,7 @@ are not calibrated yet.
   at normal volume, or a level set by hand, would make it independent of
   how a scene begins.
 
-## Train Orest's own action recogniser
+## Train Apollon's own action recogniser
 
 The pretrained NTU120 model (`changelog.md`, 2026-09-28) was trained in a lab,
 on lab actions. A model trained on the production's own footage would know
@@ -127,7 +127,7 @@ use the production's own activity names instead of NTU's.
    (Schlag, Stoß, Umarmung, Sturz, Rennen, …), plus a "nothing special" class
    for everything else. That class needs the most examples.
 3. **Find examples.** Body-search one good instance in the pose index
-   (`orest-search body`) to surface its repetitions, then confirm each hit by
+   (`apollon-search body`) to surface its repetitions, then confirm each hit by
    hand. Aim for about 50 clips per activity and a few hundred neutral clips.
 4. **Extract skeletons.** Run RTMO over each 2–5 s clip and store the
    keypoints in the same two-person, 100-frame format the NTU model takes.
@@ -139,7 +139,7 @@ use the production's own activity names instead of NTU's.
    the same rehearsal are near-duplicates, and testing on them overstates
    accuracy. Report precision per activity, since a false "Schlag" triggers
    an intervention.
-7. **Swap it in.** Export to ONNX the same way as the NTU model. Orest only
+7. **Swap it in.** Export to ONNX the same way as the NTU model. Apollon only
    sees a different class list and a different weights file.
 
 **Data protection:** the training set is footage of identifiable people. It

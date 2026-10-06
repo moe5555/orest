@@ -4,8 +4,8 @@ requires-python = ">=3.12"
 
 [manifest]
 members = [
-    "orest",
-    "orest-pose",
+    "apollon",
+    "apollon-pose",
 ]
 overrides = [
     { name = "onnxruntime", marker = "python_full_version < '3'" },
@@ -619,7 +619,7 @@ wheels = [
 ]
 
 [[package]]
-name = "orest"
+name = "apollon"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -632,7 +632,7 @@ dependencies = [
     { name = "ollama" },
     { name = "onnxruntime-gpu", extra = ["cuda", "cudnn"] },
     { name = "opencv-python" },
-    { name = "orest-pose" },
+    { name = "apollon-pose" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pygrabber" },
@@ -658,7 +658,7 @@ requires-dist = [
     { name = "ollama", specifier = ">=0.6.2" },
     { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], specifier = "==1.26.0" },
     { name = "opencv-python", specifier = ">=5.0.0.93" },
-    { name = "orest-pose", editable = "wise_ext" },
+    { name = "apollon-pose", editable = "wise_ext" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pygrabber", specifier = ">=0.2" },
@@ -672,7 +672,7 @@ requires-dist = [
 dev = [{ name = "pytest", specifier = ">=8.4.2" }]
 
 [[package]]
-name = "orest-pose"
+name = "apollon-pose"
 version = "0.1.0"
 source = { editable = "wise_ext" }
 

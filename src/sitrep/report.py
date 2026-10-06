@@ -92,7 +92,7 @@ SCHWELLE = 6
 # What every prompt says about its sources: the Chronik's context, the
 # transcript and the stills. Kept first and identical, so that Ollama can
 # reuse its cache for the prompt's opening (live_sitrep_latency.md, fix 4).
-QUELLEN = """Du bist Orest, ein Ueberwachungssystem.
+QUELLEN = """Du bist Apollon, ein Ueberwachungssystem.
 
 Quellen:
 - Rueckblick und Abschnitte: das laufende Protokoll der Szene, aelteste

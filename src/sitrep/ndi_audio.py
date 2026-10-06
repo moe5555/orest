@@ -9,7 +9,7 @@ The source is received in a child process (`Receiving` says why) and
 delivered as mono float32 chunks to whatever a microphone's sound goes to
 (capture.listen), so the run is the same whichever way the sound arrived.
 
-    orest-sitrep --audio-ndi "VSH-ARLT-5090 (OBS PGM)"
+    apollon-sitrep --audio-ndi "VSH-ARLT-5090 (OBS PGM)"
 """
 
 import multiprocessing

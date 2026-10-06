@@ -1,8 +1,40 @@
 # Changelog
 
-Central development log for Orest. Newest entries first. See
+Central development log for Apollon. Newest entries first. See
 `knowledge/KNOWLEDGE_BASE.md` for pointers into the Source of Truth files
 referenced below.
+
+---
+
+## 2026-10-06 — System renamed from Orest to Apollon
+
+Set by Moe. The name changes everywhere in the repository, including earlier
+entries in this changelog. Identifiers in older entries now carry the new
+names:
+
+| Before | After |
+|---|---|
+| package `orest`, `orest-pose` (`wise_ext/src/orest_pose`) | `apollon`, `apollon-pose` (`wise_ext/src/apollon_pose`) |
+| `orest-search`, `orest-sitrep`, `orest-ui` | `apollon-search`, `apollon-sitrep`, `apollon-ui` |
+| environment variables `OREST_*` | `APOLLON_*` |
+| OSC addresses `/orest/…` | `/apollon/…` |
+| WISE extractor id `orest/pose/rtmo-s/body7` | `apollon/pose/rtmo-s/body7` |
+| `0006-register-orest-pose-extractor.patch` | `0006-register-apollon-pose-extractor.patch` |
+| `TouchDesigner/Orest_TD_New.toe`, `old/OrestTD*.toe` | `Apollon_TD_New.toe`, `old/ApollonTD*.toe` |
+
+Unchanged: the play's characters and titles (Orestes, Oresteia), the corpus
+folder and WISE project `test_data_orest`, and the repository folder.
+
+The `apollon` and `apollon-pose` packages are installed in the project venv,
+and `apollon-pose` is installed in the `wise` conda env. The patched
+`external/wise` checkout registers the `apollon/pose/` prefix. No WISE project
+held pose features under the old id. 493 tests pass.
+
+**Still to do:** the code pasted into the TouchDesigner DATs still listens on
+`/orest/…`. Paste in the updated files from `TouchDesigner/code/` (or replace
+`/orest/` with `/apollon/` in the OSC In DATs). The venv folder is still
+`orest/` with `UV_PROJECT_ENVIRONMENT=orest`. The README now says `apollon/`,
+so the venv needs to be recreated under that name.
 
 ---
 
@@ -214,8 +246,8 @@ graph in `knowledge/source_of_truth/pipeline.md` ("Playback on stage"). The
 playback chain diagram in 03_render.md shows QLab driving all outputs and
 cueing TouchDesigner.
 
-**Consequence for Orest:** QLab runs on a Mac, and Orest's control listener
-binds `127.0.0.1` by default (`OREST_CONTROL_HOST`), so a QLab cue cannot
+**Consequence for Apollon:** QLab runs on a Mac, and Apollon's control listener
+binds `127.0.0.1` by default (`APOLLON_CONTROL_HOST`), so a QLab cue cannot
 start a body capture until the listener is bound to the show network. Nothing
 in the code changed.
 
@@ -257,7 +289,7 @@ source.
 **Moe's observation:** no lines at all, and the Chronik wrote "Kein Beginn
 der Szene dokumentiert. Statische Situation ohne erkennbare Interaktion."
 
-- **Cause.** `orest-ui` ran without `--audio-ndi`, so it listened to the
+- **Cause.** `apollon-ui` ran without `--audio-ndi`, so it listened to the
   default device, "Webcam 4 (NDI Webcam Audio)". That device delivers
   digital silence (−96.7 dBFS), as noted on 2026-09-28. With no speech the
   Chronik only had its stills to summarise. OBS's NDI output
@@ -290,7 +322,7 @@ not found (status code: 404)".
   constructed, before the camera opens.
   - A missing model names the installed ones and `--model`.
   - Ollama not running is reported as such.
-  - `orest-sitrep` prints the message and exits; `orest-ui` shows it on the
+  - `apollon-sitrep` prints the message and exits; `apollon-ui` shows it on the
     page.
 - **Default model is now `gemma4:26b`** (`report.MODEL`), set by Moe: the
   model on the production machine and the one every measurement used.
@@ -351,7 +383,7 @@ seconds, prompt a SITREP report"); a note there says so. Architecture:
   - Automatic ones are at least 15 s apart.
 - **Model gate (`llm.py`).** Ollama here serves one request at a time; a 60
   token request behind a 400 token one took 1.2 s instead of 0.23 s. The
-  gate orders Orest's requests: line ratings, Empfehlung, Lagebericht,
+  gate orders Apollon's requests: line ratings, Empfehlung, Lagebericht,
   Chronik.
 - **Leaner prompts** (fix 4, partly). One fixed opening shared by report and
   Empfehlung (`report.QUELLEN`), then roster, Chronik, live values,
@@ -369,9 +401,9 @@ seconds, prompt a SITREP report"); a note there says so. Architecture:
   the Lagebericht on R.
   - Checked in headless Edge on a replayed run.
   - Endpoints: `POST /api/sitrep/bericht` and `/empfehlung`.
-- **OSC.** `/orest/live/{begin,person,end,zeile,empfehlung}` and
-  `/orest/chronik/abschnitt`. The report's `begin` carries `abschnitte`
-  instead of `ton_s`, and adds `/orest/sitrep/verlauf`.
+- **OSC.** `/apollon/live/{begin,person,end,zeile,empfehlung}` and
+  `/apollon/chronik/abschnitt`. The report's `begin` carries `abschnitte`
+  instead of `ton_s`, and adds `/apollon/sitrep/verlauf`.
   - `TouchDesigner/code/sitrep_osc.py` writes optional `live_*` and
     `chronik` tables.
   - **`sitrep_meta` gains `verlauf` and `abschnitte`.** The TouchDesigner
@@ -617,7 +649,7 @@ tracking (`recognizer.MAX_PEOPLE`), named through the face tracker
 - For each of the two tallest bodies, a face box comes from the pose's head
   joints: the ear distance, or the eye distance, sets its size.
 - `2d106det.onnx`, the 106-point landmark model of the `buffalo_l` bundle
-  whose detector and recogniser Orest already uses (`face/model.py` unpacks
+  whose detector and recogniser Apollon already uses (`face/model.py` unpacks
   it from the cached zip), finds the lips.
 - The opening is the gap between the inner lip centres (points 62/60) divided
   by the mouth's width (52/61). Found by drawing the points on a corpus face.
@@ -692,9 +724,9 @@ once.
 ## 2026-09-28 — Sound from an NDI source: `--audio-ndi` (VSH-ARLT-5090)
 
 Live test runs had no speech: OBS Virtual Camera carries video only, and the
-NDI Webcam audio device Orest recorded had no source. Once OBS's DistroAV NDI
+NDI Webcam audio device Apollon recorded had no source. Once OBS's DistroAV NDI
 output was on (`VSH-ARLT-5090 (OBS PGM)`), NDI Webcam still couldn't be set
-to it, since its window didn't respond. Orest now receives the NDI source's
+to it, since its window didn't respond. Apollon now receives the NDI source's
 audio itself.
 
 - **`src/sitrep/ndi_audio.py`**: `NdiAudio(source)` names the source.
@@ -704,7 +736,7 @@ audio itself.
   cyndilib, already a dependency for the NDI video output (`feed.py`).
 - **`capture.windows`** opens either a microphone (sounddevice) or the NDI
   receiver, both as context managers.
-- **`--audio-ndi SOURCE`** in `orest-sitrep` and `orest-ui`.
+- **`--audio-ndi SOURCE`** in `apollon-sitrep` and `apollon-ui`.
   `session.resolve_sources(args)` picks the camera and the sound source for
   both entry points. `devices.describe` names an NDI source in the startup
   lines.
@@ -760,14 +792,14 @@ in, so the English test corpus came out as rough German. On 20 s of "Boom":
 die Tank ist nett", and "They are dying" was lost. With `en` the same audio
 transcribes cleanly.
 
-`--language` in `orest-sitrep` and `orest-ui` sets it per run (default `de`).
+`--language` in `apollon-sitrep` and `apollon-ui` sets it per run (default `de`).
 It passes through `session.Options.language` and `report.sitreps` to
 `transcribe.transcribe`, and appears in the startup lines. It prepares the
 sentiment analysis in `02_processing.md` ("Calculating Values"), which reads
 the transcript. 341 tests pass.
 
 Also found: **live test runs have had no speech.** OBS Virtual Camera carries
-only video, and the NDI Webcam Audio device Orest records had no source
+only video, and the NDI Webcam Audio device Apollon records had no source
 (report #42: `gesagt` empty). OBS's DistroAV NDI output can feed it; steps are
 in `todo_with_data.md`.
 
@@ -775,7 +807,7 @@ in `todo_with_data.md`.
 
 ## 2026-09-28 — Operator page no longer mixes cached and new files (VSH-ARLT-5090)
 
-**Symptom.** After the action panels were added, a run in `orest-ui` showed a
+**Symptom.** After the action panels were added, a run in `apollon-ui` showed a
 smooth video and "Live", but never a report.
 
 **Cause.** The server was producing reports: #7 after 2 min, with 2.1–2.2 s
@@ -804,11 +836,11 @@ alone, and the pair while they stand close. 339 tests pass.
 
 ## 2026-09-28 — Action classification no longer takes over the GPU (VSH-ARLT-5090)
 
-**Symptom.** In `orest-ui` with `gemma4:26b` on sample footage showing about 17
+**Symptom.** In `apollon-ui` with `gemma4:26b` on sample footage showing about 17
 people, reports hardly arrived and the video stuttered.
 
 **Cause, measured.**
-- Orest's process held **27.4 GB of the 5090's 32 GB**. Ollama kept 3.8 GB on
+- Apollon's process held **27.4 GB of the 5090's 32 GB**. Ollama kept 3.8 GB on
   the GPU, and Windows moved the rest of the model (~21 GB) into system RAM,
   so generation ran largely from system memory.
 - The action recogniser sent every person and every close pair to the network
@@ -838,7 +870,7 @@ the machine was occupied by the run being diagnosed.
 
 ## 2026-09-28 — Operator page shows the action recogniser live and per report (VSH-ARLT-5090)
 
-The operator page (`orest-ui`) now shows what the action recogniser measures,
+The operator page (`apollon-ui`) now shows what the action recogniser measures,
 so it can be watched while testing on sample footage:
 
 - **Aktionserkennung · live**, under the camera. The latest classification,
@@ -901,7 +933,7 @@ steps:
   class behind each rating above 0.
 
 **Other changes:**
-- On by default. `--no-actions` turns it off in `orest-sitrep` and `orest-ui`.
+- On by default. `--no-actions` turns it off in `apollon-sitrep` and `apollon-ui`.
 - The action model loads when the run starts, so a missing model fails the
   run immediately.
 - The session stops the recogniser before the face tracker it reads.
@@ -1082,12 +1114,12 @@ pushes, slaps or embraces, ideally from the production's own rehearsals.
 
 ---
 
-## 2026-09-28 — GPU ONNX Runtime in Orest's environment (VSH-ARLT-5090)
+## 2026-09-28 — GPU ONNX Runtime in Apollon's environment (VSH-ARLT-5090)
 
 Pose detection, face recognition and the new action model now run on the GPU
-in the `orest` environment. Until now they ran on the CPU there, on every
+in the `apollon` environment. Until now they ran on the CPU there, on every
 machine (`hardware_issues.md` H-10). The step 3 entry below wrongly called this
-a regression on the new machine: the laptop's `orest` environment was CPU-only
+a regression on the new machine: the laptop's `apollon` environment was CPU-only
 too, and the GPU build H-10 describes lived in WISE's environment.
 
 - **`onnxruntime-gpu[cuda,cudnn]==1.26.0`** is declared in `pyproject.toml`.
@@ -1097,7 +1129,7 @@ too, and the GPU build H-10 describes lived in WISE's environment.
 - **A uv override drops the CPU `onnxruntime`** that `rtmlib` and
   `faster-whisper` depend on. Both packages install the same `onnxruntime`
   module, and whichever lands last wins.
-- **`orest_pose.model` and `face.model`** put
+- **`apollon_pose.model` and `face.model`** put
   `site-packages/nvidia/*/bin` on PATH when torch isn't installed. The first
   attempt used `onnxruntime.preload_dlls()` alone, and cuDNN then failed on
   the first convolution: it loads `cudnn_engines_tensor_ir64_9.dll` by name
@@ -1123,14 +1155,14 @@ exact.
 ## 2026-09-28 — Pretrained action recognition, step 3: exported to ONNX (VSH-ARLT-5090)
 
 The NTU120 ST-GCN now exists as `data/models/ntu120_stgcn/stgcn_ntu120_2d.onnx`.
-Orest can run it with `onnxruntime` alone; MMAction2 and PyTorch are needed
+Apollon can run it with `onnxruntime` alone; MMAction2 and PyTorch are needed
 only to produce the file. `src/scripts/export_ntu_stgcn.py` does the export
 and checks it. Its docstring gives the environment setup, so the export can
 be repeated.
 
 **A separate conda environment, `mmaction`** (Python 3.10, torch 2.3.1 CPU,
 mmengine 0.10.7, mmcv-lite 2.1.0, MMAction2 1.2.0). It follows the same
-pattern as `wise`: a PyTorch stack that can't live in Orest's Python 3.14
+pattern as `wise`: a PyTorch stack that can't live in Apollon's Python 3.14
 environment is kept apart. Three things needed working around:
 
 - **MMAction2 1.2.0 can't be imported as packaged, from PyPI or from git.**
@@ -1146,7 +1178,7 @@ environment is kept apart. Three things needed working around:
 **What was exported:** the network only, `cls_head(backbone(x))`. It takes
 `(batch, 2 people, 100 frames, 17 joints, x/y/score)` and returns 120
 logits, with a dynamic batch axis, at opset 17. MMAction2's preprocessing, and
-its softmax averaged over 10 test clips, stay outside the file for Orest to
+its softmax averaged over 10 test clips, stay outside the file for Apollon to
 reproduce in step 4.
 
 **Verified:**
@@ -1155,9 +1187,9 @@ reproduce in step 4.
 |---|---|
 | Network: PyTorch vs ONNX Runtime, random input, logits | 1.9 × 10⁻⁶ |
 | Recogniser: MMAction2 `inference_skeleton` vs ONNX fed MMAction2's preprocessing, 120 probabilities | 6.6 × 10⁻⁷ |
-| The same, in Orest's environment (onnxruntime 1.29.0) | 3.0 × 10⁻⁷ |
+| The same, in Apollon's environment (onnxruntime 1.29.0) | 3.0 × 10⁻⁷ |
 
-- **Speed in Orest, on the CPU:** 10.6 ms per clip, about 130 ms for the
+- **Speed in Apollon, on the CPU:** 10.6 ms per clip, about 130 ms for the
   full 10-clip average.
 - **Reference fixture (`reference.npz`):** a synthetic two-person sequence
   of 75 frames at 1080p, with MMAction2's preprocessed tensor for it and its
@@ -1168,7 +1200,7 @@ reproduce in step 4.
   are two-person classes, but that says nothing about accuracy on real
   footage.
 
-**Found on the way: ONNX Runtime in the `orest` environment is CPU-only on
+**Found on the way: ONNX Runtime in the `apollon` environment is CPU-only on
 this machine.** It is version 1.29.0 with no CUDA provider, which is the
 silent regression `hardware_issues.md` H-10 warns about. The laptop's
 `onnxruntime-gpu` was a manual install that was never declared, so it didn't
@@ -1183,7 +1215,7 @@ GPU build in `pyproject.toml`; see H-10.
 This is the first step toward the *Pose* route under "Calculating Values" in
 `knowledge/components/02_processing.md`: recognising activities such as
 hitting or hugging, and mapping them to SITREP values. The plan starts from a
-recogniser someone else trained. Training one on Orest's own footage would
+recogniser someone else trained. Training one on Apollon's own footage would
 need a labelled archive first.
 
 **Model: ST-GCN, joint modality, NTU RGB+D 120 cross-subject, 2D keypoints**,
@@ -1191,7 +1223,7 @@ from the MMAction2 model zoo. The choice rests on three points:
 
 - **The keypoints match.** MMAction2's 2D NTU skeletons were produced with
   HRNet-w32 in COCO-17 layout, the same 17 joints in the same order that RTMO
-  (`orest_pose`) outputs.
+  (`apollon_pose`) outputs.
 - **NTU120, not NTU60.** NTU120 has all 26 two-person classes. Only it has
   "hit other person with something", "wield knife towards other person" and
   "knock over other person". The NTU60 models score higher (ST-GCN++ 89.3%)
@@ -1223,7 +1255,7 @@ purposes" and prohibits "derivation … and commercial usage … in any way or
 form" without permission from ROSE Lab. Moe confirmed that the theatre
 project is part of a research project, which these terms cover.
 
-Training Orest's own recogniser on rehearsal footage is listed as a
+Training Apollon's own recogniser on rehearsal footage is listed as a
 nice-to-have in `todo_with_data.md`.
 
 ---
@@ -1239,7 +1271,7 @@ beneath it"). It also starts the localhost interface of the same file, as
 planned in `progress_tracker.md` (Smart Search, phase 5: "FastAPI plus plain
 HTML").
 
-    uv run orest-ui --video "OBS Virtual Camera" --model gemma4:26b
+    uv run apollon-ui --video "OBS Virtual Camera" --model gemma4:26b
 
 - **Operator page (`/`)**: a single button, **Start live SITREP**, which opens
   `/sitrep` in a new tab.
@@ -1256,7 +1288,7 @@ HTML").
 - **`interface.live.LiveSitrep`** holds the single run on its own thread. It
   opens the session on request, so device errors show on the page rather than
   in the terminal.
-- **Binding**: `orest-ui` binds 127.0.0.1:9680, for the same reason as the
+- **Binding**: `apollon-ui` binds 127.0.0.1:9680, for the same reason as the
   WISE server: the page shows footage of identifiable people.
 - **New dependencies**: `fastapi` 0.141.1 and `uvicorn` 0.54.0.
 
@@ -1336,8 +1368,8 @@ from the 0–5 ratings per person. The Empfehlung is written only when
   it writes below the threshold is discarded.
 - `empfehlung` is now the measure as a string. The `Empfehlung` model is gone.
 
-OSC: a new `/orest/sitrep/szene <id> <relevanz> <eskalation> <gefahr>`.
-`/orest/sitrep/empfehlung` keeps its shape, with `einschreiten` now derived.
+OSC: a new `/apollon/sitrep/szene <id> <relevanz> <eskalation> <gefahr>`.
+`/apollon/sitrep/empfehlung` keeps its shape, with `einschreiten` now derived.
 `sitrep_meta` in TouchDesigner gains the three scene columns. 271 tests pass.
 
 **Open:**
@@ -1389,7 +1421,7 @@ probability in `report.py`, so renderers can take the first one as the most
 likely without relying on the model's order. A declined intervention clears
 `massnahme`, since models phrase "no action" as an action.
 
-**OSC wire format changed** (`src/sitrep/td.py`): `/orest/sitrep/lage` and
+**OSC wire format changed** (`src/sitrep/td.py`): `/apollon/sitrep/lage` and
 `/ereignis` are replaced by `/beschreibung`, `/prognose <rang>
 <wahrscheinlichkeit> <verlauf>` and `/empfehlung <einschreiten> <massnahme>`.
 The person row is `<zeile> <name> <vermutet> <beschreibung>` plus the five
@@ -1424,7 +1456,7 @@ none needing a camera, a model or TouchDesigner.
   most 100 in total, and nothing checks it.
 - The camera on this machine delivered a completely black frame
   (`NDI Webcam Video 1`, no NDI source feeding it), which produced empty
-  reports at 0/5 confidence. It is not a fault in Orest, but it is
+  reports at 0/5 confidence. It is not a fault in Apollon, but it is
   indistinguishable from an empty stage in the report.
 
 ---
@@ -1434,16 +1466,16 @@ none needing a camera, a model or TouchDesigner.
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, TouchDesigner
 2025.31760 Non-Commercial on the same machine.
 
-The live camera and the generated report now leave Orest for TouchDesigner,
+The live camera and the generated report now leave Apollon for TouchDesigner,
 which is step 7 of the Realtime-SITREP in
 `knowledge/components/02_processing.md` ("Output: video output ... and SITREP
 text beneath it"). The two channels are the ones
 `knowledge/components/03_render.md` describes: "OSC carries messages, not
 pixels."
 
-    orest-sitrep --send-ndi                      # the camera as an NDI source
-    orest-sitrep --send-td                       # report and roster over OSC
-    orest-sitrep --send-ndi --send-td --cast data/cast
+    apollon-sitrep --send-ndi                      # the camera as an NDI source
+    apollon-sitrep --send-td                       # report and roster over OSC
+    apollon-sitrep --send-ndi --send-td --cast data/cast
 
 **Pixels travel as NDI.** `src/sitrep/feed.py` publishes the camera as an NDI
 source that TouchDesigner receives with its native NDI In TOP. Spout would have
@@ -1470,9 +1502,9 @@ webcam's default 640x480; a 1080p stage camera is untested.
 established, so one OSC In DAT receives search results and the live SITREP and
 routes on the address prefix:
 
-    /orest/sitrep/begin  /sitrep/lage  /sitrep/gesagt
-    /orest/sitrep/person /sitrep/ereignis  /sitrep/end
-    /orest/presence/begin  /presence/person  /presence/end
+    /apollon/sitrep/begin  /sitrep/lage  /sitrep/gesagt
+    /apollon/sitrep/person /sitrep/ereignis  /sitrep/end
+    /apollon/presence/begin  /presence/person  /presence/end
 
 `begin` carries the row counts so TouchDesigner can size a table before its
 rows arrive. Ratings are read off `report.BEWERTUNGEN` rather than named, so
@@ -1507,7 +1539,7 @@ host and port moved there from `smartsearch`. There is one TouchDesigner and
 one OSC In DAT; two definitions of its address would drift, and the live path
 should not have to import the retrieval path to reach it.
 
-**`uv sync` used to remove `rtmlib`**, which `orest_pose` imports to load the
+**`uv sync` used to remove `rtmlib`**, which `apollon_pose` imports to load the
 RTMO model, because it was installed by hand with `--no-deps` and was therefore
 absent from the lock. It is now declared in the root project, with a uv override
 dropping its request for `opencv-contrib-python` — that package ships its own
@@ -1662,7 +1694,7 @@ face index would share one embedding space with the live path rather than
 two.
 
 The package sits in `src/` beside `sitrep` and `smartsearch`, not in
-`wise_ext/`. `orest_pose` lives there because it registers a feature extractor
+`wise_ext/`. `apollon_pose` lives there because it registers a feature extractor
 inside WISE's conda environment; face recognition runs on the live camera
 stream and has no such constraint.
 
@@ -1724,11 +1756,11 @@ at ONNX Runtime's default thread count and **222 ms p50 / 493 ms p95** at four
 threads. The default is one thread per core, which on 32 cores costs more in
 synchronisation than it wins, and costs more again when two sessions are called
 alternately. `face.model.THREADS` caps it at four, overridable with
-`OREST_FACE_THREADS`.
+`APOLLON_FACE_THREADS`.
 
 Both models run on `CPUExecutionProvider`: ONNX Runtime resolves no CUDA
 provider in this environment, the same condition pose detection runs under
-(`hardware_issues.md` H-10). `orest_pose` does not pay this penalty: measured
+(`hardware_issues.md` H-10). `apollon_pose` does not pay this penalty: measured
 again alongside the face models it runs at 42 ms per frame on CPU at the
 default thread count, matching its original figure. The cost appears when two
 sessions are called alternately, which pose alone never does.
@@ -1748,8 +1780,8 @@ untested.
 `query`, `body` and `body-live` take `--segments`, which returns the indexed
 four-second windows in place of merged spans.
 
-    orest-search query "zwei Personen streiten" --segments --send-td
-    orest-search body-live --segments --send-td
+    apollon-search query "zwei Personen streiten" --segments --send-td
+    apollon-search body-live --segments --send-td
 
 **Why.** A merged span grows with every neighbouring window that matches, so
 where a long stretch of a recording resembles the query — one person, barely
@@ -1800,19 +1832,19 @@ again after a few seconds to capture that live sequence") and the
 `QB["BODY SEARCH"] → ENC["Live encoder"]` path of the RENDER graph in
 `knowledge/source_of_truth/pipeline.md`.
 
-    orest-search body-live --send-td
-    orest-search body-live --video "FHD WebCam" --per-file 2 --send-td
-    orest-search body-live --file <recording.mp4> --at 300
+    apollon-search body-live --send-td
+    apollon-search body-live --video "FHD WebCam" --per-file 2 --send-td
+    apollon-search body-live --file <recording.mp4> --at 300
 
 **Presses** come from the terminal (Enter toggles) and over OSC,
-`/orest/body/start` and `/orest/body/stop` on `127.0.0.1:10001` — the return
+`/apollon/body/start` and `/apollon/body/stop` on `127.0.0.1:10001` — the return
 channel from TouchDesigner or QLab drafted in `knowledge/components/03_render.md`.
 A start while capturing or a stop while idle is ignored, so a doubled button
 press neither cuts a capture short nor searches with nothing.
 
 **Bodies are detected while the movement happens.** `smartsearch.live` samples
 the camera at the index's rate, four frames a second, detects poses immediately
-and keeps only keypoints. Detection runs on the CPU in Orest's environment at
+and keeps only keypoints. Detection runs on the CPU in Apollon's environment at
 42–45 ms per frame whatever the resolution, since RTMO letterboxes to 640 px:
 under a fifth of the sampling interval. A capture of any length costs next to no
 memory, and its query is ready when the stop press arrives. If detection ever
@@ -1866,14 +1898,14 @@ overlap merge into clip length.
 TouchDesigner Non-Commercial on the same machine.
 
 A search result becomes a clip file and an OSC message, so TouchDesigner can
-play what Orest finds. This is the `HITS → CUT` node of the RENDER graph in
+play what Apollon finds. This is the `HITS → CUT` node of the RENDER graph in
 `knowledge/source_of_truth/pipeline.md` and "Results are piped into
 TouchDesigner" in `knowledge/components/02_processing.md`, following the
 interface drafted in `knowledge/components/03_render.md`.
 
-    orest-search query "zwei Personen streiten" --send-td
-    orest-search query "zwei Personen streiten" --cut precise --send-td
-    orest-search body <clip.mp4> --at 90 --send-td
+    apollon-search query "zwei Personen streiten" --send-td
+    apollon-search query "zwei Personen streiten" --cut precise --send-td
+    apollon-search body <clip.mp4> --at 90 --send-td
 
 **Two cutting modes** in `smartsearch.clips`, both cutting exactly the range
 WISE returned:
@@ -1902,9 +1934,9 @@ video packet with ffprobe (about 0.07 s) and sent as `preroll`, for
 TouchDesigner to trim. It matched the source's keyframe gaps exactly (3.000 s on
 the test clip, 0.458 s and 0.958 s on Othello) and is 0 for precise clips.
 
-    /orest/results/begin  <query_id> <count>
-    /orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
-    /orest/results/end    <query_id>
+    /apollon/results/begin  <query_id> <count>
+    /apollon/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
+    /apollon/results/end    <query_id>
 
 **Clips are read through WISE's media route**, not from disk. WISE's API does
 not expose source paths, but it serves byte ranges, which ffmpeg seeks with.
@@ -1918,12 +1950,12 @@ writes to a `.part` name that is renamed on completion, so an interrupted cut
 is never taken for a finished clip. Clips are cut in rank order and each is
 announced by `smartsearch.td` as soon as it is written, between a begin and an
 end message carrying a per-search id. Paths are absolute with forward slashes.
-Orest sends every result; how many are used is decided in TouchDesigner
+Apollon sends every result; how many are used is decided in TouchDesigner
 (`03_render.md`, "How many results reach the stage"). OSC goes to
 `127.0.0.1:10000` by default.
 
 ffmpeg 6.1.2 (GPL) is taken from the `wise` conda environment, found the same
-way as `wise.exe`. `python-osc` 1.10.2 was added to the `orest` project.
+way as `wise.exe`. `python-osc` 1.10.2 was added to the `apollon` project.
 
 **Verified end to end** against the served corpus with a stand-in OSC receiver
 on port 10000. `"two people arguing on a stage"`, five results: fast clips cut
@@ -1956,7 +1988,7 @@ them new, needing neither ffmpeg, the WISE server nor TouchDesigner.
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
 
 The 4h08m test corpus is searchable by body movement.
-`orest/pose/rtmo-s/body7` holds **7,439 vectors**, one per four-second segment,
+`apollon/pose/rtmo-s/body7` holds **7,439 vectors**, one per four-second segment,
 and each file is covered end to end:
 
 | File | Vectors | Covers |
@@ -2029,7 +2061,7 @@ from regenerating thumbnails.
    against `PATH` only; `os.add_dll_directory()` does not cover that hop. The
    same defeat CTranslate2 shows in `sitrep/transcribe.py`.
 
-`orest_pose.model` now prepends torch's `lib` directory to `PATH`, where a
+`apollon_pose.model` now prepends torch's `lib` directory to `PATH`, where a
 complete CUDA 12 runtime already sits, so nothing extra was downloaded. It also
 reports the provider the session actually got and warns when CUDA was asked for
 and not granted, because the failure is otherwise invisible.
@@ -2070,14 +2102,14 @@ a few seconds of movement can be the query. This is the "body" half of embodied
 search in `knowledge/components/02_processing.md` and the `QB["BODY SEARCH"]`
 node of `knowledge/source_of_truth/pipeline.md`.
 
-    orest-search add-extractor --project P --video-id orest/pose/rtmo-s/body7
-    orest-search index --project P
-    orest-search body <clip.mp4> --at 134 --project P
+    apollon-search add-extractor --project P --video-id apollon/pose/rtmo-s/body7
+    apollon-search index --project P
+    apollon-search body <clip.mp4> --at 134 --project P
 
 **One encoder, installed in both environments.** `wise_ext/` holds the
-`orest_pose` package: RTMO keypoint detection and the embedding, in pure numpy
+`apollon_pose` package: RTMO keypoint detection and the embedding, in pure numpy
 with no declared dependencies. WISE's environment imports it to build the index,
-Orest's imports it to encode a live query. A query encoded even slightly
+Apollon's imports it to encode a live query. A query encoded even slightly
 differently from the index lands in a different space and retrieves nothing, so
 there is one implementation rather than two. It installs with `--no-deps` in
 both: `rtmlib` pulls `opencv-contrib-python`, which would add a second
@@ -2099,12 +2131,12 @@ dropped. This is the main known limitation and the natural next increment.
 
 **Registered through WISE's documented extension point**, a hardcoded prefix
 chain in the feature extractor factory, as
-`0006-register-orest-pose-extractor.patch`. Only the two registration lines are
+`0006-register-apollon-pose-extractor.patch`. Only the two registration lines are
 patched; the extractor itself stays in this repository.
 
 **No WISE patch is needed to query it.** WISE decodes every visual query as a
 still image and cannot embed a clip, but `/search_with_feature` accepts a
-finished vector, so Orest runs the same encoder on the query clip and posts the
+finished vector, so Apollon runs the same encoder on the query clip and posts the
 result. This is why clip-as-query left the critical path.
 
 **Measured** on the 12-minute probe:
@@ -2175,12 +2207,12 @@ rather than a crisp one. See `claude_concerns.md`.
 
 ---
 
-## 2026-09-11 — Smart Search phase 1: WISE driven from Orest, sample corpus indexed (MININT-ITT28VU)
+## 2026-09-11 — Smart Search phase 1: WISE driven from Apollon, sample corpus indexed (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`), RTX 4070 Laptop, 8GB VRAM.
 
 `src/smartsearch/` is an installed package that builds, serves and queries a
-WISE search index from the `orest` environment. It implements the "Process
+WISE search index from the `apollon` environment. It implements the "Process
 rehearsal footage from folder on computer" and "Feature embedding that WISE
 offers out of the box" points of the Smart Search affordance in
 `knowledge/components/02_processing.md`, and fills the
@@ -2190,11 +2222,11 @@ offers out of the box" points of the Smart Search affordance in
 The roadmap for the rest of Smart Search — clip-as-query, embodied search, the
 pose extractor, speech, the localhost UI — is in `progress_tracker.md`.
 
-    orest-search extract --project rehearsals --media <folder>
-    orest-search index --project rehearsals
-    orest-search serve --project rehearsals
-    orest-search query "zwei Personen streiten" --project rehearsals
-    orest-search query "applause" --project rehearsals --target av
+    apollon-search extract --project rehearsals --media <folder>
+    apollon-search index --project rehearsals
+    apollon-search serve --project rehearsals
+    apollon-search query "zwei Personen streiten" --project rehearsals
+    apollon-search query "applause" --project rehearsals --target av
 
 **Two processes, one HTTP boundary.** WISE keeps its own conda environment,
 whose torch stack is pinned under `numpy<2` by MS CLAP, and is never imported.
@@ -2206,7 +2238,7 @@ every batch run is written to `data/logs/` as well as the terminal.
 **WISE is invoked as the console script in its environment, without activating
 it.** `<conda>/envs/wise/Scripts/wise.exe` resolves torch and CUDA from its own
 site-packages; `conda run` is not needed and starts 2.4x slower (6.9s against
-2.9s). `config.executable()` finds it by `OREST_WISE_EXE`, then `PATH`, then the
+2.9s). `config.executable()` finds it by `APOLLON_WISE_EXE`, then `PATH`, then the
 standard conda prefixes. Every other location is overridable the same way, since
 the Probebuehne machine is not this one.
 
@@ -2257,7 +2289,7 @@ rising; the 4.0 GB of weights stay cached for a re-test on better hardware.
 
 The custom pose extractor therefore moves ahead of it as the body-search route,
 and the clip-as-query patch leaves the critical path: a pose embedding can be
-computed in Orest and submitted to `/search_with_feature`, so no WISE patch is
+computed in Apollon and submitted to `/search_with_feature`, so no WISE patch is
 needed for live body queries. `progress_tracker.md` carries the new order.
 
 This is the second model rejected for VRAM on this machine after
@@ -2321,9 +2353,9 @@ unchanged. The package layout is what the OSC and Hindsight-SITREP work in
 `knowledge/components/02_processing.md` needs, since both import this code
 rather than run it as a script.
 
-**Package.** `src/sitrep/` installs into the `orest` environment
+**Package.** `src/sitrep/` installs into the `apollon` environment
 (`[build-system]` and `[project.scripts]` in `pyproject.toml`), and its
-modules import each other relatively. The entry point is `orest-sitrep`, or
+modules import each other relatively. The entry point is `apollon-sitrep`, or
 `python -m sitrep.<module>` for the per-module diagnostics; **`python
 src/sitrep/main.py` no longer works** and the READMEs and docstrings name the
 new commands. `pydantic` is now a declared dependency, pytest sits in a `dev`
@@ -2331,7 +2363,7 @@ group, and `requires-python` is `>=3.12` — at that bound the lock resolves to
 identical versions of all 42 packages.
 
 **One entry point.** `main.py` is the only runner; `report.py`'s duplicate CLI
-is replaced by `orest-sitrep --json`. Source, timing and resolution arguments
+is replaced by `apollon-sitrep --json`. Source, timing and resolution arguments
 are defined once in the new `cli.py` and attached as parser parents. The
 default sampling interval is 10s everywhere — `capture.py`'s standalone CLI
 used 5s.
@@ -2518,7 +2550,7 @@ depends on the production machine's VRAM — see the note above on the 12b.
 Added `src/sitrep/capture.py`, implementing step 3 of the Realtime-SITREP
 steps in `knowledge/components/02_processing.md` ("Capture one frame every x
 seconds") on top of the device selection below. Covers the `CAM`/`MIC` →
-`ORE["Orest — real-time mode"]` path of the CAPTURE graph in
+`ORE["Apollon — real-time mode"]` path of the CAPTURE graph in
 `knowledge/source_of_truth/pipeline.md`.
 
     python src/sitrep/capture.py --interval 5 --window 30
@@ -2561,7 +2593,7 @@ recording.
 
 Added `src/sitrep/devices.py`, implementing step 2 of the Realtime-SITREP
 steps in `knowledge/components/02_processing.md` ("select video and audio
-source"). Covers the `CAM`/`MIC` sensor inputs feeding the `ORE["Orest —
+source"). Covers the `CAM`/`MIC` sensor inputs feeding the `ORE["Apollon —
 real-time mode"]` node of the CAPTURE graph in
 `knowledge/source_of_truth/pipeline.md`. Step 1 (Gemma via Ollama) already
 existed as `src/sitrep/test.py`.
@@ -2590,30 +2622,30 @@ Design points:
 
 Dependencies added to the uv project: `opencv-python`, `sounddevice`,
 `numpy`, `pygrabber`. Confirmed cp314 wheels exist for `torch` and
-`faster-whisper`, so the `orest` env's Python 3.14 will not block step 4
+`faster-whisper`, so the `apollon` env's Python 3.14 will not block step 4
 (transcription).
 
 ---
 
-## 2026-09-09 — Switched to `uv` for Orest's own Python environment and package management (MININT-ITT28VU)
+## 2026-09-09 — Switched to `uv` for Apollon's own Python environment and package management (MININT-ITT28VU)
 
 **Machine:** `MININT-ITT28VU` (user `ctech`), same machine as the 2026-09-08 entry.
 
-Orest's own Python code (`src/`) is now managed with
+Apollon's own Python code (`src/`) is now managed with
 [uv](https://docs.astral.sh/uv/), tracked via `pyproject.toml`/`uv.lock` in
-the repo root. The environment lives at `orest/`, gitignored via uv's own
+the repo root. The environment lives at `apollon/`, gitignored via uv's own
 `.gitignore` written inside that directory. `external/wise` is unaffected and
 keeps its own conda env (`wise`) per its `docs/Install.md`.
 
 Setup on this machine:
-- `uv venv orest` — the virtual environment
-- `uv init --bare --no-workspace --name orest` — creates `pyproject.toml`
+- `uv venv apollon` — the virtual environment
+- `uv init --bare --no-workspace --name apollon` — creates `pyproject.toml`
   only; `--no-workspace` keeps `external/wise`'s own (conda-managed)
   `pyproject.toml` out of this project
-- `UV_PROJECT_ENVIRONMENT=orest`, set as a persistent user env var (`setx`),
-  so `uv add`/`uv sync` target `orest/` instead of the default `./.venv`
+- `UV_PROJECT_ENVIRONMENT=apollon`, set as a persistent user env var (`setx`),
+  so `uv add`/`uv sync` target `apollon/` instead of the default `./.venv`
 
-Verified: `uv add ollama` installs into `orest/Lib/site-packages` and records
+Verified: `uv add ollama` installs into `apollon/Lib/site-packages` and records
 `ollama>=0.6.2` in `pyproject.toml`. `README.md` setup instructions updated to
 match.
 
@@ -2675,7 +2707,7 @@ Fails with `FileNotFoundError: Frontend assets not found at frontend\dist`.
 `npm install` and `npm run build` must be run from that directory. Built
 successfully (vite, ~14s). As with the two source patches noted in the
 2026-08-29 entry, this is local-only state — `dist/*` is gitignored by WISE
-and `external/` wholesale by Orest — so it must be rebuilt after any
+and `external/` wholesale by Apollon — so it must be rebuilt after any
 re-clone of `external/wise`.
 
 Also noted for this machine: Windows PowerShell 5.1 does not support `&&` as
@@ -2759,7 +2791,7 @@ and listed in `knowledge/source_of_truth/versions.md` alongside the two existing
 Windows patches. Reinstalled with `pip install --no-deps --force-reinstall .`
 (`--no-deps` keeps the dependency tree untouched — see item 2). Verified:
 `http://localhost:9670/probe/` returns 200. The bare root returns 404; the
-project name is a required path segment. Added a one-line usage note to Orest's
+project name is a required path segment. Added a one-line usage note to Apollon's
 `README.md`.
 
 **Still unexplained:** why the original 20:15 run over `test_data_orest` left
@@ -2826,7 +2858,7 @@ workarounds.
 
 **On the two local patches surviving a re-clone:** `external/wise` is a
 plain git clone, gitignored wholesale by this repo's `external/` rule — so
-edits inside it are invisible to Orest's git and would be lost if
+edits inside it are invisible to Apollon's git and would be lost if
 `external/wise` is ever deleted and re-cloned. Both patches are saved as
 `.patch` files under `knowledge/source_of_truth/wise-patches/` (tracked by
 this repo) and documented in `knowledge/source_of_truth/versions.md` for

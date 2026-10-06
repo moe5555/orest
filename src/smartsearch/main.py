@@ -1,16 +1,16 @@
-"""Orest smart search: build, serve and query the rehearsal search index.
+"""Apollon smart search: build, serve and query the rehearsal search index.
 
 Entry point for the Smart Search affordance of
 knowledge/components/02_processing.md.
 
-    orest-search extract                     # embed a folder of rehearsal footage
-    orest-search add-extractor --video-id ID # re-embed it with another model
-    orest-search index                       # build the nearest-neighbour indices
-    orest-search serve                       # run WISE, needed for the queries below
-    orest-search info
-    orest-search query "zwei Personen streiten"
-    orest-search query "..." --send-td       # cut clips and announce them to TouchDesigner
-    orest-search body-live --send-td         # search by a movement performed in front of a camera
+    apollon-search extract                     # embed a folder of rehearsal footage
+    apollon-search add-extractor --video-id ID # re-embed it with another model
+    apollon-search index                       # build the nearest-neighbour indices
+    apollon-search serve                       # run WISE, needed for the queries below
+    apollon-search info
+    apollon-search query "zwei Personen streiten"
+    apollon-search query "..." --send-td       # cut clips and announce them to TouchDesigner
+    apollon-search body-live --send-td         # search by a movement performed in front of a camera
 
 Equivalently, without the installed entry point:
 
@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 import httpx
-from orest_pose import EXTRACTOR_ID as POSE_ID
+from apollon_pose import EXTRACTOR_ID as POSE_ID
 
 from . import client, clips, config, td, wise_cli
 
@@ -332,7 +332,7 @@ def main(argv=None) -> int:
             return 1
         except httpx.RequestError:
             print(f"No WISE server at {wise.base_url}. Start one with "
-                  f"'orest-search serve'.", file=sys.stderr)
+                  f"'apollon-search serve'.", file=sys.stderr)
             return 1
         except RuntimeError as error:
             print(error, file=sys.stderr)

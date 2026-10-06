@@ -79,10 +79,10 @@ def test_bgrx_is_flat_contiguous_and_sized_for_the_frame():
 
 def test_the_sink_is_opened_at_the_camera_resolution(sink_factory):
     source = FakeSource(width=320, height=180)
-    publisher = feed.Publisher(source, name="Orest Test", fps=25, sink=sink_factory)
+    publisher = feed.Publisher(source, name="Apollon Test", fps=25, sink=sink_factory)
     publisher.start()
     try:
-        assert sink_factory.made[0].opened_with == ("Orest Test", 320, 180, 25)
+        assert sink_factory.made[0].opened_with == ("Apollon Test", 320, 180, 25)
     finally:
         publisher.close()
 
@@ -132,7 +132,7 @@ def test_a_missing_publisher_package_names_the_install(monkeypatch):
 
     monkeypatch.setattr(feed, "Sink", unavailable)
     with pytest.raises(RuntimeError, match="cyndilib"):
-        feed.open_sink("Orest Test", 64, 48, 30)
+        feed.open_sink("Apollon Test", 64, 48, 30)
 
 
 def test_a_missing_ndi_runtime_is_reported_like_a_missing_package(monkeypatch):
@@ -143,7 +143,7 @@ def test_a_missing_ndi_runtime_is_reported_like_a_missing_package(monkeypatch):
 
     monkeypatch.setattr(feed, "Sink", unavailable)
     with pytest.raises(RuntimeError, match="NDI runtime"):
-        feed.open_sink("Orest Test", 64, 48, 30)
+        feed.open_sink("Apollon Test", 64, 48, 30)
 
 
 def test_publishing_writes_nothing_to_disk(monkeypatch, tmp_path, sink_factory):

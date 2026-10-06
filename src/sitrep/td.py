@@ -8,24 +8,24 @@ In DAT receives both and routes on the prefix.
 A report, made when the operator asks for one, is framed by a begin and an
 end, with one message per table row between them:
 
-    /orest/sitrep/begin         <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
+    /apollon/sitrep/begin         <id> <nummer> <beginn> <ende> <dauer_s> <bilder>
                                 <abschnitte> <latenz_s> <personen> <prognosen>
-    /orest/sitrep/verlauf       <id> <verlauf>
-    /orest/sitrep/beschreibung  <id> <beschreibung>
-    /orest/sitrep/gesagt        <id> <gesagt>
-    /orest/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
+    /apollon/sitrep/verlauf       <id> <verlauf>
+    /apollon/sitrep/beschreibung  <id> <beschreibung>
+    /apollon/sitrep/gesagt        <id> <gesagt>
+    /apollon/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
                                 <risiko> <menschlichkeit> <auffaelligkeit>
-    /orest/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
-    /orest/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
-    /orest/sitrep/empfehlung    <id> <einschreiten> <massnahme>
-    /orest/sitrep/end           <id>
+    /apollon/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
+    /apollon/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
+    /apollon/sitrep/empfehlung    <id> <einschreiten> <massnahme>
+    /apollon/sitrep/end           <id>
 
 A person's ratings follow report.BEWERTUNGEN. `risiko` and `menschlichkeit`
 are measured by the action recogniser and are -1 when it read nothing of the
 person; `auffaelligkeit` is the model's.
 
 `begin` carries the row counts so TouchDesigner can size its tables before the
-rows arrive, as `/orest/results/begin` does for a search. The report id tells
+rows arrive, as `/apollon/results/begin` does for a search. The report id tells
 one report's rows from the previous report's. Forecasts arrive most likely
 first, `rang` 1 being the most likely. `vermutet` and `einschreiten` are 0 or
 1; `einschreiten` is 1 when the scene's `eskalation` or `gefahr` exceeds
@@ -37,10 +37,10 @@ while the tracker follows the room twice a second, and carrying the roster on
 the report would make "who is on stage now" lag by up to a whole window —
 exactly what presence.py exists to avoid.
 
-    /orest/presence/begin   <tick> <zeit> <anwesend>
-    /orest/presence/person  <tick> <zeile> <label> <name> <vermutet>
+    /apollon/presence/begin   <tick> <zeit> <anwesend>
+    /apollon/presence/person  <tick> <zeile> <label> <name> <vermutet>
                             <aehnlichkeit> <sichtungen> <seit> <dauer_s>
-    /orest/presence/end     <tick>
+    /apollon/presence/end     <tick>
 
 `tick` counts upward rather than being a random id: a periodic stream over UDP
 can arrive out of order, and a receiver keeps the highest tick it has seen
@@ -50,26 +50,26 @@ The fast lane (session.py) sends as things happen. The live values, whenever
 one changes as an operator would see it, framed like the roster; `alarm` is 0
 or 1, `alarm_wer` empty for a line of unknown speaker:
 
-    /orest/live/begin       <tick> <zeit> <personen> <alarm> <alarm_wert>
+    /apollon/live/begin       <tick> <zeit> <personen> <alarm> <alarm_wert>
                             <alarm_wer> <alarm_anlass>
-    /orest/live/person      <tick> <zeile> <name> <risiko> <menschlichkeit>
+    /apollon/live/person      <tick> <zeile> <name> <risiko> <menschlichkeit>
                             <anlass_risiko> <anlass_menschlichkeit>
-    /orest/live/end         <tick>
+    /apollon/live/end         <tick>
 
 Each line as soon as it is transcribed, with `bewertet` 0, and again once it
 is rated, with `bewertet` 1; `beginn` and `text` tell which line a rating
 belongs to. `name` is empty where the speaker is not known, `risiko` and
 `menschlichkeit` are the line's evidence, -5 to +5, and 0 until rated:
 
-    /orest/live/zeile       <beginn> <ende> <name> <text> <lautstaerke>
+    /apollon/live/zeile       <beginn> <ende> <name> <text> <lautstaerke>
                             <risiko> <menschlichkeit> <bewertet>
 
 Each recommendation, and each stretch the Chronik summarised; `eskalation`
 and `gefahr` are -1 for a stretch the model could not summarise:
 
-    /orest/live/empfehlung  <nummer> <zeit> <einschreiten> <eskalation> <gefahr>
+    /apollon/live/empfehlung  <nummer> <zeit> <einschreiten> <eskalation> <gefahr>
                             <lage> <massnahme> <anlass> <latenz_s>
-    /orest/chronik/abschnitt <beginn> <ende> <eskalation> <gefahr> <tendenz>
+    /apollon/chronik/abschnitt <beginn> <ende> <eskalation> <gefahr> <tendenz>
                             <zusammenfassung>
 """
 
@@ -82,26 +82,26 @@ from osc import Message, Sender  # noqa: F401  (Sender is re-exported)
 
 from . import presence, report
 
-SITREP_BEGIN = "/orest/sitrep/begin"
-SITREP_VERLAUF = "/orest/sitrep/verlauf"
-SITREP_BESCHREIBUNG = "/orest/sitrep/beschreibung"
-SITREP_GESAGT = "/orest/sitrep/gesagt"
-SITREP_PERSON = "/orest/sitrep/person"
-SITREP_SZENE = "/orest/sitrep/szene"
-SITREP_PROGNOSE = "/orest/sitrep/prognose"
-SITREP_EMPFEHLUNG = "/orest/sitrep/empfehlung"
-SITREP_END = "/orest/sitrep/end"
+SITREP_BEGIN = "/apollon/sitrep/begin"
+SITREP_VERLAUF = "/apollon/sitrep/verlauf"
+SITREP_BESCHREIBUNG = "/apollon/sitrep/beschreibung"
+SITREP_GESAGT = "/apollon/sitrep/gesagt"
+SITREP_PERSON = "/apollon/sitrep/person"
+SITREP_SZENE = "/apollon/sitrep/szene"
+SITREP_PROGNOSE = "/apollon/sitrep/prognose"
+SITREP_EMPFEHLUNG = "/apollon/sitrep/empfehlung"
+SITREP_END = "/apollon/sitrep/end"
 
-PRESENCE_BEGIN = "/orest/presence/begin"
-PRESENCE_PERSON = "/orest/presence/person"
-PRESENCE_END = "/orest/presence/end"
+PRESENCE_BEGIN = "/apollon/presence/begin"
+PRESENCE_PERSON = "/apollon/presence/person"
+PRESENCE_END = "/apollon/presence/end"
 
-LIVE_BEGIN = "/orest/live/begin"
-LIVE_PERSON = "/orest/live/person"
-LIVE_END = "/orest/live/end"
-LIVE_ZEILE = "/orest/live/zeile"
-LIVE_EMPFEHLUNG = "/orest/live/empfehlung"
-CHRONIK_ABSCHNITT = "/orest/chronik/abschnitt"
+LIVE_BEGIN = "/apollon/live/begin"
+LIVE_PERSON = "/apollon/live/person"
+LIVE_END = "/apollon/live/end"
+LIVE_ZEILE = "/apollon/live/zeile"
+LIVE_EMPFEHLUNG = "/apollon/live/empfehlung"
+CHRONIK_ABSCHNITT = "/apollon/chronik/abschnitt"
 
 # A person's rating that was not measured.
 NICHT_GEMESSEN = -1

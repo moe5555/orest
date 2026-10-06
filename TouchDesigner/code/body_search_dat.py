@@ -15,7 +15,7 @@ def onOffToOn(panelValue: PanelValue):
 	"""
 	Called when a panel value changes from 0 to non-zero.
 	"""
-	op('oscout1').sendOSC('/orest/body/start', [1])
+	op('oscout1').sendOSC('/apollon/body/start', [1])
 
 def whileOn(panelValue: PanelValue):
 	"""
@@ -27,7 +27,7 @@ def onOnToOff(panelValue: PanelValue):
 	"""
 	Called when a panel value changes from non-zero to 0.
 	"""
-	op('oscout1').sendOSC('/orest/body/stop', [1])
+	op('oscout1').sendOSC('/apollon/body/stop', [1])
 
 def whileOff(panelValue: PanelValue):
 	"""

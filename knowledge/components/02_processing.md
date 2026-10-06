@@ -21,6 +21,7 @@ Overview: components/pipeline.md
   - prediction of what might happen next. 
   - whether to interfere, if so, what to do. 
 - prioritises low latency over accuracy 
+- the system should be able to understand, when it is spoken to. If the system is directly spoken to e.g. via "System" or "Apollon". 
 
 Implementation Steps: 
 1. Install Gemma-4b and deploy via Ollama
@@ -62,7 +63,7 @@ flowchart LR
 - *Sentiment Analysis*: feed the transcript into Gemma and ask it to score the person's values (gefahr, kollaborativ, etc.) - to do this, we need to implement speaker diarisation. Speaker attribution by lip movement of the two most visible people exists (`src/sitrep/speakers.py`); each report carries its lines with speakers (`aeusserungen`). There should also be a file with key value pairs that we can add to this analysis so that we can hardcode certain things like if sentence x is said -> set value x to y. For now the prompt's example lines (`src/sitrep/speech_examples.csv`) take this role; a separate trigger table is built only if they prove insufficient. 
 - *Pose*: certain activites are recognised. For instance, people hitting each other, running, hugging, etc. and are then mapped to the SITREP values. The mapping is `src/action/sitrep_map.csv`: evidence from -5 to +5 for Risiko and Menschlichkeit per NTU120 class.
   > Claude's notes (2026-09-25), reviewed 28.09.26, kept here for now as background info:
-  > - **No live WISE needed.** The pose embedding (`orest_pose`) already runs in Orest; a labelled reference corpus of a few hundred clips can be matched directly. WISE helps *build* the corpus: body-search one good example in the archive to find its rehearsed repetitions.
+  > - **No live WISE needed.** The pose embedding (`apollon_pose`) already runs in Apollon; a labelled reference corpus of a few hundred clips can be matched directly. WISE helps *build* the corpus: body-search one good example in the archive to find its rehearsed repetitions.
   > - **Label activities, not values.** Clips are tagged "Schlag", "Umarmung", …; a separate editable table maps activities to values (Schlag → gefahr ≥ 9). Same format as the key-value file for spoken lines.
   > - **Negatives are essential.** Ordinary postures barely differ in the embedding, so a large "nothing special" class is needed; an activity counts only when it clearly beats the neutral examples.
   > - **Pose catches what Gemma misses.** Gemma sees three stills per window; a slap falls between them. Pose can run continuously (~9 ms per frame).

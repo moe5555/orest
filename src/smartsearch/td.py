@@ -1,13 +1,13 @@
 """Announcing search results to TouchDesigner over OSC.
 
-The control half of the Orest -> TouchDesigner interface in
+The control half of the Apollon -> TouchDesigner interface in
 knowledge/components/03_render.md: pixels travel as clip files, and OSC carries
 where each clip is and what it is. One search is framed by a begin and an end
 message, with one message per clip between them:
 
-    /orest/results/begin  <query_id> <count>
-    /orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
-    /orest/results/end    <query_id>
+    /apollon/results/begin  <query_id> <count>
+    /apollon/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
+    /apollon/results/end    <query_id>
 
 A hit is announced only once its clip is completely written, so TouchDesigner
 can open every path it receives. `preroll` is how many seconds into the clip
@@ -16,7 +16,7 @@ the footage ahead of the hit in a fast clip, and trims it off instead. The query
 apart from those of the search before it.
 
 How many results are used, and how, is decided in TouchDesigner or by the QLab
-cue driving it; Orest sends everything the search returned.
+cue driving it; Apollon sends everything the search returned.
 """
 
 import uuid
@@ -27,9 +27,9 @@ from osc import Message, Sender  # noqa: F401  (Sender is re-exported)
 from .client import Hit
 from .clips import Clip
 
-BEGIN = "/orest/results/begin"
-HIT = "/orest/results/hit"
-END = "/orest/results/end"
+BEGIN = "/apollon/results/begin"
+HIT = "/apollon/results/hit"
+END = "/apollon/results/end"
 
 
 def new_query_id() -> str:

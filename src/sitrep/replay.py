@@ -8,7 +8,7 @@ run itself (session.py): the same models, threads and requests.
 
     python -m sitrep.replay "../test_data_orest/Improvised Four Dogs  a Bone with Erin Darke  Alex Dickson - FULL SCENE.mp4" --language en --model gemma4:26b --window 30 --interval 5 --dauer 405 --bericht-bei 150 300 400
 
-Prints what orest-sitrep prints. r and e ask for a report or a
+Prints what apollon-sitrep prints. r and e ask for a report or a
 recommendation as they do there; --bericht-bei asks for reports at set
 positions, so that runs can be compared. At the end it prints the latencies
 measured against the targets in knowledge/background/live_sitrep_latency.md

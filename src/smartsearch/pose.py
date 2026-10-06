@@ -9,13 +9,13 @@ The embedding is computed in this process rather than by WISE. WISE's search
 path decodes every visual query as a still image and cannot embed a clip at
 all, but its /search_with_feature endpoint accepts a finished vector, so the
 encoder that built the index is simply run again on the query. Both sides
-import the same `orest_pose` package, which is what keeps the two in the same
+import the same `apollon_pose` package, which is what keeps the two in the same
 space.
 """
 
 import cv2
 import numpy as np
-from orest_pose import keypoints, model
+from apollon_pose import keypoints, model
 
 # Seconds of movement a query covers, matching the indexed segment length.
 # A query spanning a different duration describes a differently paced movement

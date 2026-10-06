@@ -58,7 +58,7 @@ They separate **raising an alarm** from **describing what happened**:
 4. **The operator gets events and changing values, not reports.** The
    narrative summary trails behind.
 
-## What this means for Orest
+## What this means for Apollon
 
 Most of a fast lane already exists. It is held back only by being routed
 through the per-window report:
@@ -98,7 +98,7 @@ through the per-window report:
   decaying").
 - Send changes as they happen: server-sent events to the operator page (it
   already receives one per second for the live action panel), and a new OSC
-  address such as `/orest/live/person` for TouchDesigner.
+  address such as `/apollon/live/person` for TouchDesigner.
 
 ### 3. Reports triggered by a spike
 

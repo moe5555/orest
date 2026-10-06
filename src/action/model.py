@@ -2,7 +2,7 @@
 
 The weights are not in the repository: data/models/ntu120_stgcn/ holds the
 exported network and the class list, with their provenance in SOURCE.md
-there. The model is research-licensed (NTU RGB+D terms), which Orest's
+there. The model is research-licensed (NTU RGB+D terms), which Apollon's
 research context covers (changelog.md, 2026-09-28).
 
 Runs on the GPU where ONNX Runtime's CUDA provider works, found the same way
@@ -20,7 +20,7 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-MODEL_DIR = Path(os.environ.get("OREST_ACTION_MODEL_DIR",
+MODEL_DIR = Path(os.environ.get("APOLLON_ACTION_MODEL_DIR",
                                 REPO_ROOT / "data" / "models" / "ntu120_stgcn"))
 MODEL_FILE = "stgcn_ntu120_2d.onnx"
 LABELS_FILE = "label_map_ntu120.txt"
@@ -42,9 +42,9 @@ def labels() -> tuple[str, ...]:
 
 
 def _providers() -> list:
-    # Imported here: orest_pose's device() also puts the CUDA libraries on
+    # Imported here: apollon_pose's device() also puts the CUDA libraries on
     # PATH, which has to happen before the session is created.
-    from orest_pose import model as pose_model
+    from apollon_pose import model as pose_model
 
     if pose_model.device() == "cuda":
         # kSameAsRequested grows the memory arena by what a run needs rather
@@ -66,7 +66,7 @@ def session():
             if not path.exists():
                 raise RuntimeError(
                     f"No action model at {path}. Export it with "
-                    f"src/scripts/export_ntu_stgcn.py, or set OREST_ACTION_MODEL_DIR.")
+                    f"src/scripts/export_ntu_stgcn.py, or set APOLLON_ACTION_MODEL_DIR.")
             _session = onnxruntime.InferenceSession(str(path), providers=_providers())
         return _session
 

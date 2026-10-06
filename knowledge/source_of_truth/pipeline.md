@@ -1,4 +1,4 @@
-# Orest - Pipeline
+# Apollon - Pipeline
 
 ```mermaid
 graph LR;
@@ -9,18 +9,18 @@ graph LR;
     DB --> R[3 · RENDER]:::mode;
     R --> OUT[Material for the play]:::out;
 
-    O((Orest)):::orest -.-> C;
+    O((Apollon)):::apollon -.-> C;
     O -.-> PR;
     O -.-> R;
 
     classDef stage fill:#f5f0e6,stroke:#8a7a5c,color:#2b2b2b;
     classDef mode fill:#e8eef7,stroke:#3f6ea8,color:#12263a;
     classDef store fill:#eef7ee,stroke:#4a8a4a,color:#12331a;
-    classDef orest fill:#f7e8ee,stroke:#a83f6e,color:#3a1226;
+    classDef apollon fill:#f7e8ee,stroke:#a83f6e,color:#3a1226;
     classDef out fill:#fff,stroke:#666,color:#222;
 ```
 
-Orest runs in three modes across the pipeline: **real-time** (capture), **offline** (processing) and **retrieval/generative** (render).
+Apollon runs in three modes across the pipeline: **real-time** (capture), **offline** (processing) and **retrieval/generative** (render).
 
 ## [CAPTURE](capture.md)
 Data capturing of rehearsals follows the AMAP principle: collect as much data as possible. 
@@ -48,7 +48,7 @@ graph TD;
     classDef sensor fill:#fdf3e3,stroke:#c08a2e,color:#3a2a0a;
     classDef clock fill:#fff,stroke:#999,stroke-dasharray:3 3,color:#333;
     classDef proc fill:#e8eef7,stroke:#3f6ea8,color:#12263a;
-    classDef orest fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
+    classDef apollon fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
     classDef store fill:#eef7ee,stroke:#4a8a4a,color:#12331a;
     classDef out fill:#fff,stroke:#666,color:#222;
     classDef human fill:#f0f0f0,stroke:#777,color:#222;
@@ -61,7 +61,7 @@ Process the rehearsal data to gather intelligence on the room + its activities &
 
 ```mermaid
 graph TD;
-    STORE[("Rehearsal database<br/>raw A/V + live annotations")]:::store --> ORE["Orest — processing mode<br/>batch processing"]:::orest;
+    STORE[("Rehearsal database<br/>raw A/V + live annotations")]:::store --> ORE["Apollon — processing mode<br/>batch processing"]:::apollon;
 
     ORE --> AV["AV analysis<br/>audio + video"]:::proc;
 
@@ -80,7 +80,7 @@ graph TD;
     IDX ==>|feeds| NEXT["3 · RENDER"]:::mode;
 
     classDef store fill:#eef7ee,stroke:#4a8a4a,color:#12331a;
-    classDef orest fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
+    classDef apollon fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
     classDef proc fill:#e8eef7,stroke:#3f6ea8,color:#12263a;
     classDef idx fill:#eaf3fb,stroke:#5a86b5,color:#12263a;
     classDef human fill:#f0f0f0,stroke:#777,color:#222;
@@ -99,7 +99,7 @@ graph TD;
         QB["BODY SEARCH<br/>actor performs live:<br/>body pose + voice as the query"]:::q;
     end
 
-    QT --> SS["SMART SEARCH<br/>Orest — retrieval mode"]:::orest;
+    QT --> SS["SMART SEARCH<br/>Apollon — retrieval mode"]:::apollon;
     QB --> ENC["Live encoder<br/>pose + voice → embedding"]:::proc;
     ENC --> SS;
 
@@ -111,7 +111,7 @@ graph TD;
     CUT --> STAGE["Playback on stage / in rehearsal"]:::stage;
 
     classDef q fill:#fdf3e3,stroke:#c08a2e,color:#3a2a0a;
-    classDef orest fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
+    classDef apollon fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
     classDef proc fill:#e8eef7,stroke:#3f6ea8,color:#12263a;
     classDef store fill:#eef7ee,stroke:#4a8a4a,color:#12331a;
     classDef out fill:#fff,stroke:#666,color:#222;

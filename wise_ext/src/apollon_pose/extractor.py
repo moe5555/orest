@@ -7,7 +7,7 @@ windowing, vector storage and index building; this class only turns frames into
 a vector.
 
 Imported only inside WISE's environment. The embedding itself lives in
-`keypoints`, which Orest imports separately to encode a live query into the
+`keypoints`, which Apollon imports separately to encode a live query into the
 same space.
 
 Segment-level rather than frame-level, so WISE hands over a whole window of
@@ -15,7 +15,7 @@ frames at once and stores one vector per window. Frame-level and segment-level
 extractors cannot be combined in one extraction run, so this is added to an
 existing project on its own:
 
-    orest-search add-extractor --video-id orest/pose/rtmo-s/body7
+    apollon-search add-extractor --video-id apollon/pose/rtmo-s/body7
 """
 
 import logging
@@ -33,10 +33,10 @@ logger = logging.getLogger(__name__)
 class PoseSegmentFeatureExtractor(FeatureExtractor):
     """Encodes a video segment as the movement of the body it contains.
 
-    See orest_pose.keypoints for what the vector represents.
+    See apollon_pose.keypoints for what the vector represents.
     """
 
-    ID_PREFIX = "orest/pose/"
+    ID_PREFIX = "apollon/pose/"
     DESCRIPTION = "RTMO body keypoints, normalised and concatenated over a segment"
 
     # Only whole segments are meaningful here. A still frame carries a posture

@@ -1,7 +1,7 @@
-"""Export the NTU120 ST-GCN action recogniser to ONNX, once, outside Orest.
+"""Export the NTU120 ST-GCN action recogniser to ONNX, once, outside Apollon.
 
-MMAction2 needs a PyTorch stack that cannot live in Orest's Python 3.14
-environment, so the model is converted here and Orest runs the resulting
+MMAction2 needs a PyTorch stack that cannot live in Apollon's Python 3.14
+environment, so the model is converted here and Apollon runs the resulting
 .onnx file with onnxruntime, as it runs RTMO (changelog.md, 2026-09-28).
 
 Runs in a conda environment of its own, `mmaction`:
@@ -28,12 +28,12 @@ Writes, next to the checkpoint:
     reference.npz          a synthetic two-person sequence, MMAction2's own
                            preprocessing of it and its prediction, and the
                            frames MMAction2 samples from longer sequences,
-                           against which Orest's preprocessing is tested
+                           against which Apollon's preprocessing is tested
                            (copied to tests/fixtures/ntu120_reference.npz)
 
 The export covers the network only. MMAction2 applies softmax to each of its
 10 test clips and averages them ('average_clips': 'prob'); that, and the
-preprocessing, are Orest's to reproduce.
+preprocessing, are Apollon's to reproduce.
 """
 
 import argparse

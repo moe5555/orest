@@ -1,5 +1,5 @@
 [project]
-name = "orest"
+name = "apollon"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -16,13 +16,13 @@ dependencies = [
     # extras install that runtime and cuDNN as NVIDIA's pip packages.
     "onnxruntime-gpu[cuda,cudnn]==1.26.0",
     "opencv-python>=5.0.0.93",
-    "orest-pose",
+    "apollon-pose",
     "pillow>=12.3.0",
     "pydantic>=2.13.5",
     "pygrabber>=0.2",
     "python-osc>=1.10.2",
-    # Loads the RTMO pose model orest_pose runs. Declared here rather than in
-    # orest_pose, which stays dependency-free so that installing it into WISE's
+    # Loads the RTMO pose model apollon_pose runs. Declared here rather than in
+    # apollon_pose, which stays dependency-free so that installing it into WISE's
     # conda environment cannot re-resolve that environment's pinned stack.
     "rtmlib>=0.0.16",
     "sounddevice>=0.5.6",
@@ -30,9 +30,9 @@ dependencies = [
 ]
 
 [project.scripts]
-orest-sitrep = "sitrep.main:main"
-orest-search = "smartsearch.main:main"
-orest-ui = "interface.main:main"
+apollon-sitrep = "sitrep.main:main"
+apollon-search = "smartsearch.main:main"
+apollon-ui = "interface.main:main"
 
 [dependency-groups]
 dev = [
@@ -67,4 +67,4 @@ members = [
 ]
 
 [tool.uv.sources]
-orest-pose = { workspace = true, editable = true }
+apollon-pose = { workspace = true, editable = true }

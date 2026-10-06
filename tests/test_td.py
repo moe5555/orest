@@ -62,7 +62,7 @@ def test_delivery_frames_the_hits_with_begin_and_end_in_rank_order(tmp_path, mon
 def test_messages_arrive_over_udp_as_sent():
     received = []
     dispatcher = Dispatcher()
-    dispatcher.map("/orest/*", lambda address, *arguments: received.append((address, list(arguments))))
+    dispatcher.map("/apollon/*", lambda address, *arguments: received.append((address, list(arguments))))
     server = BlockingOSCUDPServer(("127.0.0.1", 0), dispatcher)
     port = server.server_address[1]
     thread = threading.Thread(target=server.handle_request)

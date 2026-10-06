@@ -1,4 +1,4 @@
-"""Orest live SITREP: runs the live SITREP and prints it to the console.
+"""Apollon live SITREP: runs the live SITREP and prints it to the console.
 
 Entry point for the Realtime-SITREP of knowledge/components/02_processing.md.
 Prints each line as it is rated, the live values and the alarm, each stretch
@@ -12,9 +12,9 @@ On Windows the key alone does it; elsewhere the key and Enter. Nothing is
 retained; the camera feed itself is handled separately and is not displayed
 here.
 
-    orest-sitrep
-    orest-sitrep --window 30 --interval 10 --audio-api WASAPI
-    orest-sitrep --json
+    apollon-sitrep
+    apollon-sitrep --window 30 --interval 10 --audio-api WASAPI
+    apollon-sitrep --json
 
 Equivalently, without the installed entry point:
 
@@ -140,7 +140,7 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
     quelle = document.quelle
     bericht = document.bericht
 
-    heading = (f" OREST · SITREP{' ' * 4}{zeit.beginn:%H:%M:%S} – {zeit.ende:%H:%M:%S}"
+    heading = (f" APOLLON · SITREP{' ' * 4}{zeit.beginn:%H:%M:%S} – {zeit.ende:%H:%M:%S}"
                f"   ({zeit.dauer_s}s)")
 
     lines = [

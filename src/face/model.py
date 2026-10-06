@@ -13,7 +13,7 @@ that index occupy one space rather than two.
 The models are loaded from the ONNX files directly rather than through the
 `insightface` package, which builds from source on Python 3.14 and pulls a
 second numpy stack behind it. Only onnxruntime, numpy and cv2 are needed, all
-three of which Orest already has.
+three of which Apollon already has.
 """
 
 import glob
@@ -45,7 +45,7 @@ RECOGNISER = "w600k_r50.onnx"
 # detect-and-embed pass takes 802 ms at the default and 222 ms at four threads.
 # Four also leaves the machine to Whisper and Ollama, which run in the same
 # window.
-THREADS = int(os.environ.get("OREST_FACE_THREADS", "4"))
+THREADS = int(os.environ.get("APOLLON_FACE_THREADS", "4"))
 
 _lock = threading.Lock()
 _sessions = {}
@@ -57,7 +57,7 @@ def cache_dir() -> Path:
     Outside the repository, so re-cloning or rebuilding the environment does
     not cost a 288 MB download.
     """
-    return Path(os.environ.get("OREST_FACE_CACHE", Path.home() / ".cache" / "orest"))
+    return Path(os.environ.get("APOLLON_FACE_CACHE", Path.home() / ".cache" / "apollon"))
 
 
 def _add_cuda_libraries_to_path():
@@ -70,7 +70,7 @@ def _add_cuda_libraries_to_path():
 
     Where torch is installed, its complete CUDA 12 runtime is used, avoiding a
     second multi-gigabyte copy. Elsewhere the runtime comes from NVIDIA's pip
-    packages (nvidia-*-cu12), which Orest's environment installs with
+    packages (nvidia-*-cu12), which Apollon's environment installs with
     onnxruntime-gpu. Their folders go on PATH rather than being preloaded,
     because cuDNN loads its sub-libraries by name on first use, which only a
     search path satisfies.
@@ -96,7 +96,7 @@ def device() -> str:
     session creation if the matching CUDA runtime is missing. What was actually
     used is reported by `active_provider()` after loading.
     """
-    override = os.environ.get("OREST_FACE_DEVICE")
+    override = os.environ.get("APOLLON_FACE_DEVICE")
     if override:
         return override
 

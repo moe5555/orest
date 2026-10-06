@@ -22,8 +22,8 @@ and reapply with `git -C external/wise apply <patch>` after a fresh clone:
   raises the video streaming chunk from 10 KB to 1 MB. Each chunk is one ASGI
   message, so the 10 KB default capped playback at 12 MB/s against a disk that
   reads at 2.6 GB/s. Not Windows-specific.
-- `0006-register-orest-pose-extractor.patch` — `feature_extractor_factory.py` and
-  `hf_models.py`, registers Orest's pose extractor so WISE can construct it and
+- `0006-register-apollon-pose-extractor.patch` — `feature_extractor_factory.py` and
+  `hf_models.py`, registers Apollon's pose extractor so WISE can construct it and
   knows its segment length. This is the extension route WISE documents
   (`docs/FeatureExtractor.md`); the factory is a hardcoded prefix chain with no
   plugin mechanism. The extractor itself is **not** in this patch — it lives in

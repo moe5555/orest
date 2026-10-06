@@ -5,7 +5,7 @@ knowledge/components/03_render.md: "OSC carries messages, not pixels." Stored
 footage reaches TouchDesigner as cut clips on disk; live frames reach it as a
 video stream, which that file names as Spout or NDI.
 
-NDI rather than Spout because Orest runs on Python 3.14, for which SpoutGL
+NDI rather than Spout because Apollon runs on Python 3.14, for which SpoutGL
 publishes no wheel; rather than TouchDesigner's own shared memory because that
 operator requires a licence above Non-Commercial. TouchDesigner receives with
 its native NDI In TOP and needs no addition to run.
@@ -30,11 +30,11 @@ import numpy as np
 
 # Name TouchDesigner's NDI In TOP lists this source under. A rehearsal may run
 # more than one machine, and sources are chosen by name.
-NAME = os.environ.get("OREST_NDI_NAME", "Orest SITREP")
+NAME = os.environ.get("APOLLON_NDI_NAME", "Apollon SITREP")
 
 # Frames per second sent. Independent of the camera's rate and of the SITREP
 # interval; the publisher always sends the newest frame the stream has drained.
-FPS = float(os.environ.get("OREST_NDI_FPS", "30"))
+FPS = float(os.environ.get("APOLLON_NDI_FPS", "30"))
 
 
 def bgrx(frame: np.ndarray) -> np.ndarray:

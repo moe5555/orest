@@ -25,11 +25,11 @@ Press "R" once and the Reportbericht is displayed center of the page, no other e
 > Everything between this box and the closing box below is a proposal drafted by
 > Claude. It is not authoritative until Moe has reviewed and edited it.
 
-## Playback chain: Orest → TouchDesigner → QLab → projectors
+## Playback chain: Apollon → TouchDesigner → QLab → projectors
 
 ```mermaid
 graph LR;
-    UI["Orest UI<br/>Smart Search"]:::orest -->|OSC: hit metadata| TD["TouchDesigner<br/>effects"]:::proc;
+    UI["Apollon UI<br/>Smart Search"]:::apollon -->|OSC: hit metadata| TD["TouchDesigner<br/>effects"]:::proc;
     CUT[("Clip folder<br/>cut hits")]:::store -->|files| TD;
     UI -->|cuts clips| CUT;
     TD <-->|TDAbleton / OSC| ABL["Ableton<br/>sound design"]:::proc;
@@ -37,7 +37,7 @@ graph LR;
     QL -->|OSC: cues| TD;
     QL -->|all outputs| PROJ["Projectors"]:::out;
 
-    classDef orest fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
+    classDef apollon fill:#f7e8ee,stroke:#a83f6e,stroke-width:2px,color:#3a1226;
     classDef proc fill:#e8eef7,stroke:#3f6ea8,color:#12263a;
     classDef store fill:#eef7ee,stroke:#4a8a4a,color:#12331a;
     classDef out fill:#fff,stroke:#666,color:#222;
@@ -46,9 +46,9 @@ graph LR;
 ### Open decisions
 
 - **TD ↔ Ableton.** TDAbleton (Derivative's official bridge, via Max for Live),
-  plain OSC/MIDI, or Ableton Link for tempo. No Orest involvement.
+  plain OSC/MIDI, or Ableton Link for tempo. No Apollon involvement.
 
-## Interface: Orest → TouchDesigner
+## Interface: Apollon → TouchDesigner
 
 OSC carries messages, not pixels. The interface therefore has two channels.
 
@@ -56,7 +56,7 @@ OSC carries messages, not pixels. The interface therefore has two channels.
 
 A WISE hit is a time range inside a source recording that may be several GB
 (e.g. Othello 2022, 4.3 GB). Seeking inside long-GOP H.264 or 4K files is slow
-and unreliable in playback, so Orest cuts each hit into a short clip in a
+and unreliable in playback, so Apollon cuts each hit into a short clip in a
 playback-friendly codec, writes it to a shared clip folder, and TD plays the
 file. This is the `HITS → CUT` node of the RENDER graph in
 `source_of_truth/pipeline.md`.
@@ -71,18 +71,18 @@ announced once its clip exists, so rank 1 is playable first.
 ### Control: OSC
 
 ```
-/orest/results/begin  <query_id> <count>
-/orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
-/orest/results/end    <query_id>
+/apollon/results/begin  <query_id> <count>
+/apollon/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
+/apollon/results/end    <query_id>
 ```
 
 TD collects the hits of one `query_id` into a Table DAT. The fields follow
 `Hit` in `src/smartsearch/client.py`. A return channel from TD (e.g.
-`/orest/query ...`) allows a QLab cue to trigger a search.
+`/apollon/query ...`) allows a QLab cue to trigger a search.
 
 ## How many results reach the stage
 
-**Orest sends a fixed maximum; TD/QLab chooses how many to use, per cue.**
+**Apollon sends a fixed maximum; TD/QLab chooses how many to use, per cue.**
 
 - The number of clips a scene uses is a playback parameter, like opacity or
   timing. Stored in a QLab cue (as OSC to TD), it is recalled identically every
@@ -93,7 +93,7 @@ TD collects the hits of one `query_id` into a Table DAT. The fields follow
 
 Division of responsibility:
 
-| Orest (Smart Search) | TouchDesigner / QLab |
+| Apollon (Smart Search) | TouchDesigner / QLab |
 |---|---|
 | Which moments are good results: ranking, per-file caps, excluding the recent past (`progress_tracker.md`, Phase 3) | How many are used and how, per cue |
 | Maximum number of results sent | Count, order, effects, timing |

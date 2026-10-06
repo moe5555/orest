@@ -2,7 +2,7 @@
 
 Covers the query half of Smart Search in knowledge/components/02_processing.md.
 WISE's search API is unauthenticated JSON over HTTP, which is the boundary
-between Orest's environment and WISE's.
+between Apollon's environment and WISE's.
 
 Every search returns a flat list of Hit. WISE splits its response by modality —
 the visual stream of videos, the audio stream of videos, still images — each

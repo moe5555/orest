@@ -268,7 +268,7 @@ def check(video_spec=None, audio_spec=None, hostapi=None, seconds=10.0, preview=
 
                 if preview:
                     _draw_overlay(frame, video, audio, frames / max(elapsed, 1e-6), level["rms"])
-                    cv2.imshow("Orest SITREP - source check", frame)
+                    cv2.imshow("Apollon SITREP - source check", frame)
                     if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
                         break
                 elif frames % 30 == 0:

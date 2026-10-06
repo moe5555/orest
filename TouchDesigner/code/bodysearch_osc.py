@@ -1,13 +1,13 @@
 """
 Text DAT module: bodysearch_osc
 
-Receives search results from `orest-search ... --send-td` and writes them into
+Receives search results from `apollon-search ... --send-td` and writes them into
 the `results` Table DAT beside this module. The wire format is documented in
 src/smartsearch/td.py:
 
-	/orest/results/begin  <query_id> <count>
-	/orest/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
-	/orest/results/end    <query_id>
+	/apollon/results/begin  <query_id> <count>
+	/apollon/results/hit    <query_id> <rank> <clip_path> <ts> <te> <score> <source_file> <preroll>
+	/apollon/results/end    <query_id>
 
 Hits are appended as they arrive, since each is announced once its clip exists
 and rank 1 is playable before the rest are cut.
@@ -23,7 +23,7 @@ _query_id = None
 def handle(address, args):
 	"""Route one OSC message. Returns True if the address belonged to this module."""
 	global _query_id
-	if not address.startswith('/orest/results/'):
+	if not address.startswith('/apollon/results/'):
 		return False
 
 	results = op('results')

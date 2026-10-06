@@ -1,11 +1,11 @@
 """Serve the operator interface on the loopback interface.
 
-    orest-ui
-    orest-ui --video "OBS Virtual Camera" --model gemma4:26b
-    orest-ui --cast data/cast --send-td --send-ndi
-    uv run orest-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
+    apollon-ui
+    apollon-ui --video "OBS Virtual Camera" --model gemma4:26b
+    apollon-ui --cast data/cast --send-td --send-ndi
+    uv run apollon-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
 
-Takes the same camera, microphone, window and output options as orest-sitrep;
+Takes the same camera, microphone, window and output options as apollon-sitrep;
 they apply to every live SITREP started from the page. Devices are resolved
 when a run starts, not here, so a camera plugged in after the server started
 is found.
@@ -26,8 +26,8 @@ from sitrep import cli, report, session, transcribe
 from .app import create_app
 from .live import LiveSitrep
 
-HOST = os.environ.get("OREST_UI_HOST", "127.0.0.1")
-PORT = int(os.environ.get("OREST_UI_PORT", "9680"))
+HOST = os.environ.get("APOLLON_UI_HOST", "127.0.0.1")
+PORT = int(os.environ.get("APOLLON_UI_PORT", "9680"))
 
 
 def main(argv=None) -> int:
@@ -64,7 +64,7 @@ def main(argv=None) -> int:
         return run
 
     live = LiveSitrep(open_session)
-    print(f"Orest operator page: http://{args.host}:{args.port}/", flush=True)
+    print(f"Apollon operator page: http://{args.host}:{args.port}/", flush=True)
     try:
         uvicorn.run(create_app(live), host=args.host, port=args.port,
                     log_level="warning", timeout_graceful_shutdown=2)

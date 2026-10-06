@@ -167,7 +167,7 @@ class ActionRecognizer:
 
     def observe(self, frame: np.ndarray, at: float) -> tracking.Frame:
         """Detect and track the bodies in one frame."""
-        from orest_pose import model as pose_model
+        from apollon_pose import model as pose_model
 
         started = time.perf_counter()
         keypoints, scores = pose_model.detect(frame)
@@ -295,7 +295,7 @@ def main(argv=None) -> int:
         print(error, file=sys.stderr)
         return 1
 
-    from orest_pose import model as pose_model
+    from apollon_pose import model as pose_model
 
     if recognizer.pose_seconds:
         print(f"\npose on {pose_model.active_provider()}: "

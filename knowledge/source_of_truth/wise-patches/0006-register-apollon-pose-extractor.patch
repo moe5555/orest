@@ -6,8 +6,8 @@ index f71698d..20ac8b7 100644
  
          return HFMultiModalFeatureExtractor
  
-+    if _id.startswith("orest/pose/"):
-+        from orest_pose.extractor import PoseSegmentFeatureExtractor
++    if _id.startswith("apollon/pose/"):
++        from apollon_pose.extractor import PoseSegmentFeatureExtractor
 +
 +        return PoseSegmentFeatureExtractor
 +
@@ -22,11 +22,11 @@ index 8921923..17b55a1 100644
          "segment_overlap": 4.0,
          "segment_num_frames": 16,
      },
-+    # Body-pose retrieval for Orest. Shorter and more finely sampled than the
++    # Body-pose retrieval for Apollon. Shorter and more finely sampled than the
 +    # Qwen entries above: at 4 fps a fall is separable from a slow descent,
 +    # which 2 fps blurs together, and a 4s window is the length of the captured
 +    # phrase the query side produces.
-+    "orest/pose/rtmo-s/body7": {
++    "apollon/pose/rtmo-s/body7": {
 +        "hf_model_id": None,
 +        "modalities": ["video_segment"],
 +        "segment_duration": 4.0,

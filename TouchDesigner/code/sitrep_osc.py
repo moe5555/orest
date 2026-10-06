@@ -1,7 +1,7 @@
 """
 Text DAT module: sitrep_osc
 
-Receives the live SITREP and the presence roster from `orest-sitrep --send-td`
+Receives the live SITREP and the presence roster from `apollon-sitrep --send-td`
 and writes them into Table DATs beside this module. The wire format is
 documented in src/sitrep/td.py.
 
@@ -37,7 +37,7 @@ META_HEADER = ['id', 'nummer', 'beginn', 'ende', 'dauer_s', 'bilder', 'abschnitt
 			   'beschreibung', 'gesagt', 'relevanz', 'eskalation', 'gefahr',
 			   'einschreiten', 'massnahme']
 
-# Rating columns follow report.BEWERTUNGEN in Orest, in the same order.
+# Rating columns follow report.BEWERTUNGEN in Apollon, in the same order.
 # risiko and menschlichkeit are -1 when the action recogniser read nothing of
 # the person.
 PERSON_HEADER = ['zeile', 'name', 'vermutet', 'beschreibung',
@@ -45,7 +45,7 @@ PERSON_HEADER = ['zeile', 'name', 'vermutet', 'beschreibung',
 
 PROGNOSE_HEADER = ['rang', 'wahrscheinlichkeit', 'verlauf']
 
-# Name Orest gives a person in frame whom face tracking did not follow.
+# Name Apollon gives a person in frame whom face tracking did not follow.
 UNBEKANNT = 'Unbekannt'
 
 PRESENCE_META_HEADER = ['tick', 'zeit', 'anwesend']
@@ -71,7 +71,7 @@ CHRONIK_HEADER = ['beginn', 'ende', 'eskalation', 'gefahr', 'tendenz', 'zusammen
 LIVE_ZEILEN = 20
 CHRONIK_ZEILEN = 20
 
-# A tick this far below the last one shown means orest-sitrep restarted and
+# A tick this far below the last one shown means apollon-sitrep restarted and
 # its first reading was lost, rather than a reading that arrived late.
 TICK_RESTART = 10
 
@@ -86,16 +86,16 @@ _last_live = 0
 
 def handle(address, args):
 	"""Route one OSC message. Returns True if the address belonged to this module."""
-	if address.startswith('/orest/sitrep/'):
+	if address.startswith('/apollon/sitrep/'):
 		_sitrep(address.rsplit('/', 1)[-1], list(args))
 		return True
-	if address.startswith('/orest/presence/'):
+	if address.startswith('/apollon/presence/'):
 		_presence(address.rsplit('/', 1)[-1], list(args))
 		return True
-	if address.startswith('/orest/live/'):
+	if address.startswith('/apollon/live/'):
 		_live_message(address.rsplit('/', 1)[-1], list(args))
 		return True
-	if address == '/orest/chronik/abschnitt':
+	if address == '/apollon/chronik/abschnitt':
 		_append('chronik', CHRONIK_HEADER, list(args), CHRONIK_ZEILEN)
 		return True
 	return False
@@ -232,7 +232,7 @@ def _live_message(kind, args):
 		reading['personen'].append(args[1:])
 	elif kind == 'end':
 		del _live[tick]
-		# A reading older than the one shown, unless Orest restarted.
+		# A reading older than the one shown, unless Apollon restarted.
 		if 1 < tick <= _last_live and tick > _last_live - TICK_RESTART:
 			return
 		_last_live = tick

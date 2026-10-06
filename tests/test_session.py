@@ -214,7 +214,7 @@ def test_a_bare_session_opens_the_camera_once(room):
 def test_every_reader_is_given_the_one_open_camera(room, readers, tmp_path):
     """The whole point of the session: three readers, one device."""
     video, audio, _, opened, _ = room
-    options = session.Options(cast=tmp_path, ndi="Orest Test")
+    options = session.Options(cast=tmp_path, ndi="Apollon Test")
     with session.Session(video, audio, options) as live:
         assert len(opened) == 1
         assert readers["publisher"].source is live.stream
@@ -228,7 +228,7 @@ def test_every_reader_is_given_the_one_open_camera(room, readers, tmp_path):
 def test_readers_are_closed_before_the_camera(room, readers, tmp_path):
     """A reader sampling a released camera is the failure this order prevents."""
     video, audio, _, _, closed = room
-    options = session.Options(cast=tmp_path, ndi="Orest Test")
+    options = session.Options(cast=tmp_path, ndi="Apollon Test")
     session.Session(video, audio, options).close()
     assert closed[-1] == "camera"
     assert set(closed[:-1]) == {"publisher", "actions", "tracker"}
@@ -258,7 +258,7 @@ def test_a_reader_that_fails_to_start_does_not_strand_the_camera(room, monkeypat
 
     monkeypatch.setattr(session.feed, "Publisher", refuses)
     with pytest.raises(RuntimeError, match="NDI"):
-        session.Session(video, audio, session.Options(ndi="Orest Test"))
+        session.Session(video, audio, session.Options(ndi="Apollon Test"))
     assert camera.released
 
 
@@ -331,13 +331,13 @@ def test_options_carry_the_command_line_through(tmp_path):
         model = "some-model:tag"
         language = "en"
         cast = tmp_path
-        send_ndi, ndi_name, ndi_fps = True, "Orest Test", 15.0
+        send_ndi, ndi_name, ndi_fps = True, "Apollon Test", 15.0
         send_td = True
         no_actions = False
 
     options = session.Options.from_args(Args())
     assert options.language == "en"
-    assert options.ndi == "Orest Test"
+    assert options.ndi == "Apollon Test"
     assert options.ndi_fps == 15.0
     assert options.cast == tmp_path
     assert options.send_td
@@ -350,7 +350,7 @@ def test_ndi_is_off_unless_asked_for(tmp_path):
         model = "some-model:tag"
         language = "de"
         cast = None
-        send_ndi, ndi_name, ndi_fps = False, "Orest Test", 30.0
+        send_ndi, ndi_name, ndi_fps = False, "Apollon Test", 30.0
         send_td = False
         no_actions = True
 
@@ -362,12 +362,12 @@ def test_ndi_is_off_unless_asked_for(tmp_path):
 def test_the_startup_lines_name_every_open_channel(room, readers, tmp_path, monkeypatch):
     video, audio, _, _, _ = room
     monkeypatch.setattr(session.td, "Sender", RecordingSender)
-    options = session.Options(cast=tmp_path, ndi="Orest Test", send_td=True)
+    options = session.Options(cast=tmp_path, ndi="Apollon Test", send_td=True)
     with session.Session(video, audio, options) as live:
         described = live.describe()
 
     assert "Fake Camera" in described
-    assert "Orest Test" in described
+    assert "Apollon Test" in described
     assert "127.0.0.1:10000" in described
     assert "klara" in described
 

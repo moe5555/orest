@@ -1,6 +1,6 @@
 """Bodies followed from frame to frame.
 
-RTMO detects every frame on its own (orest_pose.model.detect), while the
+RTMO detects every frame on its own (apollon_pose.model.detect), while the
 action model needs the same person in the same slot for four seconds. Bodies
 are linked by the overlap of their boxes between consecutive frames: at 25
 frames a second a body moves a few pixels from one frame to the next, so the

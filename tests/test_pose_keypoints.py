@@ -1,6 +1,6 @@
 """The pose embedding, which has to mean the same thing on both sides of a search.
 
-Indexing runs inside WISE's environment and live queries inside Orest's. A
+Indexing runs inside WISE's environment and live queries inside Apollon's. A
 difference between the two would not raise anything; it would quietly retrieve
 nothing useful. These tests pin the properties retrieval depends on, and need no
 model, GPU or video.
@@ -9,7 +9,7 @@ model, GPU or video.
 import numpy as np
 import pytest
 
-from orest_pose import keypoints
+from apollon_pose import keypoints
 
 # A plausible standing skeleton in pixel coordinates, COCO-17 order.
 STANDING = np.array([

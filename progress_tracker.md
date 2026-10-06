@@ -17,7 +17,7 @@ was built and why is in `changelog.md`; open questions are in
 | 4 · Transcription | done — `sitrep.transcribe`; speaker diarisation not implemented |
 | 5 · SITREP JSON | done — `sitrep.report` |
 | 6 · Latency budget | done — `sitrep.benchmark` |
-| 7 · Output | done — operator page (`orest-ui`): camera with the report beneath it, and display Prototype 1 of `03_render.md` as a second tab; console; NDI video and OSC data to TouchDesigner |
+| 7 · Output | done — operator page (`apollon-ui`): camera with the report beneath it, and display Prototype 1 of `03_render.md` as a second tab; console; NDI video and OSC data to TouchDesigner |
 | — · Cast recognition | built — `face`, `sitrep.presence`; the roster names the people in the report |
 | — · Action recognition | in the live SITREP — `sitrep.actions` rates risiko and menschlichkeit per named person from the NTU120 ST-GCN and `action/sitrep_map.csv`; uncalibrated (`todo_with_data.md`) |
 
@@ -81,7 +81,7 @@ earlier code.
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | Drive WISE from Orest; index the sample corpus | **done** |
+| 1 | Drive WISE from Apollon; index the sample corpus | **done** |
 | 2 | Custom pose feature extractor — the body index | **done** |
 | 3 | Embodied search: live capture becomes the query | **done** |
 | 4 | Speech as query — transcript import and live line matching | not started |
@@ -101,16 +101,16 @@ path — see "Deferred" below.
 
 ### Phase 1 — done
 
-`src/smartsearch/` drives WISE from the `orest` environment: `orest-search
+`src/smartsearch/` drives WISE from the `apollon` environment: `apollon-search
 extract | add-extractor | index | serve | info | query`. The sample corpus is
 indexed and searchable by text over both picture and sound.
 
 ### Phase 2 — done
 
-`wise_ext/` holds `orest_pose`, installed into both environments: RTMO keypoints
+`wise_ext/` holds `apollon_pose`, installed into both environments: RTMO keypoints
 normalised and concatenated into a 544-dimension movement vector. Registered
 with WISE through its factory, indexed, and searchable with a clip as the query
-via `orest-search body`. Verified by self-retrieval on the probe. Details and
+via `apollon-search body`. Verified by self-retrieval on the probe. Details and
 measurements in `changelog.md`.
 
 Open increments, in rough order of value:
@@ -134,8 +134,8 @@ Open increments, in rough order of value:
 
 ### Phase 3 — embodied search — done
 
-`orest-search body-live`: Enter or OSC `/orest/body/start` and
-`/orest/body/stop` on port 10001 bracket a capture, which is searched in
+`apollon-search body-live`: Enter or OSC `/apollon/body/start` and
+`/apollon/body/stop` on port 10001 bracket a capture, which is searched in
 index-shaped windows and delivered to TouchDesigner like any other search.
 Verified on known footage played in real time with `--file`; details in
 `changelog.md`.

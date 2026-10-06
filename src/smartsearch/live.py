@@ -17,7 +17,7 @@ segment, 16 detections over four seconds, stepped by the index's own two-second
 stride, and each window is searched on its own. A capture shorter than one
 segment is extended backwards from the stop press to a full segment, which is
 how the index saw a short movement: wholly inside a four-second window
-(orest_pose.keypoints, SEGMENT_OVERLAP).
+(apollon_pose.keypoints, SEGMENT_OVERLAP).
 
 Presses arrive from the terminal (Enter toggles) and over OSC, so a button in
 TouchDesigner or a QLab cue can start and stop a capture.
@@ -34,7 +34,7 @@ from typing import Callable, Iterable
 
 import cv2
 import numpy as np
-from orest_pose import keypoints, model
+from apollon_pose import keypoints, model
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import ThreadingOSCUDPServer
 
@@ -48,8 +48,8 @@ SAMPLE_SECONDS = keypoints.SEGMENT_DURATION / keypoints.FRAMES_PER_SEGMENT
 WINDOW = keypoints.FRAMES_PER_SEGMENT
 STRIDE = round(keypoints.SEGMENT_OVERLAP / SAMPLE_SECONDS)
 
-START_ADDRESS = "/orest/body/start"
-STOP_ADDRESS = "/orest/body/stop"
+START_ADDRESS = "/apollon/body/start"
+STOP_ADDRESS = "/apollon/body/stop"
 
 START, STOP, TOGGLE = "start", "stop", "toggle"
 

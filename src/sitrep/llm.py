@@ -2,13 +2,13 @@
 
 Ollama on the production machine serves one request at a time and queues the
 rest in arrival order (measured 2026-09-29: a 60-token request sent while a
-400-token one ran took 1.2 s instead of 0.23 s). Orest makes requests of very
+400-token one ran took 1.2 s instead of 0.23 s). Apollon makes requests of very
 different urgency: rating a line that was just said, recommending a measure
 after an alarm, a report the operator asked for, and the background summary
 of the scene. Left to Ollama's queue, a line rating could wait behind a
 summary nobody is waiting for.
 
-So Orest's requests pass this gate: at most one is with Ollama, and when it
+So Apollon's requests pass this gate: at most one is with Ollama, and when it
 finishes the most urgent waiting one goes next. A request already running is
 never interrupted, so the wait for an urgent one is at most the rest of the
 running one.

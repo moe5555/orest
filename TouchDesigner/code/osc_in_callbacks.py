@@ -1,7 +1,7 @@
 """
 OSC In DAT callbacks: osc_in.tox
 
-The one OSC In DAT on port 10000 receives everything Orest sends. Each feature
+The one OSC In DAT on port 10000 receives everything Apollon sends. Each feature
 component holds a module with `handle(address, args)`, which returns True for
 the addresses it owns; this callback offers every message to each in turn.
 The features share only this receiver and know nothing of one another.
@@ -9,8 +9,8 @@ The features share only this receiver and know nothing of one another.
 
 # Module DATs of the feature components, by absolute path.
 HANDLERS = [
-	'/project1/bodysearch/bodysearch_osc',  # /orest/results/
-	'/project1/sitrep/sitrep_osc',          # /orest/sitrep/, /orest/presence/
+	'/project1/bodysearch/bodysearch_osc',  # /apollon/results/
+	'/project1/sitrep/sitrep_osc',          # /apollon/sitrep/, /apollon/presence/
 ]
 
 

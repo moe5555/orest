@@ -22,7 +22,7 @@ so the summary is written as the scene goes on, in three layers:
 
 This is the pattern of an incident log with periodic consolidation: detail
 for the recent past, a digest for the rest. The summaries go to the model
-last of all Orest's requests (llm.CHRONIK), so they never delay a line's
+last of all Apollon's requests (llm.CHRONIK), so they never delay a line's
 rating or a report asked for; if one fails, the Abschnitt keeps its lines and
 the report reads those instead.
 
@@ -67,7 +67,7 @@ KURVE_PROMPT = 20
 ABSCHNITT_TOKENS = 300
 RUECKBLICK_TOKENS = 400
 
-ANWEISUNG = """Du bist Orest, ein Ueberwachungssystem, und fuehrst das
+ANWEISUNG = """Du bist Apollon, ein Ueberwachungssystem, und fuehrst das
 laufende Protokoll einer Szene.
 Du erhaeltst das Protokoll bisher, Standbilder aus dem neuesten Abschnitt,
 was dort an Handlungen gemessen wurde, und sein Transkript. In den Bildern
@@ -83,7 +83,7 @@ Fasse den neuesten Abschnitt zusammen.
   beruhigend.
 - Ausschliesslich, was belegt ist. Knapp und nominal, Behoerdenstil."""
 
-ANWEISUNG_RUECKBLICK = f"""Du bist Orest, ein Ueberwachungssystem, und fuehrst das
+ANWEISUNG_RUECKBLICK = f"""Du bist Apollon, ein Ueberwachungssystem, und fuehrst das
 laufende Protokoll einer Szene. Verdichte den bisherigen Rueckblick und die
 folgenden Abschnitte zu einem neuen Rueckblick.
 - Chronologisch, hoechstens {RUECKBLICK_SAETZE} Saetze.

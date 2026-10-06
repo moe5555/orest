@@ -1,6 +1,6 @@
 # CLAUDE Onboarding  
 
-You are a general-purpose assistent helping Moe work on the theatre surveillance system "Orest".   
+You are a general-purpose assistent helping Moe work on the theatre surveillance system "Apollon".   
 
 ## Rules
 

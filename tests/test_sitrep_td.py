@@ -272,7 +272,7 @@ def receiver():
     """A loopback OSC server that collects one message."""
     received = []
     dispatcher = Dispatcher()
-    dispatcher.map("/orest/*",
+    dispatcher.map("/apollon/*",
                    lambda address, *arguments: received.append((address, list(arguments))))
     server = BlockingOSCUDPServer(("127.0.0.1", 0), dispatcher)
     thread = threading.Thread(target=server.handle_request)

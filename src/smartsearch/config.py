@@ -1,8 +1,8 @@
-"""Locations and defaults for the WISE installation Orest drives.
+"""Locations and defaults for the WISE installation Apollon drives.
 
 WISE is never imported. It runs in its own conda environment, pinned against
 numpy<2 by its audio feature extractor (knowledge/source_of_truth/versions.md),
-while Orest's own code runs under uv on Python 3.12+. The two processes meet at
+while Apollon's own code runs under uv on Python 3.12+. The two processes meet at
 WISE's command line and at its HTTP API, so everything here addresses WISE by
 filesystem path and by URL.
 
@@ -21,39 +21,39 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Name of the conda environment holding the WISE installation.
-ENV_NAME = os.environ.get("OREST_WISE_ENV", "wise")
+ENV_NAME = os.environ.get("APOLLON_WISE_ENV", "wise")
 
 # Clone of ox-vgg/wise. Needed for the built frontend assets, which `wise serve`
 # reads from disk rather than from the installed package.
-WISE_REPO = Path(os.environ.get("OREST_WISE_REPO", REPO_ROOT / "external" / "wise"))
+WISE_REPO = Path(os.environ.get("APOLLON_WISE_REPO", REPO_ROOT / "external" / "wise"))
 
 # WISE projects live under data/ rather than inside the clone. Everything below
 # external/ is lost when external/wise is re-cloned to reapply the Windows
 # patches (knowledge/source_of_truth/versions.md), and an index over a full
 # rehearsal season is expensive to rebuild.
-PROJECTS_ROOT = Path(os.environ.get("OREST_WISE_PROJECTS", REPO_ROOT / "data" / "wise-projects"))
+PROJECTS_ROOT = Path(os.environ.get("APOLLON_WISE_PROJECTS", REPO_ROOT / "data" / "wise-projects"))
 
 # Captured output of each batch command, one file per run.
-LOGS_ROOT = Path(os.environ.get("OREST_WISE_LOGS", REPO_ROOT / "data" / "logs"))
+LOGS_ROOT = Path(os.environ.get("APOLLON_WISE_LOGS", REPO_ROOT / "data" / "logs"))
 
 # Rehearsal footage to index. Test recordings until the Probebuehne naming
 # convention is settled (knowledge/components/01_capture.md, "Saving").
-MEDIA_DIR = Path(os.environ.get("OREST_MEDIA_DIR", REPO_ROOT.parent / "test_data_orest"))
+MEDIA_DIR = Path(os.environ.get("APOLLON_MEDIA_DIR", REPO_ROOT.parent / "test_data_orest"))
 
-DEFAULT_PROJECT = os.environ.get("OREST_WISE_PROJECT", "test_data_orest")
+DEFAULT_PROJECT = os.environ.get("APOLLON_WISE_PROJECT", "test_data_orest")
 
-# WISE binds 0.0.0.0 by default. Orest binds the loopback interface instead: the
+# WISE binds 0.0.0.0 by default. Apollon binds the loopback interface instead: the
 # corpus is unreleased footage of identifiable people, and the consent questions
 # in knowledge/components/01_capture.md are open. Override to serve a UI machine
 # elsewhere on the theatre network.
-HOST = os.environ.get("OREST_WISE_HOST", "127.0.0.1")
-PORT = int(os.environ.get("OREST_WISE_PORT", "9670"))
+HOST = os.environ.get("APOLLON_WISE_HOST", "127.0.0.1")
+PORT = int(os.environ.get("APOLLON_WISE_PORT", "9670"))
 
 # Clips cut from search results, one folder per project. Under data/, which git
 # ignores: clips are footage of identifiable people, like the corpus itself.
-CLIPS_ROOT = Path(os.environ.get("OREST_CLIPS_DIR", REPO_ROOT / "data" / "clips"))
+CLIPS_ROOT = Path(os.environ.get("APOLLON_CLIPS_DIR", REPO_ROOT / "data" / "clips"))
 
-# Where TouchDesigner is reached, and where Orest is reached from it. Defined
+# Where TouchDesigner is reached, and where Apollon is reached from it. Defined
 # in the `osc` package and re-exported here, because the live SITREP addresses
 # the same OSC In DAT and two definitions of one receiver would drift apart.
 from osc import CONTROL_HOST, CONTROL_PORT, TD_HOST, TD_PORT  # noqa: E402,F401
@@ -95,7 +95,7 @@ def executable() -> Path:
     on this machine — torch resolves its CUDA libraries from the environment's
     own site-packages.
     """
-    override = os.environ.get("OREST_WISE_EXE")
+    override = os.environ.get("APOLLON_WISE_EXE")
     if override:
         return Path(override)
 
@@ -110,7 +110,7 @@ def executable() -> Path:
 
     raise RuntimeError(
         f"No 'wise' executable found for conda environment {ENV_NAME!r}. "
-        f"Install WISE per external/wise/docs/Install.md, or set OREST_WISE_EXE "
+        f"Install WISE per external/wise/docs/Install.md, or set APOLLON_WISE_EXE "
         f"to the full path of the console script."
     )
 
@@ -121,7 +121,7 @@ def ffmpeg() -> Path:
     Found by override, then on PATH, then in the WISE conda environment, which
     carries a GPL build with libx264 and NVENC.
     """
-    override = os.environ.get("OREST_FFMPEG_EXE")
+    override = os.environ.get("APOLLON_FFMPEG_EXE")
     if override:
         return Path(override)
 
@@ -136,7 +136,7 @@ def ffmpeg() -> Path:
 
     raise RuntimeError(
         f"No ffmpeg found on PATH or in conda environment {ENV_NAME!r}. "
-        f"Set OREST_FFMPEG_EXE to the full path of an ffmpeg executable."
+        f"Set APOLLON_FFMPEG_EXE to the full path of an ffmpeg executable."
     )
 
 
@@ -167,4 +167,4 @@ def frontend_dist() -> Path:
 
 def base_url() -> str:
     """Root URL of the WISE server, without a project path segment."""
-    return os.environ.get("OREST_WISE_URL", f"http://{HOST}:{PORT}").rstrip("/")
+    return os.environ.get("APOLLON_WISE_URL", f"http://{HOST}:{PORT}").rstrip("/")

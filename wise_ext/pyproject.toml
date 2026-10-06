@@ -1,12 +1,12 @@
 [project]
-name = "orest-pose"
+name = "apollon-pose"
 version = "0.1.0"
 description = "Pose-keypoint feature extractor for WISE, and the query encoder that matches it"
 requires-python = ">=3.12"
 
 # Deliberately no dependencies. This package is installed into two environments
 # that resolve numpy differently: WISE's conda environment is held below numpy 2
-# by its audio feature extractor, while Orest's is on numpy 2.x. Declaring
+# by its audio feature extractor, while Apollon's is on numpy 2.x. Declaring
 # numpy, opencv or onnxruntime here would let an install in one environment
 # re-resolve the other's pinned stack. All three are present in both already;
 # install with --no-deps.
@@ -17,4 +17,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/orest_pose"]
+packages = ["src/apollon_pose"]

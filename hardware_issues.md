@@ -1,6 +1,6 @@
 # Hardware Issues
 
-Everything in Orest that is limited, blocked or undecided **because of the
+Everything in Apollon that is limited, blocked or undecided **because of the
 machine it runs on**. The production machine, `VSH-ARLT-5090`, has existed since
 2026-09-25; each item says what was measured on the laptop, what has since been
 measured on the workstation, and what is still to do there.
@@ -67,7 +67,7 @@ body-search route.
 **Blocks:** searching by *event* ("someone collapsing") as opposed to by scene
 semantics or by limb configuration.
 
-**Not yet re-tested on `VSH-ARLT-5090`.** Re-run `orest-search add-extractor
+**Not yet re-tested on `VSH-ARLT-5090`.** Re-run `apollon-search add-extractor
 --project probe --video-id hf/Qwen/Qwen3-VL-Embedding/2B` and read the
 iteration rate off the first 20 segments. Anything near or below realtime makes
 the index practical; the 8B build needs a further step up again. The model
@@ -189,7 +189,7 @@ room, before relying on any of it.
 **On `VSH-ARLT-5090`:** a live SITREP run with `gemma4:26b` peaked at
 **25.0 GB of 32** ("Four Dogs",
 `changelog.md`, 2026-09-29). This depends on the action recogniser's bounded
-memory (`changelog.md`, 2026-09-28): before it, Orest's process took 27.4 GB
+memory (`changelog.md`, 2026-09-28): before it, Apollon's process took 27.4 GB
 on a 17-person scene and pushed most of Gemma into system RAM.
 
 **Re-measure** if the SITREP model changes or a voice-based diarisation model
@@ -200,17 +200,17 @@ is added.
 ### H-10 · ONNX Runtime on GPU — resolved, but version-fragile
 
 ONNX Runtime runs on CUDA in both environments: pose in WISE's, and pose, face
-and action recognition in Orest's. How each was made to work is in `changelog.md` (2026-09-11 for
-WISE's environment, 2026-09-28 for Orest's).
+and action recognition in Apollon's. How each was made to work is in `changelog.md` (2026-09-11 for
+WISE's environment, 2026-09-28 for Apollon's).
 
 **What is installed:**
 - **WISE's environment:** `onnxruntime-gpu==1.22.0`, the newest CUDA 12 line.
-  `orest_pose.model` prepends torch's `lib` directory to `PATH`, where a
+  `apollon_pose.model` prepends torch's `lib` directory to `PATH`, where a
   complete CUDA 12 runtime already sits.
-- **Orest's environment:** `onnxruntime-gpu[cuda,cudnn]==1.26.0`, declared in
+- **Apollon's environment:** `onnxruntime-gpu[cuda,cudnn]==1.26.0`, declared in
   `pyproject.toml`, which brings the CUDA runtime and cuDNN as
   `nvidia-*-cu12` packages. A uv override drops the CPU `onnxruntime` that
-  `rtmlib` and `faster-whisper` ask for. Without torch, `orest_pose.model` and
+  `rtmlib` and `faster-whisper` ask for. Without torch, `apollon_pose.model` and
   `face.model` put `site-packages/nvidia/*/bin` on `PATH`.
 
 Measured on the RTX 5090:
@@ -226,8 +226,8 @@ at once, an `onnxruntime-gpu` line built for a different CUDA major version, or
 the CUDA libraries missing from `PATH` each return inference to the CPU
 silently — a CUDA provider can be listed and still fail at session creation.
 After any change to `onnxruntime-gpu` or torch, check that
-`orest_pose.model.active_provider()` reports `CUDAExecutionProvider`.
-`OREST_POSE_DEVICE` forces the device.
+`apollon_pose.model.active_provider()` reports `CUDAExecutionProvider`.
+`APOLLON_POSE_DEVICE` forces the device.
 
 **Still to do:** the same check for WISE's environment on `VSH-ARLT-5090`,
 once Smart Search is installed there.

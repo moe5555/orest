@@ -1,4 +1,4 @@
-"""The command lines Orest builds for WISE.
+"""The command lines Apollon builds for WISE.
 
 WISE infers what it will do from the shape of its arguments, and several of its
 options behave differently from what their names suggest, so the argument list

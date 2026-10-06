@@ -3,7 +3,7 @@
 knowledge/components/02_processing.md ("Calculating Values", Pose) asks for
 activities such as hitting, running or hugging to be recognised and mapped to
 the report's values. This package recognises them with a model trained by
-others: ST-GCN on NTU RGB+D 120, exported to ONNX once, outside Orest
+others: ST-GCN on NTU RGB+D 120, exported to ONNX once, outside Apollon
 (src/scripts/export_ntu_stgcn.py).
 
     preprocess  MMAction2's test pipeline, reproduced in numpy
