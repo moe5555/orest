@@ -572,7 +572,7 @@ function render(snapshot) {
 
 // ---- Display prototypes ---------------------------------------------------
 
-// Prototypes 1 and 2 (knowledge/components/03_render.md, "Live SITREP") share
+// Prototypes 1 to 3 (knowledge/components/03_render.md, "Live SITREP") share
 // two states that replace the whole page, set on the body as data-screen. A
 // recommendation to intervene shows alone, with its reason and measure, until
 // the next recommendation or until the operator overrides it (X). R shows the

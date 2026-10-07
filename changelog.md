@@ -6,6 +6,41 @@ referenced below.
 
 ---
 
+## 2026-10-07 — Prototype 3 of the Live SITREP display
+
+Completes Prototype 3 in `03_render.md` ("Live SITREP"): Prototype 2, but the
+people's values stand still at the edge of the video, tied to each box by a
+white line. New tab "Prototyp 3" (`prototyp3.js`), feed
+`/api/sitrep/video?ratings=1&strip=1`.
+- The server adds a strip beneath the picture (`annotate.draw_ratings_strip`),
+  so the values cover nothing of the scene; only the lines cross it. Drawn
+  into the picture like Prototype 2's, so the lines follow the boxes without
+  lag.
+- The strip has four fixed slots, one per person the recogniser follows
+  (`recognizer.MAX_PEOPLE`). A person takes the free slot nearest their place
+  in the picture and keeps it while in view and for 5 s after, so a briefly
+  lost body track returns to the same place (`annotate.Slots`).
+- A panel shows the name above Risiko and Menschlichkeit; the line runs from
+  above the name to the foot of the box. Only recognised people get a slot,
+  as on Prototype 2. The strip's height is fixed, so the picture does not
+  change size as people come and go.
+- The scene's values beneath, Einschreiten and the report on R are
+  Prototype 2's.
+
+---
+
+## 2026-10-07 — Prototype 2: values for recognised people only, at the name's size
+
+Requested by Moe, on the Live SITREP display (`03_render.md`, "Live SITREP").
+- The picture sets Risiko and Menschlichkeit only beside bodies that carry a
+  cast name (`LiveSitrep.overlay`). An unnamed Körper or a guessed name
+  ("Vielleicht: …") is boxed and labelled without values, matching the
+  "recognised" state of the In-view list.
+- The values are set at the name's text height (was 0.8×,
+  `annotate.RATING_SHARE`).
+
+---
+
 ## 2026-10-06 — Live SITREP follows up to four people at once (VSH-ARLT-5090)
 
 Requested by Moe, reversing the two-person limit of 2026-09-28: more than two

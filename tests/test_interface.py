@@ -125,12 +125,12 @@ def test_the_sitrep_page_is_served_with_its_script(client):
     assert client.get("/static/sitrep.js").status_code == 200
 
 
-def test_the_sitrep_page_offers_both_prototypes_as_tabs(client):
+def test_the_sitrep_page_offers_the_prototypes_as_tabs(client):
     page = client.get("/sitrep").text
     assert 'data-ansicht="uebersicht"' in page
-    for prototype in ("p1", "p2"):
+    for prototype in ("p1", "p2", "p3"):
         assert f'data-ansicht="{prototype}"' in page
-    for script in ("/static/prototyp1.js", "/static/prototyp2.js"):
+    for script in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js"):
         assert script in page
         assert client.get(script).status_code == 200
 
@@ -139,6 +139,10 @@ def test_prototype_2_asks_for_a_feed_with_the_ratings_drawn_in(client):
     script = client.get("/static/prototyp2.js").text
     assert 'feed: "&ratings=1"' in script
     assert 'id="p2-scene-meters"' in client.get("/sitrep").text
+
+
+def test_prototype_3_asks_for_a_feed_with_the_ratings_on_a_strip(client):
+    assert 'feed: "&ratings=1&strip=1"' in client.get("/static/prototyp3.js").text
 
 
 def test_the_people_in_view_are_named_left_to_right():
@@ -242,12 +246,12 @@ def test_an_override_keeps_a_recommendation_that_arrived_meanwhile(client, live,
     assert answer["empfehlung"]["nummer"] == 2
 
 
-def test_both_prototypes_offer_the_override_on_x(client):
+def test_all_prototypes_offer_the_override_on_x(client):
     page = client.get("/sitrep").text
     assert 'id="intervene-override"' in page and "<kbd>X</kbd> Override" in page
     script = client.get("/static/sitrep.js").text
     assert "/api/sitrep/override?nummer=" in script and 'key === "x"' in script
-    for prototype in ("/static/prototyp1.js", "/static/prototyp2.js"):
+    for prototype in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js"):
         assert "fullPage.key(key)" in client.get(prototype).text
 
 
@@ -348,10 +352,13 @@ def test_the_video_feed_with_ratings_ends_when_no_run_holds_the_camera(client):
     assert response.content == b""
 
 
-def test_ratings_are_drawn_beside_the_people_in_view(monkeypatch, run):
-    """A person in view without recent evidence reads 0, as on Prototype 1."""
-    klara, body = np.array([10, 10, 50, 90]), np.array([60, 10, 90, 90])
-    run.actions = SimpleNamespace(visible=lambda: [(klara, "Klara"), (body, "Körper 7")])
+def test_ratings_are_drawn_beside_the_recognised_people_in_view(monkeypatch, run):
+    """A recognised person without recent evidence reads 0, as on Prototype 1;
+    bodies without a cast name carry no values."""
+    boxes = [np.array([10 * i, 10, 10 * i + 8, 90]) for i in range(4)]
+    run.actions = SimpleNamespace(visible=lambda: list(zip(
+        boxes, ["Klara", "Orest", "Körper 7", "Vielleicht: Ida"])))
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Klara", "Orest"]))
     drawn = []
     monkeypatch.setattr(live_module.annotate, "draw_ratings",
                         lambda frame, rated: drawn.append(rated) or frame)
@@ -364,8 +371,25 @@ def test_ratings_are_drawn_beside_the_people_in_view(monkeypatch, run):
     (rated,) = drawn
     assert [(name, rows) for _, name, rows in rated] == [
         ("Klara", [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm")]),
-        ("Körper 7", [("Risiko", 0, "calm"), ("Menschlichkeit", 0, "calm")]),
+        ("Orest", [("Risiko", 0, "calm"), ("Menschlichkeit", 0, "calm")]),
+        ("Körper 7", []),
+        ("Vielleicht: Ida", []),
     ]
+
+
+def test_on_the_strip_only_recognised_people_take_a_slot(monkeypatch, run):
+    run.actions = SimpleNamespace(visible=lambda: [
+        (np.array([10, 10, 30, 90]), "Klara"), (np.array([60, 10, 90, 90]), "Körper 7")])
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Klara"]))
+    drawn = []
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_strip",
+                        lambda frame, rated, slots, labels: drawn.append((slots, labels)) or frame)
+    controller = LiveSitrep(lambda: run)
+    controller.session = run
+
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
+
+    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit"])]
 
 
 def test_the_overview_feed_carries_names_only(monkeypatch, run):

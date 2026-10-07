@@ -31,6 +31,11 @@ If an Einschreiten is recommended, place this warning large, in red and as the o
 We do not see any of the other values, even if they are all still being recorded. 
 
 Press "R" once and the Reportbericht is displayed center of the page, no other elements visible. Press "R" again and we go back to the regular view. 
+
+### Prototype 3
+
+Same as #2, but the SITREP values are not moving next to the bounding boxes, but appear statically at the edges of the video, attached to the name of the person via a white line attached to the bounding box. This is meant to prevent the overlays occluding the scene and moving around hectically that makes it hard to read. 
+
 ---
 
 > **⚠ Written by Claude — draft, not yet reviewed by Moe (2026-09-12).**

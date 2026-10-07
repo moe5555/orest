@@ -14,6 +14,7 @@ polling or streaming the state knows whether anything is new.
 """
 
 import threading
+import time
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -199,6 +200,8 @@ class LiveSitrep:
         self.fehler: dict[str, str] = {}
         self.started: datetime | None = None
         self.version = 0
+        # Prototype 3's slots on the strip beneath the picture, by person.
+        self.slots = annotate.Slots()
 
     def start(self) -> bool:
         """Begin a run. Returns False if one is already under way."""
@@ -211,6 +214,7 @@ class LiveSitrep:
             self.zeilen.clear()
             self.fehler = {}
             self.started = datetime.now()
+            self.slots = annotate.Slots()
             self.version += 1
             self._thread = threading.Thread(target=self._run, args=(self._stop,),
                                             daemon=True)
@@ -382,12 +386,15 @@ class LiveSitrep:
             return None
         return run.stream.latest()
 
-    def overlay(self, frame, ratings: bool = False):
+    def overlay(self, frame, ratings: bool = False, strip: bool = False):
         """The frame with the people the run tracks boxed and named.
 
-        With `ratings`, each person's live values are set beside their box
-        (Prototype 2). A person in view with no recent evidence reads 0, as on
-        Prototype 1.
+        With `ratings`, each recognised person's live values are set beside
+        their box (Prototype 2); a recognised person with no recent evidence
+        reads 0, as on Prototype 1. Bodies not carrying a cast name (an unnamed
+        Körper, a guessed name) are boxed and labelled without values. With
+        `strip` as well, the values stand in fixed slots on a strip beneath
+        the picture, each tied to its box by a line (Prototype 3).
         """
         run = self.session
         if run is None:
@@ -396,11 +403,18 @@ class LiveSitrep:
             return run.overlay(frame)
         with self._lock:
             live = {person["name"]: person for person in (self.werte or {}).get("personen", [])}
+        cast = set(run.tracker.cast.names) if run.tracker.cast else set()
         rated = []
         for box, name in run.actions.visible():
             values = live.get(name, {})
             rows = [(RATING_LABELS[rating], values.get(rating, 0),
                      rating_level(rating, values.get(rating, 0)))
-                    for rating in report.GEMESSEN]
+                    for rating in report.GEMESSEN] if name in cast else []
             rated.append((box, name, rows))
-        return annotate.draw_ratings(frame, rated)
+        if not strip:
+            return annotate.draw_ratings(frame, rated)
+        width = frame.shape[1]
+        slots = self.slots.assign([(name, float(box[0] + box[2]) / 2 / width)
+                                   for box, name, rows in rated if rows], time.monotonic())
+        return annotate.draw_ratings_strip(frame, rated, slots,
+                                           [RATING_LABELS[rating] for rating in report.GEMESSEN])

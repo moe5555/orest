@@ -383,8 +383,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 .ansichten button[aria-current="page"] { color: var(--text-dim); box-shadow: inset 0 -1px 0 var(--text-faint); border-radius: 0; }
 
 body:not([data-ansicht="p1"]) .p1-only { display: none; }
-body:not([data-ansicht="p2"]) .p2-only { display: none; }
-body:not([data-ansicht="p1"]):not([data-ansicht="p2"]) .display-only { display: none; }
+body:not(:is([data-ansicht="p2"], [data-ansicht="p3"])) .p2-only { display: none; }
+body:not(:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])) .display-only { display: none; }
 
 /* ---- Prototype 1: picture, the two people in view, nothing else -------- */
 
@@ -452,15 +452,15 @@ body[data-ansicht="p1"] .top .feed { height: auto; aspect-ratio: 16 / 9; max-hei
 .p1-alarm-anlass { color: var(--text); font-size: 18px; }
 .p1-alarm-anlass:empty { display: none; }
 
-/* ---- Prototype 2: picture in the centre, the scene beneath it ---------- */
+/* ---- Prototypes 2 and 3: picture in the centre, the scene beneath it --- */
 
-body[data-ansicht="p2"] .bar,
-body[data-ansicht="p2"] .top .live { display: none; }
-body[data-ansicht="p2"][data-screen="normal"] .wrap > :not(.top, .p2-scene, #error, #stumm) { display: none; }
+body:is([data-ansicht="p2"], [data-ansicht="p3"]) .bar,
+body:is([data-ansicht="p2"], [data-ansicht="p3"]) .top .live { display: none; }
+body:is([data-ansicht="p2"], [data-ansicht="p3"])[data-screen="normal"] .wrap > :not(.top, .p2-scene, #error, #stumm) { display: none; }
 
 /* The picture as large as the window allows with the scene beneath it, and
    centred. 150px holds the tabs, the padding and the scene's row. */
-body[data-ansicht="p2"][data-screen="normal"] .wrap {
+body:is([data-ansicht="p2"], [data-ansicht="p3"])[data-screen="normal"] .wrap {
   --p2-width: min(100%, calc((100vh - 150px) * 16 / 9));
   max-width: none;
   min-height: calc(100vh - 30px);
@@ -468,10 +468,17 @@ body[data-ansicht="p2"][data-screen="normal"] .wrap {
   align-content: center;
   justify-items: center;
 }
-body[data-ansicht="p2"] #error,
-body[data-ansicht="p2"] #stumm { width: var(--p2-width); }
-body[data-ansicht="p2"] .top { width: var(--p2-width); grid-template-columns: minmax(0, 1fr); }
+body:is([data-ansicht="p2"], [data-ansicht="p3"]) #error,
+body:is([data-ansicht="p2"], [data-ansicht="p3"]) #stumm { width: var(--p2-width); }
+body:is([data-ansicht="p2"], [data-ansicht="p3"]) .top { width: var(--p2-width); grid-template-columns: minmax(0, 1fr); }
 body[data-ansicht="p2"] .top .feed { height: auto; aspect-ratio: 16 / 9; }
+
+/* Prototype 3: the server adds the strip of values beneath the picture,
+   about a seventh of its height on a 16:9 camera, so the feed is taller
+   than 16:9 and takes its height from the picture. */
+body[data-ansicht="p3"][data-screen="normal"] .wrap { --p2-width: min(100%, calc((100vh - 150px) * 1.55)); }
+body[data-ansicht="p3"] .top .feed { height: auto; }
+body[data-ansicht="p3"] .top .feed img { height: auto; max-height: calc(100vh - 150px); }
 
 .p2-scene { width: var(--p2-width); display: grid; gap: 10px; }
 .p2-scene-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
@@ -485,7 +492,7 @@ body[data-ansicht="p2"] .top .feed { height: auto; aspect-ratio: 16 / 9; }
 .p2-scene-source { margin: 0; font: 12px/1.4 var(--mono); color: var(--text-faint); text-align: right; }
 .p2-scene-source:empty { display: none; }
 
-/* ---- Both prototypes: Einschreiten and the report replace the page ----- */
+/* ---- All prototypes: Einschreiten and the report replace the page ------ */
 
 /* Einschreiten: the only thing on the page, the word first, beneath it why
    and what to do. */
@@ -514,14 +521,14 @@ body[data-ansicht="p2"] .top .feed { height: auto; aspect-ratio: 16 / 9; }
 }
 .intervene-override:hover, .intervene-override:focus-visible { color: var(--text); border-color: var(--red); }
 .intervene-override kbd { margin-right: 10px; font-size: 13px; }
-body:is([data-ansicht="p1"], [data-ansicht="p2"])[data-screen="intervene"] .ansichten,
-body:is([data-ansicht="p1"], [data-ansicht="p2"])[data-screen="intervene"] .wrap > :not(.intervene) { display: none; }
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="intervene"] .ansichten,
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="intervene"] .wrap > :not(.intervene) { display: none; }
 body:not([data-screen="intervene"]) .intervene { display: none; }
 
 /* The report on R: alone, in the middle of the page. */
-body:is([data-ansicht="p1"], [data-ansicht="p2"])[data-screen="report"] .ansichten,
-body:is([data-ansicht="p1"], [data-ansicht="p2"])[data-screen="report"] .wrap > :not(#report-bereich) { display: none; }
-body:is([data-ansicht="p1"], [data-ansicht="p2"])[data-screen="report"] .wrap { max-width: 960px; min-height: 100vh; align-content: center; }
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="report"] .ansichten,
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="report"] .wrap > :not(#report-bereich) { display: none; }
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="report"] .wrap { max-width: 960px; min-height: 100vh; align-content: center; }
 
 .waiting { color: var(--text-faint); font: 13px/1.5 var(--mono); padding: 28px 4px; text-align: center; }
 .error-text { color: var(--red); font: 13px/1.5 var(--mono); white-space: pre-wrap; margin: 0 0 14px; }

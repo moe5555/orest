@@ -10,13 +10,16 @@ stays clean, and nothing is written to disk.
 
 The operator's picture is marked the same way. Prototype 2 of the live
 display (knowledge/components/03_render.md) also sets each person's live
-ratings beside their box (draw_ratings).
+ratings beside their box (draw_ratings); Prototype 3 sets them in fixed slots
+on a strip beneath the picture, each tied to its box by a line
+(draw_ratings_strip).
 
 Text is set with Pillow rather than OpenCV, whose built-in fonts cover ASCII
 only: a cast name with an umlaut has to appear on the frame exactly as it
 appears in the name list, or the model cannot match the two.
 """
 
+import threading
 from functools import lru_cache
 
 import cv2
@@ -38,15 +41,23 @@ BOX = (255, 214, 0)
 TAG = (0, 0, 0)
 TEXT = (255, 255, 255)
 
-# Ratings beside a box: text a little smaller than the name, pips in the
-# operator page's colours (style.css: --accent, --amber, --red; empty #232a33).
-RATING_SHARE = 0.8
+# Ratings beside a box: text the size of the name; pips in the operator page's
+# colours (style.css: --accent, --amber, --red; empty #232a33).
+RATING_SHARE = 1.0
 PIPS = 5
 PIP_OFF = (35, 42, 51)
 LEVEL = {"calm": (108, 196, 255), "amber": (243, 169, 59), "red": (255, 90, 95)}
 
+# Prototype 3: one slot per person the recogniser follows
+# (recognizer.MAX_PEOPLE). A slot stays with its person for HOLD seconds after
+# they leave the view, so a body track lost for a moment returns to the same
+# place.
+SLOTS = 4
+HOLD = 5.0
+LINK = (255, 255, 255)
 
-@lru_cache(maxsize=8)
+
+@lru_cache(maxsize=16)
 def _font(size: int) -> ImageFont.FreeTypeFont:
     try:
         return ImageFont.truetype(FONT, size)
@@ -94,6 +105,47 @@ def draw_names(frame: np.ndarray, named: list[tuple[np.ndarray, str]]) -> np.nda
     return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
 
 
+class _RatingRows:
+    """Rating rows set in one font: the label, five pips and the number.
+
+    Measured on the labels given, so panels drawn with one instance line up.
+    """
+
+    def __init__(self, draw: ImageDraw.ImageDraw, font: ImageFont.FreeTypeFont,
+                 labels, padding: int):
+        self.font, self.padding = font, padding
+        self.ascent = font.getbbox("Hg")
+        self.row = self.ascent[3] - self.ascent[1]
+        self.pip = max(4, self.row // 2)
+        self.gap = max(2, self.pip // 3)
+        self.label_width = max((draw.textlength(label, font=font) for label in labels), default=0)
+        self.width = int(3 * padding + self.label_width + PIPS * (self.pip + self.gap)
+                         + self.gap + draw.textlength("5", font=font))
+
+    def height(self, count: int) -> int:
+        """Height of `count` rows, without the panel's padding."""
+        return count * self.row + max(0, count - 1) * self.gap
+
+    def text(self, draw: ImageDraw.ImageDraw, x: int, top: int, text: str, fill) -> None:
+        """Text whose row starts at `top`."""
+        draw.text((x, top - self.ascent[1]), text, font=self.font, fill=fill)
+
+    def draw(self, draw: ImageDraw.ImageDraw, x: int, top: int,
+             rows: list[tuple[str, int, str]]) -> None:
+        """The rows of a panel whose left edge is `x`, the first row starting at `top`."""
+        for index, (label, value, level) in enumerate(rows):
+            row_top = top + index * (self.row + self.gap)
+            self.text(draw, x + self.padding, row_top, label, TEXT)
+            pips_left = x + 2 * self.padding + self.label_width
+            pip_top = row_top + (self.row - self.pip) // 2
+            for slot in range(PIPS):
+                left = pips_left + slot * (self.pip + self.gap)
+                colour = LEVEL.get(level, LEVEL["calm"]) if slot < value else PIP_OFF
+                draw.rectangle((left, pip_top, left + self.pip, pip_top + self.pip), fill=colour)
+            self.text(draw, pips_left + PIPS * (self.pip + self.gap) + self.gap, row_top,
+                      str(value), LEVEL["red"] if level == "red" else TEXT)
+
+
 def draw_ratings(frame: np.ndarray,
                  rated: list[tuple[np.ndarray, str, list[tuple[str, int, str]]]]) -> np.ndarray:
     """A copy of a BGR frame with each person boxed and named, and their ratings beside the box.
@@ -109,36 +161,109 @@ def draw_ratings(frame: np.ndarray,
     image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     draw = ImageDraw.Draw(image)
     size, _, padding, line = _layout(image)
-    font = _font(max(MIN_TEXT, round(size * RATING_SHARE)))
-    ascent = font.getbbox("Hg")
-    row_height = ascent[3] - ascent[1]
-    pip = max(4, row_height // 2)
-    gap = max(2, pip // 3)
-    label_width = max((draw.textlength(label, font=font) for _, _, rows in rated
-                       for label, _, _ in rows), default=0)
-    number_width = draw.textlength("5", font=font)
-    width = int(3 * padding + label_width + PIPS * (pip + gap) + gap + number_width)
+    layout = _RatingRows(draw, _font(max(MIN_TEXT, round(size * RATING_SHARE))),
+                         [label for _, _, rows in rated for label, _, _ in rows], padding)
+    width = layout.width
 
     for box, name, rows in rated:
         x1, y1, x2, _ = _name(draw, image, box, name)
         if not rows:
             continue
-        height = 2 * padding + len(rows) * row_height + (len(rows) - 1) * gap
+        height = 2 * padding + layout.height(len(rows))
         x = x2 + line if x2 + line + width <= image.width else x1 - line - width
         x = min(max(0, x), max(0, image.width - width))
         y = min(max(0, y1), max(0, image.height - height))
         draw.rectangle((x, y, x + width, y + height), fill=TAG)
+        layout.draw(draw, x, y + padding, rows)
 
-        for index, (label, value, level) in enumerate(rows):
-            top = y + padding + index * (row_height + gap)
-            draw.text((x + padding, top - ascent[1]), label, font=font, fill=TEXT)
-            pips_left = x + 2 * padding + label_width
-            pip_top = top + (row_height - pip) // 2
-            for slot in range(PIPS):
-                left = pips_left + slot * (pip + gap)
-                colour = LEVEL.get(level, LEVEL["calm"]) if slot < value else PIP_OFF
-                draw.rectangle((left, pip_top, left + pip, pip_top + pip), fill=colour)
-            draw.text((pips_left + PIPS * (pip + gap) + gap, top - ascent[1]), str(value),
-                      font=font, fill=LEVEL["red"] if level == "red" else TEXT)
+    return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
+
+
+class Slots:
+    """Which person's ratings stand in which slot of the strip (draw_ratings_strip).
+
+    A person keeps their slot while in view and for `hold` seconds after. A
+    person new to the view takes the free slot nearest their place in the
+    picture, so their line starts short; with none free, the slot whose
+    person has been gone longest. Called from every feed's thread.
+    """
+
+    def __init__(self, count: int = SLOTS, hold: float = HOLD):
+        self.count, self.hold = count, hold
+        self._held: list[tuple[str, float] | None] = [None] * count
+        self._lock = threading.Lock()
+
+    def assign(self, people: list[tuple[str, float]], now: float) -> dict[str, int]:
+        """Slot by name for the people in view.
+
+        `people` are (name, centre of the box as a share of the frame width),
+        `now` a monotonic time in seconds.
+        """
+        in_view = {name for name, _ in people}
+        with self._lock:
+            slots = {}
+            for index, held in enumerate(self._held):
+                if held is not None and held[0] in in_view:
+                    slots[held[0]] = index
+                    self._held[index] = (held[0], now)
+            for name, centre in sorted(people, key=lambda person: person[1]):
+                if name in slots:
+                    continue
+                open_slots = [index for index, held in enumerate(self._held)
+                              if held is None or held[0] not in in_view]
+                if not open_slots:
+                    continue
+                expired = [index for index in open_slots if self._held[index] is None
+                           or now - self._held[index][1] > self.hold]
+                if expired:
+                    index = min(expired, key=lambda slot: abs((slot + 0.5) / self.count - centre))
+                else:
+                    index = min(open_slots, key=lambda slot: self._held[slot][1])
+                slots[name] = index
+                self._held[index] = (name, now)
+            return slots
+
+
+def draw_ratings_strip(frame: np.ndarray,
+                       rated: list[tuple[np.ndarray, str, list[tuple[str, int, str]]]],
+                       slots: dict[str, int], labels: list[str],
+                       count: int = SLOTS) -> np.ndarray:
+    """A copy of a BGR frame with a strip beneath it holding the people's ratings.
+
+    In the picture each person is boxed and named. The strip is divided into
+    `count` slots of equal width that do not move with the people. A person
+    with rows and a slot in `slots` has their name and rows set in that slot,
+    and a white line runs from above the name to the foot of their box.
+    The strip's height and font follow from `labels`, all the rating labels
+    there can be, so the picture keeps its size from frame to frame. The font
+    is the name's size, smaller where a slot is too narrow for it.
+    """
+    base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    size, _, padding, line = _layout(base)
+    slot_width = base.width // count
+    probe = ImageDraw.Draw(base)
+    text = max(MIN_TEXT, round(size * RATING_SHARE))
+    layout = _RatingRows(probe, _font(text), labels, padding)
+    while layout.width > slot_width - 2 * padding and text > MIN_TEXT:
+        text = max(MIN_TEXT, min(text - 1, int(text * (slot_width - 2 * padding) / layout.width)))
+        layout = _RatingRows(probe, _font(text), labels, padding)
+
+    strip = 3 * padding + layout.row + layout.height(len(labels)) + padding
+    image = Image.new("RGB", (base.width, base.height + strip), TAG)
+    image.paste(base, (0, 0))
+    draw = ImageDraw.Draw(image)
+
+    for box, name, rows in rated:
+        x1, _, x2, y2 = _name(draw, base, box, name)
+        slot = slots.get(name)
+        if not rows or slot is None:
+            continue
+        x = slot * slot_width + (slot_width - layout.width) // 2
+        y = base.height + padding
+        above_name = x + padding + int(draw.textlength(name, font=layout.font)) // 2
+        foot = (x1 + x2) // 2, min(max(0, y2), base.height - 1)
+        draw.line(((above_name, base.height), foot), fill=LINK, width=line)
+        layout.text(draw, x + padding, y, name, TEXT)
+        layout.draw(draw, x, y + layout.row + 2 * padding, rows)
 
     return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)

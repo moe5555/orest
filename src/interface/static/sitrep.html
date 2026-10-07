@@ -13,6 +13,7 @@
     <button type="button" data-ansicht="uebersicht" aria-current="page">Übersicht</button>
     <button type="button" data-ansicht="p1">Prototyp 1</button>
     <button type="button" data-ansicht="p2">Prototyp 2</button>
+    <button type="button" data-ansicht="p3">Prototyp 3</button>
   </nav>
 
   <header class="bar">
@@ -86,14 +87,14 @@
         <span class="p1-alarm-anlass" id="p1-alarm-anlass"></span>
       </section>
     </div>
-    <!-- Prototype 2: beneath the picture, the scene as a whole. The people's
-         values are drawn into the picture by the server. -->
+    <!-- Prototypes 2 and 3: beneath the picture, the scene as a whole. The
+         people's values are drawn into the picture by the server. -->
     <section class="p2-only p2-scene" aria-label="Szene">
       <div class="p2-scene-meters" id="p2-scene-meters"></div>
       <p class="p2-scene-source" id="p2-scene-source"></p>
     </section>
 
-    <!-- Both prototypes: a recommendation to intervene in place of
+    <!-- All prototypes: a recommendation to intervene in place of
          everything else. -->
     <div class="display-only intervene" role="alert">
       <span class="intervene-word">Einschreiten</span>
@@ -178,5 +179,6 @@
   <script src="/static/sitrep.js"></script>
   <script src="/static/prototyp1.js"></script>
   <script src="/static/prototyp2.js"></script>
+  <script src="/static/prototyp3.js"></script>
 </body>
 </html>

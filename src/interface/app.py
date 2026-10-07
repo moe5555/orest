@@ -13,7 +13,8 @@
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
     /api/sitrep/video        the camera as an MJPEG stream; ?ratings=1 sets each
-                             person's live values beside their box (Prototype 2)
+                             person's live values beside their box (Prototype 2),
+                             with &strip=1 in slots beneath the picture (Prototype 3)
     /api/sources             the cameras and microphones on offer, and the selection
     POST /api/sources        select the camera and sound source of the next run
     /api/sources/ndi         the NDI sources on the network (takes two seconds)
@@ -59,18 +60,19 @@ def _jpeg(frame) -> bytes:
 
 
 async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]],
-                ratings: bool = False):
+                ratings: bool = False, strip: bool = False):
     """The camera as multipart JPEG parts, until the viewer leaves or the run ends.
 
     Ends when no run holds the camera; the page reopens the feed when a new
-    run starts. With `ratings`, the live values are drawn beside each box.
+    run starts. With `ratings`, the live values are drawn beside each box, or
+    with `strip` on a strip beneath the picture (LiveSitrep.overlay).
     """
     while not await disconnected():
         frame = live.latest_frame()
         if frame is None:
             return
         # Marking and encoding both run off the event loop.
-        jpeg = await asyncio.to_thread(lambda: _jpeg(live.overlay(frame, ratings)))
+        jpeg = await asyncio.to_thread(lambda: _jpeg(live.overlay(frame, ratings, strip)))
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n"
                b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
                + jpeg + b"\r\n")
@@ -166,8 +168,8 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
                                  headers={"Cache-Control": "no-store"})
 
     @app.get("/api/sitrep/video")
-    async def video(request: Request, ratings: bool = False):
-        return StreamingResponse(mjpeg(live, request.is_disconnected, ratings),
+    async def video(request: Request, ratings: bool = False, strip: bool = False):
+        return StreamingResponse(mjpeg(live, request.is_disconnected, ratings, strip),
                                  media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-store"})
 
