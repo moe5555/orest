@@ -54,6 +54,22 @@ def test_a_line_goes_to_the_person_whose_lips_moved():
     assert line.beginn == T0 and line.ende == T0 + timedelta(seconds=2)
 
 
+def test_a_line_goes_to_the_one_speaker_among_several():
+    subject = speakers.Speakers()
+    feed(subject, {1: [0.1, 0.12] * 25, 2: [0.1, 0.11] * 25, 3: [0.1, 0.4] * 25})
+    [line] = subject.attribute([transcribe.Segment(0.0, 2.0, "Halt.")], T0,
+                               {1: "Klara", 2: "Jakob", 3: "Lena"})
+    assert line.name == "Lena"
+
+
+def test_a_line_stays_unattributed_when_two_of_several_moved_alike():
+    subject = speakers.Speakers()
+    feed(subject, {1: [0.1, 0.4] * 25, 2: [0.1, 0.11] * 25, 3: [0.1, 0.35] * 25})
+    [line] = subject.attribute([transcribe.Segment(0.0, 2.0, "Ja.")], T0,
+                               {1: "Klara", 2: "Jakob", 3: "Lena"})
+    assert line.name is None
+
+
 def test_a_line_stays_unattributed_when_both_moved_alike():
     subject = speakers.Speakers()
     feed(subject, {1: [0.1, 0.4] * 25, 2: [0.1, 0.35] * 25})
@@ -86,13 +102,14 @@ def test_only_the_segments_own_moments_count():
     assert [line.name for line in lines] == ["Klara", "Jakob"]
 
 
-def test_only_the_two_tallest_bodies_are_measured(monkeypatch):
+def test_only_the_tallest_bodies_are_measured(monkeypatch):
     measured = []
     monkeypatch.setattr(speakers, "mouth_opening",
                         lambda image, x, y, size: measured.append(round(x)) or 0.2)
-    frame = tracking.Frame(0.0, {1: body(100, 400), 2: body(300, 150), 3: body(500, 380)})
+    frame = tracking.Frame(0.0, {1: body(100, 400), 2: body(300, 150), 3: body(500, 380),
+                                 4: body(700, 390), 5: body(900, 410)})
     speakers.Speakers().observe(np.zeros((1080, 1920, 3), np.uint8), frame, T0)
-    assert sorted(measured) == [100, 500]
+    assert sorted(measured) == [100, 500, 700, 900]
 
 
 def test_a_failing_measurement_stops_mouths_but_not_the_recogniser(monkeypatch, capsys):
@@ -108,9 +125,10 @@ def test_a_failing_measurement_stops_mouths_but_not_the_recogniser(monkeypatch, 
     assert capsys.readouterr().err.count("mouth measurement stopped") == 1
 
 
-def test_the_overlay_boxes_the_two_tallest_bodies_by_name():
+def test_the_overlay_boxes_the_tallest_bodies_by_name():
     ratings = actions.ActionRatings(source=None, faces=None)
-    frame = tracking.Frame(0.0, {1: body(100, 400), 2: body(300, 150), 3: body(500, 380)})
+    frame = tracking.Frame(0.0, {1: body(100, 400), 2: body(300, 150), 3: body(500, 380),
+                                 4: body(700, 390), 5: body(900, 410)})
     ratings.recognizer.tracker.frames.append(frame)
     ratings.name(frame, [(np.array([85, 95, 115, 125]), "Klara")])
-    assert [label for _, label in ratings.visible()] == ["Klara", "Körper 3"]
+    assert [label for _, label in ratings.visible()] == ["Körper 5", "Klara", "Körper 4", "Körper 3"]

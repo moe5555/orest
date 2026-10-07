@@ -42,6 +42,7 @@ from pydantic import BaseModel
 
 from . import (actions, annotate, capture, chronik, cli, devices, feed, lage, llm, loudness,
                ndi_audio, presence, report, speakers, speech, td, transcribe, utterances)
+from . import appearance
 
 
 def resolve_sources(args) -> tuple[devices.VideoDevice, devices.AudioDevice | ndi_audio.NdiAudio]:
@@ -283,6 +284,11 @@ class Session:
         self.sender = None
         self.roster = None
         self.missing_enrolment: list[pathlib.Path] = []
+        # Bodies the operator named: the face lessons each one taught, and the
+        # label it carried before, which the model is told it now means.
+        self._lessons: dict[int, list[int]] = {}
+        self._umbenannt: dict[int, tuple[str, str]] = {}
+        self._assigning = threading.Lock()
         self._events: queue.Queue = queue.Queue()
         self._berichte = None
         self._empfehlungen = None
@@ -316,8 +322,16 @@ class Session:
             # Speakers are told apart by the lips of the people the action
             # recogniser follows, on the frames it tracks.
             self.speakers = speakers.Speakers().load()
+            # Appearance names people the faces cannot, where its model is
+            # installed (appearance.py); without it, faces name them alone.
+            appearances = appearance.Appearances() if appearance.available() else None
+            if appearances is None:
+                print("appearance model missing: people are named by face alone "
+                      "(src/scripts/export_osnet.py)", file=sys.stderr)
             self.actions = actions.ActionRatings(self.stream, self.tracker,
-                                                 on_frame=self.speakers.observe).start()
+                                                 on_frame=self.speakers.observe,
+                                                 on_learn=self._learn,
+                                                 appearances=appearances).start()
 
         if self.options.send_td:
             self.sender = td.Sender()
@@ -348,10 +362,12 @@ class Session:
         options = self.options
         self.chronik = chronik.Chronik(
             laenge=options.window, model=options.model,
-            roster=self.tracker.roster,
+            roster=self._roster,
             handlungen=self._handlungen if self.actions else None,
             bilder=self._bilder,
             on_abschnitt=self._abschnitt)
+        with self._assigning:
+            self.chronik.zuordnen(self._zuordnungen())
         self.frames = capture.FrameRing(self.stream, interval=options.interval,
                                         keep=max(BILDER_KEEP, 2 * options.window),
                                         annotate=self._name_faces).start()
@@ -445,6 +461,67 @@ class Session:
             return False
         return self._empfehlungen.request("Vom Operator angefordert.")
 
+    def assign(self, body: int, name: str | None):
+        """Name a body in view by hand, or release it to the automatic naming.
+
+        The name is absolute for that body (actions.ActionRatings.assign). If
+        a face was seen on the body, its face track takes the name too and
+        its faces are learned for the rest of the run
+        (presence.PresenceTracker.teach), so the person is recognised after
+        leaving the picture. Faces seen on the body later are learned as they
+        appear (`_learn`). Releasing takes every lesson of the body back. The
+        model is told which earlier label now means whom, since the Chronik
+        already written still uses it.
+        """
+        if self.actions is None:
+            raise ValueError("Ohne Aktionserkennung werden keine Körper verfolgt.")
+        cast = self.tracker.cast
+        if name is not None and (cast is None or name not in cast.names):
+            raise ValueError(f"{name!r} gehört nicht zur Besetzung.")
+        with self._assigning:
+            before = self.actions.names().get(body, f"Körper {body}")
+            face = self.actions.assign(body, name)
+            for lesson in self._lessons.pop(body, []):
+                self.tracker.unteach(lesson)
+            first, _ = self._umbenannt.pop(body, (before, None))
+            if name is not None:
+                if face is not None and face != name:
+                    self._teach(body, face, name)
+                if first != name:
+                    self._umbenannt[body] = (first, name)
+            if self.chronik is not None:
+                self.chronik.zuordnen(self._zuordnungen())
+
+    def _learn(self, body: int, face: str, name: str):
+        """Learn a face that stayed on a body named by hand, under its name.
+
+        Called by the action recogniser, from its thread, while the name
+        holds; an assignment changed meanwhile wins.
+        """
+        with self._assigning:
+            if self.actions.pinned(body) == name:
+                self._teach(body, face, name)
+
+    def _teach(self, body: int, face: str, name: str):
+        lesson = self.tracker.teach(face, name)
+        if lesson is not None:
+            self._lessons.setdefault(body, []).append(lesson)
+
+    def _zuordnungen(self) -> list[str]:
+        """The operator's reassignments, as the Chronik tells the model of them."""
+        return [f"{alt} ist {neu}" for alt, neu in self._umbenannt.values()]
+
+    def _roster(self, since: datetime, until: datetime) -> list[presence.Presence]:
+        """Who was present: the faces tracked, and cast members named on a
+        body without a face tracked, by appearance or by hand, so the report
+        may name them."""
+        roster = self.tracker.roster(since, until)
+        if self.actions is not None:
+            present = {person.label for person in roster}
+            roster += [presence.Presence(name, name, name, 1.0, 0, since, until)
+                       for name in self.actions.carried(since, until) if name not in present]
+        return roster
+
     def _bericht(self, anlass: str):
         started = time.monotonic()
         now = datetime.now()
@@ -523,7 +600,7 @@ class Session:
 
     def _anwesend(self, since: datetime, until: datetime) -> list[report.Anwesend]:
         return [report.Anwesend(name=person.label, erkannt=person.known)
-                for person in self.tracker.roster(since, until)]
+                for person in self._roster(since, until)]
 
     def _einschaetzen(self, aeusserungen, vorher):
         """The lines rated by the run's model."""

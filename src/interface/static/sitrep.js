@@ -32,7 +32,8 @@ let feedOpen = false;
 
 // Views over the same snapshot, by the name their tab carries. A view may
 // define render(snapshot), taste(key) returning true for a key it handles in
-// place of the page's own, and verlassen() when another tab is chosen.
+// place of the page's own, verlassen() when another tab is chosen, and feed,
+// a query the camera feed is opened with while the view is shown.
 // Prototype scripts add themselves here.
 const ANSICHTEN = { uebersicht: {} };
 
@@ -445,6 +446,54 @@ function renderAktionen(aktionen, status) {
   if (!aktionen.lesungen.length) liste.append(el("div", "waiting", "Niemand im Bild erkannt."));
 }
 
+// ---- People in view: naming by hand ----------------------------------------
+
+// Each body in view, left to right as in the picture, with the cast names it
+// can be given. A name given here holds until "Automatisch" releases it
+// (session.Session.assign).
+function renderInView(snapshot) {
+  const list = $("in-view");
+  const cast = snapshot.quelle?.besetzung ?? [];
+  const bodies = snapshot.in_view ?? [];
+  list.replaceChildren(...bodies.map((body) => {
+    const row = el("div", "in-view-row");
+    row.dataset.state = body.assigned ? "assigned"
+      : cast.includes(body.label) ? "recognised" : "unnamed";
+    const select = el("select");
+    select.setAttribute("aria-label", `${body.label} zuordnen`);
+    select.append(el("option", null, "Automatisch"),
+                  ...cast.map((name) => el("option", null, name)));
+    select.options[0].value = "";
+    select.value = body.assigned ? body.label : "";
+    select.disabled = !cast.length;
+    select.addEventListener("change", () => {
+      select.blur();
+      assign(body.body, select.value || null);
+    });
+    row.append(el("span", "in-view-label", body.label), select);
+    return row;
+  }));
+  if (!bodies.length) {
+    list.append(el("div", "waiting", snapshot.status !== "running" ? ""
+      : snapshot.quelle?.aktionen === false ? "Aktionserkennung aus: niemand wird verfolgt."
+      : "Niemand im Bild."));
+  } else if (!cast.length) {
+    list.append(el("p", "hinweis", "Keine Besetzung geladen. Auf der Startseite wählen."));
+  }
+}
+
+async function assign(body, name) {
+  const response = await fetch("/api/sitrep/assign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, name }),
+  });
+  const data = await response.json();
+  $("in-view-error").hidden = response.ok;
+  $("in-view-error").textContent = response.ok ? "" : `Nicht zugeordnet: ${data.detail}`;
+  if (response.ok) render(data);
+}
+
 // ---- The whole page -------------------------------------------------------
 
 // Parts are redrawn only when their data changed: a report or the Chronik
@@ -481,7 +530,7 @@ function render(snapshot) {
   $("ask-empfehlung").disabled = !running || Boolean(snapshot.laeuft?.empfehlung);
 
   if (running && !feedOpen) {
-    $("video").src = `/api/sitrep/video?t=${Date.now()}`;
+    $("video").src = feedSrc();
     feedOpen = true;
   } else if (!running && feedOpen) {
     $("video").removeAttribute("src");
@@ -500,6 +549,12 @@ function render(snapshot) {
     renderEmpfehlung(snapshot.empfehlung, snapshot.laeuft, snapshot.fehler);
   }
   if (changed("werte", snapshot.werte?.personen)) renderLivePersonen(snapshot.werte);
+  // Not redrawn while one of its menus is in use, which would close it.
+  if (!$("in-view").contains(document.activeElement)
+      && changed("in-view", [snapshot.status, snapshot.in_view, snapshot.quelle?.besetzung,
+                             snapshot.quelle?.aktionen])) {
+    renderInView(snapshot);
+  }
   if (changed("zeilen", snapshot.zeilen)) renderZeilen(snapshot.zeilen);
   const schwelle = snapshot.report?.schwelle ?? snapshot.empfehlung?.schwelle ?? 6;
   if (changed("chronik", snapshot.chronik)) renderChronik(snapshot.chronik, schwelle);
@@ -510,12 +565,81 @@ function render(snapshot) {
   $("report").hidden = !snapshot.report;
   if (snapshot.report && changed("report", snapshot.report)) renderReport(snapshot.report);
 
+  document.body.dataset.screen = fullPage.state(snapshot);
+  renderIntervene(snapshot.empfehlung?.urteil);
   for (const view of Object.values(ANSICHTEN)) view.render?.(snapshot);
 }
+
+// ---- Display prototypes ---------------------------------------------------
+
+// Prototypes 1 and 2 (knowledge/components/03_render.md, "Live SITREP") share
+// two states that replace the whole page, set on the body as data-screen. A
+// recommendation to intervene shows alone, with its reason and measure, until
+// the next recommendation or until the operator overrides it (X). R shows the
+// report alone, and R again returns. The report takes precedence, since it
+// was asked for.
+const fullPage = {
+  // The report is on screen, from one R to the next.
+  report: false,
+
+  state(snapshot) {
+    if (this.report) return "report";
+    const intervene = snapshot?.status === "running" && Boolean(snapshot.empfehlung?.urteil?.einschreiten);
+    return intervene ? "intervene" : "normal";
+  },
+
+  // Override sets the shown recommendation aside on the server, which returns
+  // every view to its regular state. It names the recommendation by number,
+  // so one that arrived meanwhile is not set aside unseen.
+  override() {
+    if (!current || this.state(current) !== "intervene") return;
+    post(`/api/sitrep/override?nummer=${current.empfehlung.nummer}`);
+  },
+
+  // R shows the report and asks for a new one while the run is live; with no
+  // run and no earlier report there is nothing to show. X overrides a
+  // recommendation to intervene while it is on screen.
+  key(key) {
+    if (key === "x" && current && this.state(current) === "intervene") {
+      this.override();
+      return true;
+    }
+    if (key !== "r") return false;
+    if (this.report) {
+      this.report = false;
+    } else if (current?.status === "running" || current?.report) {
+      this.report = true;
+      askBericht();
+    }
+    if (current) render(current);
+    return true;
+  },
+
+  leave() {
+    this.report = false;
+    document.body.dataset.screen = current ? this.state(current) : "normal";
+  },
+};
+
+// Why the model recommends intervening (its sentence on what is happening)
+// and what it recommends doing. Set as text: both are model output.
+function renderIntervene(urteil) {
+  $("intervene-why").textContent = urteil?.lage ?? "";
+  $("intervene-measure").textContent = urteil?.empfehlung ?? "";
+  $("intervene-why-row").hidden = !urteil?.lage;
+  $("intervene-measure-row").hidden = !urteil?.empfehlung;
+}
+
+$("intervene-override").addEventListener("click", () => fullPage.override());
 
 // ---- Views ----------------------------------------------------------------
 
 const TABS = [...document.querySelectorAll(".ansichten [data-ansicht]")];
+
+// The camera feed's address, with the query of the view shown.
+function feedSrc() {
+  return `/api/sitrep/video?t=${Date.now()}${ANSICHTEN[document.body.dataset.ansicht]?.feed ?? ""}`;
+}
 
 // The chosen view is kept in the address (#p1), so a reload stays on it.
 function setAnsicht(name) {
@@ -528,6 +652,10 @@ function setAnsicht(name) {
     else tab.removeAttribute("aria-current");
   }
   history.replaceState(null, "", name === "uebersicht" ? location.pathname : `#${name}`);
+  // A view that marks the picture differently gets a feed of its own.
+  if (feedOpen && (ANSICHTEN[previous]?.feed ?? "") !== (ANSICHTEN[name]?.feed ?? "")) {
+    $("video").src = feedSrc();
+  }
   if (current) render(current);
 }
 
@@ -570,7 +698,7 @@ function askEmpfehlung() {
 $("video").addEventListener("error", () => {
   if (current?.status !== "running") return;
   setTimeout(() => {
-    if (current?.status === "running") $("video").src = `/api/sitrep/video?t=${Date.now()}`;
+    if (current?.status === "running") $("video").src = feedSrc();
   }, 1000);
 });
 

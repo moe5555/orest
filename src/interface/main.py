@@ -6,9 +6,10 @@
     uv run apollon-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
 
 Takes the same camera, microphone, window and output options as apollon-sitrep;
-they apply to every live SITREP started from the page. The camera and sound
-source are chosen on the operator page and remembered (interface/sources.py);
---video, --audio, --audio-api and --audio-ndi preselect them. Devices are
+they apply to every live SITREP started from the page. The camera, sound
+source and cast are chosen on the operator page and remembered
+(interface/sources.py); --video, --audio, --audio-api, --audio-ndi and --cast
+preselect them. Devices are
 resolved when a run starts, not here, so a camera plugged in after the server
 started is found.
 
@@ -62,8 +63,11 @@ def main(argv=None) -> int:
     selection = Selection.load(SOURCES_FILE, Sources.from_args(args))
 
     def open_session() -> session.Session:
-        video, audio = session.resolve_sources(selection.sources)
-        run = session.Session(video, audio, session.Options.from_args(args))
+        chosen = selection.sources
+        video, audio = session.resolve_sources(chosen)
+        options = session.Options.from_args(args).model_copy(
+            update={"cast": pathlib.Path(chosen.cast) if chosen.cast else None})
+        run = session.Session(video, audio, options)
         for path in run.missing_enrolment:
             print(f"no face found in {path}", file=sys.stderr)
         return run

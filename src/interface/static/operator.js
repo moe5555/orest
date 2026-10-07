@@ -1,5 +1,5 @@
-// Operator page: the camera and sound source of the next live SITREP, chosen
-// from what this machine offers. The server keeps the selection, so the
+// Operator page: the camera, sound source and cast of the next live SITREP,
+// chosen from what this machine offers. The server keeps the selection, so the
 // SITREP page, opened from here or restarted there, opens whatever is selected.
 "use strict";
 
@@ -12,6 +12,7 @@ const ndiValue = (name) => JSON.stringify({ audio_ndi: name });
 let selection = null;   // the selection as the server last confirmed it
 let microphones = [];
 let ndi = null;         // NDI source names, once the search has finished
+let casts = [];
 
 function option(text, value, disabled = false) {
   const node = document.createElement("option");
@@ -70,13 +71,32 @@ function renderSound() {
   select.value = shown;
 }
 
+// A cast folder is listed with the people it enrols. The selected one stays
+// listed even outside the default folder, e.g. given with --cast.
+function renderCasts() {
+  const select = $("cast");
+  const listed = [...casts];
+  const selected = selection?.cast;
+  if (selected && !listed.some((cast) => cast.path === selected.path)) listed.push(selected);
+  select.replaceChildren(
+    option("Ohne Besetzung: Namen werden vermutet", ""),
+    ...listed.map((cast) => option(`${cast.label} · ${cast.names.join(", ")}`, cast.path)),
+  );
+  select.value = selected?.path ?? "";
+}
+
 function revert() {
   $("camera").value = selection?.camera ?? "";
   $("sound").value = soundValue(selection?.sound);
+  $("cast").value = selection?.cast?.path ?? "";
 }
 
 async function choose() {
-  const chosen = { video: $("camera").value || null, ...JSON.parse($("sound").value || "{}") };
+  const chosen = {
+    video: $("camera").value || null,
+    ...JSON.parse($("sound").value || "{}"),
+    cast: $("cast").value || null,
+  };
   notice("Wird gespeichert …");
   try {
     const response = await fetch("/api/sources", {
@@ -117,10 +137,11 @@ async function load() {
     const data = await response.json();
     selection = data.selection;
     microphones = data.microphones;
+    casts = data.casts;
     renderCameras(data.cameras);
     renderSound();
-    $("camera").disabled = false;
-    $("sound").disabled = false;
+    renderCasts();
+    for (const id of ["camera", "sound", "cast"]) $(id).disabled = false;
     if (selection.errors.length) notice(selection.errors.join("\n"), true);
     else await runNotice("");
   } catch (error) {
@@ -140,5 +161,6 @@ async function searchNdi() {
 
 $("camera").addEventListener("change", choose);
 $("sound").addEventListener("change", choose);
+$("cast").addEventListener("change", choose);
 load();
 searchNdi();

@@ -43,11 +43,12 @@ STEP = 1.0
 # it, most of the sequence would be the zeros that stand for "absent".
 MIN_PRESENCE = 0.5
 
-# People classified per window, the largest bodies first. The production's
-# footage shows two performers, nearer the camera than anyone else in frame.
-# Every person admitted also adds pairs: 17 people can make over 150 groups,
-# which the network cannot classify within one STEP.
-MAX_PEOPLE = 2
+# People classified per window, the largest bodies first: as many as the
+# enrolled cast (data/cast), who stand nearer the camera than anyone else in
+# frame. Every person admitted also adds pairs, so four people make at most ten
+# groups; 17 people could make over 150, which the network cannot classify
+# within one STEP.
+MAX_PEOPLE = 4
 
 # Two people form a pair when their box centres are, on average over the
 # frames they share, closer than this many mean body heights. Touching

@@ -288,3 +288,12 @@ def test_only_the_largest_bodies_are_classified():
     frames = track([(near, far)] * 50)
     assert recognizer.groups(frames, max_people=1) == [(1,)]
     assert recognizer.groups(frames, max_people=2) == [(1,), (2,)]
+
+
+def test_four_people_are_classified_alone_and_in_their_pairs():
+    """The cast on stage at once, with someone small at the back left out."""
+    cast = [figure(x) for x in (200, 700, 1200, 1700)]
+    frames = track([(*cast, figure(950, y=250.0, height=100.0))] * 50)
+    found = recognizer.groups(frames)
+    assert sorted(group for group in found if len(group) == 1) == [(1,), (2,), (3,), (4,)]
+    assert sorted(group for group in found if len(group) == 2) == [(1, 2), (2, 3), (3, 4)]

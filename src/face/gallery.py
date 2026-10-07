@@ -86,6 +86,25 @@ class Gallery:
             for row, column in zip(similarities, best)
         ]
 
+    def extended(self, additions: list[tuple[str, np.ndarray]]) -> "Gallery":
+        """A copy with further faces, each (name, vectors), e.g. faces of a run.
+
+        A name already enrolled gains the faces; a new name is appended. The
+        added faces have no source image.
+        """
+        names = list(self.names)
+        vectors = [self.vectors]
+        owners = [self.owners]
+        sources = list(self.sources)
+        for name, added in additions:
+            if name not in names:
+                names.append(name)
+            added = np.asarray(added, dtype=self.vectors.dtype).reshape(-1, self.vectors.shape[1])
+            vectors.append(added)
+            owners.append(np.full(len(added), names.index(name), dtype=self.owners.dtype))
+            sources.extend([None] * len(added))
+        return Gallery(names, np.concatenate(vectors), np.concatenate(owners), sources)
+
     def separation(self) -> np.ndarray:
         """Highest similarity between each pair of enrolled people.
 

@@ -7,7 +7,8 @@ run's life cycle is exercised as the page drives it without any hardware.
 import asyncio
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -17,7 +18,7 @@ from interface import app as app_module
 from interface import live as live_module
 from interface.app import create_app
 from interface.live import LiveSitrep
-from sitrep import actions, devices, lage, report, session
+from sitrep import actions, chronik, devices, lage, report, session
 
 
 def wait_for(predicate, timeout=5.0):
@@ -124,11 +125,20 @@ def test_the_sitrep_page_is_served_with_its_script(client):
     assert client.get("/static/sitrep.js").status_code == 200
 
 
-def test_the_sitrep_page_offers_prototype_1_as_a_tab(client):
+def test_the_sitrep_page_offers_both_prototypes_as_tabs(client):
     page = client.get("/sitrep").text
-    assert 'data-ansicht="uebersicht"' in page and 'data-ansicht="p1"' in page
-    assert "/static/prototyp1.js" in page
-    assert client.get("/static/prototyp1.js").status_code == 200
+    assert 'data-ansicht="uebersicht"' in page
+    for prototype in ("p1", "p2"):
+        assert f'data-ansicht="{prototype}"' in page
+    for script in ("/static/prototyp1.js", "/static/prototyp2.js"):
+        assert script in page
+        assert client.get(script).status_code == 200
+
+
+def test_prototype_2_asks_for_a_feed_with_the_ratings_drawn_in(client):
+    script = client.get("/static/prototyp2.js").text
+    assert 'feed: "&ratings=1"' in script
+    assert 'id="p2-scene-meters"' in client.get("/sitrep").text
 
 
 def test_the_people_in_view_are_named_left_to_right():
@@ -232,11 +242,13 @@ def test_an_override_keeps_a_recommendation_that_arrived_meanwhile(client, live,
     assert answer["empfehlung"]["nummer"] == 2
 
 
-def test_prototype_1_offers_the_override_on_x(client):
+def test_both_prototypes_offer_the_override_on_x(client):
     page = client.get("/sitrep").text
-    assert 'id="p1-override"' in page and "<kbd>X</kbd> Override" in page
-    script = client.get("/static/prototyp1.js").text
+    assert 'id="intervene-override"' in page and "<kbd>X</kbd> Override" in page
+    script = client.get("/static/sitrep.js").text
     assert "/api/sitrep/override?nummer=" in script and 'key === "x"' in script
+    for prototype in ("/static/prototyp1.js", "/static/prototyp2.js"):
+        assert "fullPage.key(key)" in client.get(prototype).text
 
 
 def test_starting_twice_does_not_open_a_second_run(client, live):
@@ -328,6 +340,114 @@ def test_the_video_feed_sends_jpeg_frames_until_the_run_stops(live, run):
     assert 2 <= len(parts) <= 3
     assert all(part.startswith(b"--frame\r\nContent-Type: image/jpeg") for part in parts)
     assert b"\xff\xd8" in parts[0]           # JPEG start-of-image marker
+
+
+def test_the_video_feed_with_ratings_ends_when_no_run_holds_the_camera(client):
+    response = client.get("/api/sitrep/video", params={"ratings": 1})
+    assert response.status_code == 200
+    assert response.content == b""
+
+
+def test_ratings_are_drawn_beside_the_people_in_view(monkeypatch, run):
+    """A person in view without recent evidence reads 0, as on Prototype 1."""
+    klara, body = np.array([10, 10, 50, 90]), np.array([60, 10, 90, 90])
+    run.actions = SimpleNamespace(visible=lambda: [(klara, "Klara"), (body, "Körper 7")])
+    drawn = []
+    monkeypatch.setattr(live_module.annotate, "draw_ratings",
+                        lambda frame, rated: drawn.append(rated) or frame)
+    controller = LiveSitrep(lambda: run)
+    controller.session = run
+    controller.werte = {"personen": [{"name": "Klara", "risiko": 4, "menschlichkeit": 1}]}
+
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
+
+    (rated,) = drawn
+    assert [(name, rows) for _, name, rows in rated] == [
+        ("Klara", [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm")]),
+        ("Körper 7", [("Risiko", 0, "calm"), ("Menschlichkeit", 0, "calm")]),
+    ]
+
+
+def test_the_overview_feed_carries_names_only(monkeypatch, run):
+    run.actions = SimpleNamespace(visible=lambda: [])
+    monkeypatch.setattr(live_module.annotate, "draw_ratings",
+                        lambda frame, rated: pytest.fail("ratings drawn"))
+    controller = LiveSitrep(lambda: run)
+    controller.session = run
+    frame = np.zeros((10, 10, 3), dtype=np.uint8)
+    assert controller.overlay(frame) is frame
+
+
+def _abschnitt(ende, eskalation):
+    return chronik.Abschnitt(
+        beginn=ende - timedelta(seconds=30), ende=ende,
+        zusammenfassung=chronik.Zusammenfassung(
+            zusammenfassung="Streit.", tendenz="zuspitzend",
+            szene=report.Szene(relevanz=5, eskalation=eskalation, gefahr=2)))
+
+
+def test_the_scene_is_rated_by_the_newest_of_chronik_report_and_recommendation():
+    noon = datetime(2026, 10, 6, 12, 0, 0)
+    kept = SimpleNamespace(abschnitte=[_abschnitt(noon, 3), _abschnitt(noon + timedelta(seconds=30), 4)])
+    bericht = {"zeitfenster": {"ende": (noon + timedelta(seconds=10)).isoformat()},
+               "bericht": {"szene": {"relevanz": 6, "eskalation": 5, "gefahr": 1}}}
+    empfehlung = {"zeit": (noon + timedelta(seconds=45)).isoformat(),
+                  "urteil": {"szene": {"relevanz": 8, "eskalation": 7, "gefahr": 3}}}
+
+    assert live_module.latest_scene(kept, bericht, None) == {
+        "relevanz": 5, "eskalation": 4, "gefahr": 2, "source": "chronik",
+        "time": "2026-10-06T12:00:30", "threshold": report.SCHWELLE}
+    assert live_module.latest_scene(kept, bericht, empfehlung)["source"] == "empfehlung"
+    assert live_module.latest_scene(None, bericht, None)["eskalation"] == 5
+
+
+def test_an_unsummarised_abschnitt_does_not_rate_the_scene():
+    noon = datetime(2026, 10, 6, 12, 0, 0)
+    unsummarised = chronik.Abschnitt(beginn=noon, ende=noon + timedelta(seconds=30))
+    kept = SimpleNamespace(abschnitte=[_abschnitt(noon, 3), unsummarised])
+    assert live_module.latest_scene(kept, None, None)["eskalation"] == 3
+    assert live_module.latest_scene(SimpleNamespace(abschnitte=[]), None, None) is None
+
+
+def test_the_bodies_in_view_are_offered_left_to_right_by_track_id():
+    seen = [(4, np.array([400, 10, 500, 300]), "Alex", True),
+            (20, np.array([10, 10, 100, 300]), "Körper 20", False)]
+    assert live_module.in_view(seen) == [
+        {"body": 20, "label": "Körper 20", "assigned": False},
+        {"body": 4, "label": "Alex", "assigned": True}]
+
+
+def test_a_body_is_named_through_the_page(client, live, run):
+    named = []
+    run.assign = lambda body, name: named.append((body, name))
+    live.start()
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+
+    answer = client.post("/api/sitrep/assign", json={"body": 20, "name": "Lena"}).json()
+    assert answer["assigned"]
+    client.post("/api/sitrep/assign", json={"body": 20, "name": None})
+    assert named == [(20, "Lena"), (20, None)]
+
+
+def test_a_name_outside_the_cast_is_refused(client, live, run):
+    def refuse(body, name):
+        raise ValueError(f"{name!r} gehört nicht zur Besetzung.")
+
+    run.assign = refuse
+    live.start()
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    response = client.post("/api/sitrep/assign", json={"body": 20, "name": "Hamlet"})
+    assert response.status_code == 400
+    assert "Besetzung" in response.json()["detail"]
+
+
+def test_nothing_is_named_while_no_run_is_live(client):
+    assert not client.post("/api/sitrep/assign", json={"body": 1, "name": "Lena"}).json()["assigned"]
+
+
+def test_the_overview_offers_naming_the_people_in_view(client):
+    assert 'id="in-view"' in client.get("/sitrep").text
+    assert "/api/sitrep/assign" in client.get("/static/sitrep.js").text
 
 
 def test_the_video_feed_ends_when_the_viewer_leaves(live, run):

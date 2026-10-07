@@ -142,12 +142,12 @@ Menschlichkeit is left as it is. The report header shows the calibration
 (`Pegel normal −30 dBFS ±5`), and each amplified line its gain (`×1.5`).
 
 **Who said what** is measured by lip movement (`src/sitrep/speakers.py`). The
-two tallest bodies are the people the system follows. Each Whisper segment
-goes to the one whose lips moved at least 1.5 times as much as the other's,
+four tallest bodies are the people the system follows. Each Whisper segment
+goes to the one whose lips moved at least 1.5 times as much as anyone else's,
 measured with the 106-point landmark model of the face models' `buffalo_l`
 bundle. Otherwise it stays `(unklar)`. The report carries the lines as
 `aeusserungen`, and the model reads the transcript as `Name: line`. The
-operator page's video shows both people boxed with their names. The NDI feed
+operator page's video shows these people boxed with their names. The NDI feed
 and the model's frames are marked as before.
 `--no-actions` turns the recogniser off. It needs the exported model in
 `data/models/ntu120_stgcn/`.
@@ -159,9 +159,10 @@ and the model's frames are marked as before.
     uv run apollon-ui
     uv run apollon-ui --model gemma4:26b --window 15 --interval 5
 
-Open http://127.0.0.1:9680/. Choose the **Kamera** and the **Ton** from the
-dropdowns: every camera on the machine, NDI sources on the network (found
-after about two seconds), and every microphone, grouped by host API. The
+Open http://127.0.0.1:9680/. Choose the **Kamera**, the **Ton** and the
+**Besetzung** from the dropdowns: every camera on the machine, NDI sources on
+the network (found after about two seconds), every microphone, grouped by
+host API, and the cast folder `data/cast` with the people it enrols. The
 choice is saved to `data/interface/sources.json` (override:
 `APOLLON_UI_SOURCES`) and is still selected after a restart. A choice made
 during a run applies from the next start. **Start live SITREP** opens a new
@@ -173,6 +174,32 @@ delivered no sound for 10 s is flagged in red, e.g. "NDI Webcam Audio"
 without anything feeding it. The tab's **Stoppen** button releases the camera. Closing
 the tab does not stop the run. Reopening the page rejoins it.
 
+**Im Bild** beside the camera lists the people in view from left to right,
+each with a dropdown of the cast. Choosing a name gives it to that person for
+good: it holds over the automatic recognition until **Automatisch** releases
+it, and leaves anyone else in view who carried it. Everything the person did
+since their body was first tracked counts under the new name. The run learns
+the person's face for the rest of the session: the face seen on them when
+named, any face that stays on them for about three seconds later (someone
+named from behind is learned once they turn round), and the clearer views of
+that face as they come. They are then recognised by name after leaving and
+returning. The model is told which earlier label (e.g.
+`Körper 20`, `Vielleicht: Helene`) now means whom. Learned faces last for the
+run only; nothing is saved. Without a cast the dropdowns are empty.
+
+People are named by face and appearance together. While a cast member's face
+is recognised on them, or once you name them by hand, the run also learns
+what they look like (clothes, colours, build) with a person
+re-identification network (`src/sitrep/appearance.py`). Seen from behind or
+too far off for a face, they are then recognised by appearance, and keep or
+regain their name after leaving the picture. Both cues vote for one name; when
+they disagree, the face wins. The model is exported once with
+`src/scripts/export_osnet.py` into `data/models/osnet/`; without it, people
+are named by face alone. To measure how well appearance separates the people
+of a recording:
+
+    uv run python -m sitrep.appearance recording.mp4
+
 Below the camera, **Aktionserkennung · live** shows the action recogniser's
 latest classification every second: each person or pair, their most probable
 action and its evidence for risiko and menschlichkeit. Bodies without a
@@ -180,10 +207,10 @@ recognised face appear as `Körper <id>` and don't count toward the report. In
 each report, **Gemessen** lists everyone the recogniser rated, with the action
 behind each rating.
 
-`apollon-ui` takes the same window, `--cast`, `--send-td` and `--send-ndi`
-options as `apollon-sitrep`, and applies them to every run started from the
-page. `--video`, `--audio`, `--audio-api` and `--audio-ndi` preselect the
-sources and replace the saved choice. Devices are resolved when a run starts, so a device
+`apollon-ui` takes the same window, `--send-td` and `--send-ndi` options as
+`apollon-sitrep`, and applies them to every run started from the page.
+`--video`, `--audio`, `--audio-api`, `--audio-ndi` and `--cast` preselect the
+sources and the cast and replace the saved choice. Devices are resolved when a run starts, so a device
 error appears on the page. Only one run can hold the camera at a time.
 Overrides: `APOLLON_UI_HOST`, `APOLLON_UI_PORT`.
 

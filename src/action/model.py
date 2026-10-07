@@ -41,7 +41,10 @@ def labels() -> tuple[str, ...]:
     return tuple((MODEL_DIR / LABELS_FILE).read_text(encoding="utf-8").splitlines())
 
 
-def _providers() -> list:
+def providers() -> list:
+    """Execution providers for an ONNX session: CUDA where pose detection
+    runs on it, otherwise the CPU. Shared by the models fed from the pose
+    tracker (this one, sitrep/appearance.py)."""
     # Imported here: apollon_pose's device() also puts the CUDA libraries on
     # PATH, which has to happen before the session is created.
     from apollon_pose import model as pose_model
@@ -67,7 +70,7 @@ def session():
                 raise RuntimeError(
                     f"No action model at {path}. Export it with "
                     f"src/scripts/export_ntu_stgcn.py, or set APOLLON_ACTION_MODEL_DIR.")
-            _session = onnxruntime.InferenceSession(str(path), providers=_providers())
+            _session = onnxruntime.InferenceSession(str(path), providers=providers())
         return _session
 
 

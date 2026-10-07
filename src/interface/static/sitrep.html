@@ -6,12 +6,13 @@
   <title>Live SITREP · Apollon</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body data-ansicht="uebersicht" data-p1="normal">
+<body data-ansicht="uebersicht" data-screen="normal">
   <!-- Views over the same run: the overview, and the display prototypes of
        knowledge/components/03_render.md ("Live SITREP"). -->
   <nav class="ansichten" aria-label="Ansicht">
     <button type="button" data-ansicht="uebersicht" aria-current="page">Übersicht</button>
     <button type="button" data-ansicht="p1">Prototyp 1</button>
+    <button type="button" data-ansicht="p2">Prototyp 2</button>
   </nav>
 
   <header class="bar">
@@ -61,6 +62,14 @@
           <span class="anlass-zeile" id="empfehlung-anlass"></span>
         </article>
 
+        <!-- The people in view, left to right, named by hand where the
+             automatic naming is unsure or wrong. -->
+        <article class="panel">
+          <span class="label">Im Bild · links nach rechts</span>
+          <div class="in-view" id="in-view"></div>
+          <p class="hinweis" id="in-view-error" data-level="red" hidden></p>
+        </article>
+
         <article class="panel">
           <span class="label">Personen · live · 0–5</span>
           <div class="people compact" id="live-personen"></div>
@@ -68,9 +77,8 @@
       </aside>
     </div>
 
-    <!-- Prototype 1: the two people in view, in the order they stand from
-         left to right, and a recommendation to intervene in place of
-         everything else. -->
+    <!-- Prototype 1: the people in view, in the order they stand from
+         left to right. -->
     <div class="p1-only p1-seite">
       <section class="p1-personen" id="p1-personen" aria-label="Personen im Bild"></section>
       <section class="p1-alarm" id="p1-alarm" hidden>
@@ -78,17 +86,26 @@
         <span class="p1-alarm-anlass" id="p1-alarm-anlass"></span>
       </section>
     </div>
-    <div class="p1-only p1-einschreiten" role="alert">
-      <span class="p1-wort">Einschreiten</span>
-      <div class="p1-zeile" id="p1-warum-zeile">
+    <!-- Prototype 2: beneath the picture, the scene as a whole. The people's
+         values are drawn into the picture by the server. -->
+    <section class="p2-only p2-scene" aria-label="Szene">
+      <div class="p2-scene-meters" id="p2-scene-meters"></div>
+      <p class="p2-scene-source" id="p2-scene-source"></p>
+    </section>
+
+    <!-- Both prototypes: a recommendation to intervene in place of
+         everything else. -->
+    <div class="display-only intervene" role="alert">
+      <span class="intervene-word">Einschreiten</span>
+      <div class="intervene-row" id="intervene-why-row">
         <span class="label">Warum</span>
-        <p id="p1-warum"></p>
+        <p id="intervene-why"></p>
       </div>
-      <div class="p1-zeile" id="p1-massnahme-zeile">
+      <div class="intervene-row" id="intervene-measure-row">
         <span class="label">Empfehlung</span>
-        <p id="p1-massnahme"></p>
+        <p id="intervene-measure"></p>
       </div>
-      <button id="p1-override" class="p1-override" type="button" title="Empfehlung übergehen"><kbd>X</kbd> Override</button>
+      <button id="intervene-override" class="intervene-override" type="button" title="Empfehlung übergehen"><kbd>X</kbd> Override</button>
     </div>
 
     <!-- The report is made only on request (R), and stays until the next. -->
@@ -160,5 +177,6 @@
 
   <script src="/static/sitrep.js"></script>
   <script src="/static/prototyp1.js"></script>
+  <script src="/static/prototyp2.js"></script>
 </body>
 </html>

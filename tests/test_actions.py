@@ -212,3 +212,79 @@ def test_readings_made_before_a_body_is_named_count_once_it_is(ratings):
     ratings.record([reading(1)], T0 + timedelta(seconds=1))
     [klara] = ratings.between(EARLIER, T0 + timedelta(seconds=1))
     assert (klara.name, klara.risiko, klara.lesungen) == ("Klara", 5, 2)
+
+
+# Naming by hand -------------------------------------------------------------
+
+def test_an_assigned_name_holds_over_every_vote(ratings):
+    ratings.assign(1, "Jakob")
+    assert set(names_after(ratings, ["Klara"] * 8)) == {"Jakob"}
+
+
+def test_an_assigned_name_leaves_the_body_that_carried_it(ratings):
+    for second in range(4):
+        ratings.name(tracking.Frame(float(second), {1: body(100, 100), 2: body(400, 100)}),
+                     [face(400, 100, "Klara")])
+    assert ratings.names()[2] == "Klara"
+
+    ratings.assign(1, "Klara")
+    ratings.name(tracking.Frame(4.0, {1: body(100, 100), 2: body(400, 100)}),
+                 [face(400, 100, "Klara")])
+    assert ratings.names().get(1) == "Klara"
+    assert ratings.names().get(2) != "Klara"
+
+
+def test_an_assigned_body_is_rated_on_what_it_did_before(ratings):
+    ratings.record([reading(7, kicking_other_person=1.0)], T0)
+    ratings.assign(7, "Klara")
+    [klara] = ratings.between(EARLIER, T0)
+    assert klara.name == "Klara" and klara.risiko > 0
+
+
+def test_a_released_body_is_named_by_its_faces_again(ratings):
+    ratings.assign(1, "Jakob")
+    names_after(ratings, ["Klara"] * 3)
+    ratings.assign(1, None)
+    assert names_after(ratings, ["Klara"])[-1] == "Klara"
+
+
+def test_assigning_reports_the_face_last_seen_on_the_body(ratings):
+    names_after(ratings, ["Vielleicht: Theo"])
+    assert ratings.assign(1, "Klara") == "Vielleicht: Theo"
+    assert ratings.assign(2, "Jakob") is None
+
+
+def test_carried_names_are_those_of_bodies_active_in_a_stretch(ratings):
+    ratings.record([reading(7, kicking_other_person=1.0), reading(9)], T0)
+    ratings.assign(7, "Klara")
+    ratings.assign(8, "Jakob")
+    names_after(ratings, ["Vielleicht: Theo"], track=9)
+    assert ratings.carried(EARLIER, T0) == ["Klara"]
+
+
+def learning(sightings: list[str], pinned: str | None = "Klara"):
+    """What a body named by hand passes on for learning over a series of face sightings."""
+    learned = []
+    subject = actions.ActionRatings(source=None, faces=None, mapping=MAPPING,
+                                    on_learn=lambda *face: learned.append(face))
+    if pinned:
+        subject.assign(1, pinned)
+    names_after(subject, sightings)
+    return learned
+
+
+def test_a_face_staying_on_a_named_body_is_learned_under_its_name():
+    assert learning(["Vielleicht: Theo"] * 5) == [(1, "Vielleicht: Theo", "Klara")]
+
+
+def test_a_face_crossing_a_named_body_briefly_is_not_learned():
+    assert learning(["Vielleicht: Theo", "Vielleicht: Theo", "Vielleicht: Rosa",
+                     "Vielleicht: Theo"]) == []
+
+
+def test_a_face_already_carrying_the_name_is_not_learned_again():
+    assert learning(["Klara"] * 5) == []
+
+
+def test_faces_on_bodies_not_named_by_hand_are_not_learned():
+    assert learning(["Vielleicht: Theo"] * 5, pinned=None) == []

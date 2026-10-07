@@ -23,6 +23,12 @@ unrecognised face is given an invented name marked as a guess, rather than left
 as a number. The guess holds for as long as the track does, and gives way to
 the real name if the person is later recognised.
 
+The operator can name a track by hand (`teach`). The name is final for that
+track, and its faces join the cast gallery for the rest of the run, so the
+person is recognised again after leaving the picture. The lesson follows the
+track: as it keeps clearer faces, the gallery learns those. Nothing learned is
+written to disk.
+
 Nothing is written to disk, in line with the non-recording real-time path.
 
 Watch the tracker without generating reports:
@@ -33,6 +39,7 @@ Watch the tracker without generating reports:
 
 import argparse
 import itertools
+import math
 import pathlib
 import random
 import sys
@@ -104,6 +111,10 @@ NAMES = (
 # datetime.min that subtracting the forget window cannot underflow.
 REPLAY_EPOCH = datetime(2000, 1, 1)
 
+# Similarity of a track the operator has named. Above any match, so the
+# gallery never renames it (_adopt keeps a track's strongest match).
+TAUGHT = math.inf
+
 # Sightings kept per track, largest face first. A track is matched on its best
 # stored vector, exactly as an enrolled person is, so keeping several covers
 # the angles a person turns through; keeping more than this buys little.
@@ -150,6 +161,15 @@ class Track:
         return float(max(stored @ vector for stored in self.vectors))
 
 
+@dataclass
+class Lesson:
+    """A track the operator named, and the faces learned from it."""
+
+    name: str
+    track: Track
+    vectors: np.ndarray
+
+
 @dataclass(frozen=True)
 class Presence:
     """One person's presence over a stretch of time."""
@@ -184,8 +204,13 @@ class PresenceTracker:
                  threshold: float = gallery.THRESHOLD,
                  detector_size: int = detect.INPUT_SIZE):
         self._source = source
-        # Public: a run reports which cast it was given.
+        # Public: a run reports which cast it was given. Faces the operator
+        # taught are added to it; the enrolled gallery is kept apart, so a
+        # lesson can be taken back.
         self.cast = cast
+        self._enrolled = cast
+        self._lessons: dict[int, Lesson] = {}
+        self._lesson_ids = itertools.count(1)
         self._interval = interval
         self._min_face = min_face
         self._threshold = threshold
@@ -247,6 +272,8 @@ class PresenceTracker:
                 touched = self._link(faces, vectors, matches, at)
                 self._adopt(touched, matches)
                 self._merge_by_name()
+                if any(track.similarity == TAUGHT for track in touched):
+                    self._refresh_lessons()
                 self.passes += 1
                 return touched
 
@@ -263,9 +290,62 @@ class PresenceTracker:
                 return [(track.box, track.label) for track in touched]
 
     def clear(self):
-        """Delete every track, with the face embeddings it holds."""
-        with self._lock:
+        """Delete every track and every lesson, with the face embeddings they hold."""
+        with self._pass, self._lock:
             self._tracks = []
+            self._lessons = {}
+            self.cast = self._enrolled
+
+    def teach(self, label: str, name: str) -> int | None:
+        """Name the live track called `label` as `name`, for good, and learn its faces.
+
+        Returns the lesson's id, for `unteach`, or None when no live track
+        carries the label.
+        """
+        with self._pass, self._lock:
+            track = next((track for track in self._tracks if track.label == label), None)
+            if track is None or not track.vectors:
+                return None
+            track.name, track.similarity = name, TAUGHT
+            lesson = next(self._lesson_ids)
+            self._lessons[lesson] = Lesson(name, track, np.array(track.vectors))
+            self._merge_by_name()
+            self._relearn()
+            return lesson
+
+    def unteach(self, lesson: int):
+        """Take a lesson back: forget its faces, and let the gallery name its track again."""
+        with self._pass, self._lock:
+            taken = self._lessons.pop(lesson, None)
+            if taken is None:
+                return
+            # A merge may have moved the name to another track of the person.
+            if not any(kept.name == taken.name for kept in self._lessons.values()):
+                for track in self._tracks:
+                    if track.name == taken.name and track.similarity == TAUGHT:
+                        track.name, track.similarity = None, 0.0
+            self._relearn()
+
+    def _refresh_lessons(self):
+        """Learn the faces each taught track keeps now, its clearest so far."""
+        live = {id(track) for track in self._tracks}
+        for lesson in self._lessons.values():
+            if id(lesson.track) in live:
+                lesson.vectors = np.array(lesson.track.vectors)
+        self._relearn()
+
+    def _relearn(self):
+        """The enrolled gallery with every lesson's faces added."""
+        additions = [(lesson.name, lesson.vectors) for lesson in self._lessons.values()]
+        if not additions:
+            self.cast = self._enrolled
+            return
+        base = self._enrolled
+        if base is None:
+            width = additions[0][1].shape[1]
+            base = gallery.Gallery([], np.empty((0, width), dtype=np.float32),
+                                   np.empty(0, dtype=np.int64), [])
+        self.cast = base.extended(additions)
 
     def faces(self, within: float, at: datetime | None = None) -> list[tuple[np.ndarray, str]]:
         """The face box and name of every track sighted in the `within` seconds before `at`.

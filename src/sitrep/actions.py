@@ -24,7 +24,25 @@ frame keeps its name for what it did while it was there, so a camera cut or a
 lost track does not unname its earlier readings. Readings are kept
 under the body and named only when a report takes them, so a body named at
 any point before then is rated on all its readings, including those made
-before its face was seen. A body that never shows its face is not rated.
+before its face was seen. A body named neither by a face nor by its
+appearance is not rated.
+
+Appearance. Given a memory of appearances (appearance.Appearances), each
+naming also describes the bodies in view, and a description that matches a
+person adds APPEARANCE_VOTE for them to the same tally the faces vote in.
+Face and appearance thus decide one name together: agreeing, they settle it
+faster; disagreeing, the face wins, since it votes more per sighting. A name
+needs MIN_NAME votes, so one appearance match alone names no one. The memory
+learns from bodies whose name is sure, named by hand or confirmed by a cast
+face within SURE_AGE seconds, never from appearance alone, so a mistake does
+not teach itself.
+
+The operator can name a body by hand (`assign`). The name is absolute: it
+holds over every vote until released, and leaves any other body in view that
+carried it. Since readings are named when taken, a body named by hand is
+rated under that name on everything it did, including before. A face seen on
+it in LEARN_SIGHTINGS namings in a row is passed to `on_learn` under that
+name, so the face tracker can learn the person while the name holds.
 
 Evidence. A reading's 120 class probabilities are weighed with the
 Action-to-SITREP table (action/sitrep_map.csv): the evidence for a rating is
@@ -43,6 +61,7 @@ values (lage.py) read the last few seconds, each stretch of the scene's
 summary (chronik.py) and a report asked for read theirs.
 """
 
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -52,7 +71,7 @@ import numpy as np
 
 from action import model, recognizer, sitrep_map, tracking
 
-from . import loudness, presence, report
+from . import appearance, loudness, presence, report
 
 # Seconds a face box stays usable for naming a body: two passes of the
 # presence tracker, so one missed detection does not leave a body unnamed.
@@ -70,6 +89,25 @@ VOTE_HALF_LIFE = 3.0
 # Votes by which another cast name must lead the one a body carries to take
 # its place, on that body or on another body in view.
 SWITCH = 2.0
+
+# Namings in a row in which the same face must lie on a body named by hand
+# before that face is learned under the name: about three seconds at the
+# recogniser's step. A face crossing the body for a moment, as in an embrace,
+# is not learned.
+LEARN_SIGHTINGS = 3
+
+# A matching appearance's vote, beside a face sighting's 1. Two matches in a
+# row reach MIN_NAME, while a face seen steadily outweighs an appearance seen
+# steadily by more than SWITCH.
+APPEARANCE_VOTE = 0.6
+
+# Votes a cast name needs before a body carries it. One face sighting reaches
+# it; appearance alone needs two matches in a row.
+MIN_NAME = 1.0
+
+# Seconds after a cast face was sighted on a body during which the body's
+# appearance is learned under that name.
+SURE_AGE = 3.0
 
 # Seconds a body's votes are kept after its last sighting in view. Longer than
 # the body tracker's own FORGET, after which the track cannot return.
@@ -204,7 +242,9 @@ class ActionRatings:
     """
 
     def __init__(self, source, faces: presence.PresenceTracker,
-                 mapping: sitrep_map.Mapping | None = None, on_frame=None):
+                 mapping: sitrep_map.Mapping | None = None, on_frame=None,
+                 on_learn: Callable[[int, str, str], None] | None = None,
+                 appearances: appearance.Appearances | None = None):
         self.mapping = mapping or sitrep_map.load()
         self._faces = faces
         self._names: dict[int, str] = {}
@@ -215,6 +255,22 @@ class ActionRatings:
         self._voted_at: dict[int, float] = {}
         self._guesses: dict[int, str] = {}
         self._sighted_at: dict[int, float] = {}
+        # Per body: the face label last sighted on it, and the name the
+        # operator gave it.
+        self._faces_seen: dict[int, str] = {}
+        self._pinned: dict[int, str] = {}
+        # Per body named by hand: the face lying on it, and in how many
+        # namings in a row. `on_learn(body, face label, name)` receives a
+        # face that stayed for LEARN_SIGHTINGS.
+        self._steady: dict[int, tuple[str, int]] = {}
+        self._on_learn = on_learn
+        # Per body: the cast face last sighted on it, and when.
+        self._face_sure: dict[int, tuple[str, float]] = {}
+        # What each person looks like, and the frame the recogniser saw last,
+        # which the bodies of a naming are described on.
+        self.appearances = appearances
+        self._latest = appearance.Latest() if appearances is not None else None
+        self.appearance_error: Exception | None = None
         self._records: list[Evidence] = []
         self._lock = threading.Lock()
         # The last classification, every body included, and how many there
@@ -223,6 +279,12 @@ class ActionRatings:
         self.evaluations = 0
         # `on_frame` receives each camera frame with its tracked bodies, e.g.
         # for measuring mouths (speakers.py).
+        if self._latest is not None:
+            observers = [self._latest.observe] + ([on_frame] if on_frame else [])
+
+            def on_frame(image, frame):
+                for observe in observers:
+                    observe(image, frame)
         self.recognizer = recognizer.ActionRecognizer(source, on_readings=self._on_readings,
                                                       on_frame=on_frame)
 
@@ -231,6 +293,8 @@ class ActionRatings:
         # its start rather than silently on the thread, and the first window
         # does not pay for the load.
         model.session()
+        if self.appearances is not None:
+            appearance.session()
         self.recognizer.start()
         return self
 
@@ -259,33 +323,126 @@ class ActionRatings:
         The people the ratings and speaker attribution are about, labelled by
         name, or "Körper <id>" while no face has named them.
         """
+        return [(box, label) for _, box, label, _ in self.in_view()]
+
+    def in_view(self) -> list[tuple[int, np.ndarray, str, bool]]:
+        """Track id, box, label and whether the operator named it, for each
+        body `visible` reports."""
         # The recogniser's thread only appends finished frames, so the newest
         # one can be read without its lock.
         frames = self.recognizer.tracker.frames
         if not frames:
             return []
         frame = frames[-1]
-        names = self.names()
-        return [(frame.bodies[track].box, names.get(track, f"Körper {track}"))
+        with self._lock:
+            names, pinned = dict(self._names), set(self._pinned)
+        return [(track, frame.bodies[track].box, names.get(track, f"Körper {track}"),
+                 track in pinned)
                 for track in recognizer.tallest(frame)]
+
+    def assign(self, track: int, name: str | None) -> str | None:
+        """Name a body by hand, or release it to the automatic naming with None.
+
+        The name leaves every other body in view that carries it; bodies out
+        of view keep theirs for what they did. Returns the face label last
+        sighted on the body, if any, through which the face tracker can learn
+        the person.
+        """
+        frames = self.recognizer.tracker.frames
+        in_view = set(frames[-1].bodies) if frames else set()
+        with self._lock:
+            self._steady.pop(track, None)
+            if name is None:
+                self._pinned.pop(track, None)
+                # The next naming pass names it from its votes or guess again.
+                self._names.pop(track, None)
+            else:
+                for other in [other for other, pinned in self._pinned.items()
+                              if pinned == name and other != track]:
+                    del self._pinned[other]
+                    self._names.pop(other, None)
+                for other in [other for other, held in self._names.items()
+                              if held == name and other != track and other in in_view]:
+                    del self._names[other]
+                self._pinned[track] = name
+                self._names[track] = name
+            return self._faces_seen.get(track)
+
+    def pinned(self, track: int) -> str | None:
+        """The name the operator gave a body, if any."""
+        with self._lock:
+            return self._pinned.get(track)
+
+    def carried(self, since: datetime, until: datetime) -> list[str]:
+        """Cast names carried by bodies in view or with readings in a stretch,
+        however they were named: by face, by appearance or by hand."""
+        frames = self.recognizer.tracker.frames
+        in_view = set(frames[-1].bodies) if frames else set()
+        with self._lock:
+            active = {member for record in self._records if since < record.at <= until
+                      for member in record.members}
+            return sorted({name for track, name in self._names.items()
+                           if (track in active or track in in_view)
+                           and not presence.guessed(name)})
 
     def _on_readings(self, readings: list[recognizer.Reading]):
         # Runs on the recogniser's thread between two of its frames, so its
         # body tracker is not being updated meanwhile.
         frames = self.recognizer.tracker.frames
         if frames:
-            self.name(frames[-1], self._faces.faces(FACE_AGE))
+            self.name(frames[-1], self._faces.faces(FACE_AGE), self._describe(frames[-1]))
         self.record(readings, datetime.now())
 
-    def name(self, frame: tracking.Frame, faces: list[tuple[np.ndarray, str]]):
-        """Name the bodies in a frame from the faces seen around it."""
+    def _describe(self, frame: tracking.Frame) -> dict[int, np.ndarray]:
+        """Descriptions of the bodies in view, on the image the frame was tracked on.
+
+        A failure stops the appearance cue alone, as a failed mouth
+        measurement stops speaker attribution alone: on this thread it would
+        otherwise stop action recognition.
+        """
+        if self._latest is None or self.appearance_error is not None:
+            return {}
+        taken = self._latest.take()
+        if taken is None or taken[1].at != frame.at:
+            return {}
+        image, _ = taken
+        try:
+            return appearance.describe(
+                image, {track: frame.bodies[track] for track in recognizer.tallest(frame)})
+        except Exception as error:
+            self.appearance_error = error
+            print(f"appearance stopped: {error!r}", file=sys.stderr)
+            return {}
+
+    def name(self, frame: tracking.Frame, faces: list[tuple[np.ndarray, str]],
+             descriptions: dict[int, np.ndarray] | None = None):
+        """Name the bodies in a frame from the faces seen around it and, given
+        their descriptions, from what they look like."""
         sighted = name_bodies(frame, faces)
+        descriptions = descriptions or {}
+        matched = {}
+        if self.appearances is not None:
+            for track, description in descriptions.items():
+                person, _ = self.appearances.match(description)
+                if person is not None:
+                    matched[track] = person
+        learned = []
         with self._lock:
             for track in frame.bodies:
                 if track in self._votes:
                     self._fade(track, frame.at)
             for track, label in sighted.items():
                 self._sighted_at[track] = frame.at
+                self._faces_seen[track] = label
+                pinned = self._pinned.get(track)
+                if pinned is not None and label != pinned:
+                    held, count = self._steady.get(track, (label, 0))
+                    count = count + 1 if held == label else 1
+                    self._steady[track] = (label, count)
+                    if count == LEARN_SIGHTINGS:
+                        learned.append((track, label, pinned))
+                else:
+                    self._steady.pop(track, None)
                 if presence.guessed(label):
                     self._guesses[track] = label
                     continue
@@ -294,21 +451,55 @@ class ActionRatings:
                     self._voted_at[track] = frame.at
                 votes = self._votes[track]
                 votes[label] = votes.get(label, 0.0) + 1.0
+                self._face_sure[track] = (label, frame.at)
+            for track, person in matched.items():
+                if track not in frame.bodies:
+                    continue
+                if track not in self._votes:
+                    self._votes[track] = {}
+                    self._voted_at[track] = frame.at
+                votes = self._votes[track]
+                votes[person] = votes.get(person, 0.0) + APPEARANCE_VOTE
 
             chosen = {track: self._choose(track) for track in frame.bodies
                       if track in self._votes}
             self._one_body_per_name(chosen)
 
+            # The operator's names hold over every vote, and no other body
+            # carries them.
+            pinned = set(self._pinned.values())
             for track in frame.bodies:
                 cast = chosen.get(track)
-                if cast is not None:
+                if track in self._pinned:
+                    self._names[track] = self._pinned[track]
+                elif cast is not None and cast not in pinned:
                     self._names[track] = cast
                 elif track in self._guesses:
                     self._names[track] = self._guesses[track]
                 elif track in self._votes:
                     # Its cast name went to another body in view.
                     self._names.pop(track, None)
+            # A face must lie on the body in consecutive namings.
+            for track in [track for track in self._steady if track not in sighted]:
+                del self._steady[track]
+            sure = {track: self._names[track] for track in descriptions
+                    if track in self._names and self._sure(track, frame.at)}
             self._drop_stale_votes(frame)
+        if self.appearances is not None:
+            for track, name in sure.items():
+                self.appearances.learn(name, descriptions[track], frame.at)
+        # Outside the lock: the face tracker may take a moment to learn.
+        if self._on_learn is not None:
+            for track, label, name in learned:
+                self._on_learn(track, label, name)
+
+    def _sure(self, track: int, at: float) -> bool:
+        """Whether a body's name is sure enough to learn its appearance from:
+        given by hand, or its cast face sighted on it within SURE_AGE."""
+        if track in self._pinned:
+            return True
+        face, when = self._face_sure.get(track, (None, -np.inf))
+        return face == self._names.get(track) and at - when <= SURE_AGE
 
     def _fade(self, track: int, at: float):
         """Fade a body's votes to recogniser time `at`."""
@@ -325,6 +516,8 @@ class ActionRatings:
         held = self._names.get(track)
         if held in votes and votes[leader] < votes[held] + SWITCH:
             return held
+        if votes[leader] < MIN_NAME:
+            return held if held in votes else None
         return leader
 
     def _one_body_per_name(self, chosen: dict[int, str | None]):
@@ -350,7 +543,8 @@ class ActionRatings:
         """Forget the votes and guess of bodies unsighted and out of view for VOTES_KEPT."""
         for track in [track for track, at in self._sighted_at.items()
                       if track not in frame.bodies and frame.at - at > VOTES_KEPT]:
-            for kept in (self._sighted_at, self._votes, self._voted_at, self._guesses):
+            for kept in (self._sighted_at, self._votes, self._voted_at, self._guesses,
+                         self._faces_seen, self._face_sure):
                 kept.pop(track, None)
 
     def record(self, readings: list[recognizer.Reading], at: datetime):
@@ -381,6 +575,10 @@ class ActionRatings:
             self._voted_at = {}
             self._guesses = {}
             self._sighted_at = {}
+            self._faces_seen = {}
+            self._pinned = {}
+            self._steady = {}
+            self._face_sure = {}
             self.latest = []
         self.recognizer.tracker.frames.clear()
 

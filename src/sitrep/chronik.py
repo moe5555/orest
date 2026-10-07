@@ -67,7 +67,7 @@ KURVE_PROMPT = 20
 ABSCHNITT_TOKENS = 300
 RUECKBLICK_TOKENS = 400
 
-ANWEISUNG = """Du bist Apollon, ein Ueberwachungssystem, und fuehrst das
+ANWEISUNG = """Du bist Apollon, ein militaerisches Lagesystem, und fuehrst das
 laufende Protokoll einer Szene.
 Du erhaeltst das Protokoll bisher, Standbilder aus dem neuesten Abschnitt,
 was dort an Handlungen gemessen wurde, und sein Transkript. In den Bildern
@@ -81,15 +81,17 @@ Fasse den neuesten Abschnitt zusammen.
 - Szene: Relevanz, Eskalation und Gefahr in diesem Abschnitt, 0-10.
 - Tendenz gegenueber dem Protokoll bisher: zuspitzend, gleichbleibend oder
   beruhigend.
-- Ausschliesslich, was belegt ist. Knapp und nominal, Behoerdenstil."""
+- Ausschliesslich, was belegt ist. Knapp und nominal, militaerischer
+  Meldestil. Keine Polizei- oder Verwaltungssprache."""
 
-ANWEISUNG_RUECKBLICK = f"""Du bist Apollon, ein Ueberwachungssystem, und fuehrst das
+ANWEISUNG_RUECKBLICK = f"""Du bist Apollon, ein militaerisches Lagesystem, und fuehrst das
 laufende Protokoll einer Szene. Verdichte den bisherigen Rueckblick und die
 folgenden Abschnitte zu einem neuen Rueckblick.
 - Chronologisch, hoechstens {RUECKBLICK_SAETZE} Saetze.
 - Erhalten bleiben: Wendepunkte, wer eskalierte oder beruhigte, entscheidende
   Aeusserungen, und wie sich Eskalation und Gefahr entwickelt haben.
-- Nichts hinzufuegen, was nicht im Protokoll steht. Knapp, Behoerdenstil."""
+- Nichts hinzufuegen, was nicht im Protokoll steht. Knapp, militaerischer
+  Meldestil."""
 
 
 class Zusammenfassung(BaseModel):
@@ -171,6 +173,8 @@ class Chronik:
         self.rueckblick_von: datetime | None = None
         self.rueckblick_bis: datetime | None = None
         self.kurve: list[Punkt] = []
+        # Labels the operator reassigned: "<earlier label> ist <name>".
+        self.zuordnungen: list[str] = []
         self.began = began or datetime.now()
         self._cut = self.began
         self._stop = threading.Event()
@@ -314,15 +318,24 @@ class Chronik:
             # The words of folded Abschnitte are not kept.
             self._zeilen = [line for line in self._zeilen if line.ende > bis]
 
+    def zuordnen(self, zuordnungen: list[str]):
+        """Set which earlier labels the operator has since named, e.g.
+        "Körper 20 ist Alex". Abschnitte already written keep the earlier
+        label; every prompt reading the Chronik is told what it means."""
+        with self._lock:
+            self.zuordnungen = list(zuordnungen)
+
     # Reading ----------------------------------------------------------------
 
     def kontext(self, abschnitte: int | None = None) -> str:
         """The Chronik as a prompt reads it: Rueckblick, then the Abschnitte
-        in detail (the last `abschnitte` of them, or all), then the Kurve."""
+        in detail (the last `abschnitte` of them, or all), then the Kurve, then
+        the operator's reassignments of earlier labels."""
         with self._lock:
             rueckblick, von, bis = self.rueckblick, self.rueckblick_von, self.rueckblick_bis
             detail = list(self.abschnitte)
             kurve = list(self.kurve)
+            zuordnungen = list(self.zuordnungen)
         if abschnitte is not None:
             detail = detail[-abschnitte:] if abschnitte else []
         parts = []
@@ -334,6 +347,9 @@ class Chronik:
             punkte = kurve[-KURVE_PROMPT:]
             parts.append(f"Eskalation je Abschnitt seit {punkte[0].ende:%H:%M:%S}: "
                          + " ".join(str(punkt.eskalation) for punkt in punkte))
+        if zuordnungen:
+            parts.append("Vom Operator zugeordnet, fruehere Bezeichnungen meinen diese "
+                         "Personen: " + "; ".join(zuordnungen) + ".")
         return "\n\n".join(parts)
 
     def woertlich_seit(self) -> datetime:
@@ -357,6 +373,7 @@ class Chronik:
             self.rueckblick = ""
             self.rueckblick_von = self.rueckblick_bis = None
             self.kurve = []
+            self.zuordnungen = []
 
     def close(self):
         self._stop.set()

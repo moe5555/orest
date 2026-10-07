@@ -18,7 +18,7 @@ from collections import deque
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from sitrep import chronik, lage, report, session
+from sitrep import annotate, chronik, lage, report, session
 
 # Run states, as the page shows them.
 IDLE, STARTING, RUNNING, STOPPING, ERROR = "idle", "starting", "running", "stopping", "error"
@@ -105,6 +105,18 @@ def im_bild(visible: list[tuple]) -> list[str]:
     return [name for box, name in sorted(visible, key=lambda seen: float(seen[0][0] + seen[0][2]))]
 
 
+def in_view(seen: list[tuple]) -> list[dict]:
+    """The bodies in view, left to right, as the page offers them for naming.
+
+    Takes what `actions.ActionRatings.in_view()` returns. `body` is the
+    recogniser's track id, which an assignment names; `assigned` marks a name
+    the operator gave.
+    """
+    ordered = sorted(seen, key=lambda body: float(body[1][0] + body[1][2]))
+    return [{"body": int(track), "label": label, "assigned": assigned}
+            for track, _, label, assigned in ordered]
+
+
 def chronik_payload(kept: chronik.Chronik) -> dict:
     """The Chronik as the page shows it: the Rueckblick, the Abschnitte, the Kurve."""
     return {
@@ -121,6 +133,46 @@ def chronik_payload(kept: chronik.Chronik) -> dict:
 
 # Lines the page lists, newest last.
 ZEILEN_SHOWN = 12
+
+# The live ratings drawn beside each person on Prototype 2's picture, with the
+# names the page gives them.
+RATING_LABELS = {"risiko": "Risiko", "menschlichkeit": "Menschlichkeit"}
+
+
+def rating_level(name: str, value: int) -> str:
+    """A person's rating as the page colours it (sitrep.js, personLevel):
+    Risiko amber from 2 and red from 4 on its 0-5 scale, the rest neutral."""
+    if name != "risiko":
+        return "calm"
+    return "red" if value >= 4 else "amber" if value >= 2 else "calm"
+
+
+def latest_scene(kept: chronik.Chronik | None, bericht: dict | None,
+                 empfehlung: dict | None) -> dict | None:
+    """The newest rating of the scene as a whole, with its time and source.
+
+    Three things rate the scene, each at its own rhythm: the Chronik once per
+    Abschnitt, a Lagebericht on request, a recommendation on request or alarm.
+    None is continuous, so the newest stands for the scene now. `bericht` and
+    `empfehlung` are as the page receives them (payload, LiveSitrep._take).
+    """
+    candidates = []
+    if kept is not None:
+        summarised = [abschnitt for abschnitt in kept.abschnitte if abschnitt.zusammenfassung]
+        if summarised:
+            candidates.append(("chronik", summarised[-1].ende,
+                               summarised[-1].zusammenfassung.szene.model_dump()))
+    if bericht is not None:
+        candidates.append(("bericht", datetime.fromisoformat(bericht["zeitfenster"]["ende"]),
+                           bericht["bericht"]["szene"]))
+    if empfehlung is not None:
+        candidates.append(("empfehlung", datetime.fromisoformat(empfehlung["zeit"]),
+                           empfehlung["urteil"]["szene"]))
+    if not candidates:
+        return None
+    source, time, szene = max(candidates, key=lambda candidate: candidate[1])
+    return {**szene, "source": source, "time": time.isoformat(timespec="seconds"),
+            "threshold": report.SCHWELLE}
 
 
 class LiveSitrep:
@@ -256,6 +308,18 @@ class LiveSitrep:
         run = self.session
         return run.empfehlung() if run is not None and self.status == RUNNING else False
 
+    def assign(self, body: int, name: str | None) -> bool:
+        """Name a body in view by hand, or release it with None
+        (session.Session.assign). False while no run is live; a name outside
+        the cast raises ValueError."""
+        run = self.session
+        if run is None or self.status != RUNNING:
+            return False
+        run.assign(body, name)
+        with self._lock:
+            self.version += 1
+        return True
+
     def uebergehen(self, nummer: int | None = None) -> bool:
         """Set the recommendation aside, so the page returns to its regular view.
 
@@ -296,11 +360,15 @@ class LiveSitrep:
                 "aktionen": aktionen(run.actions) if run is not None else None,
                 "im_bild": (im_bild(run.actions.visible())
                             if run is not None and run.actions is not None else []),
+                "in_view": (in_view(run.actions.in_view())
+                            if run is not None and run.actions is not None else []),
                 "ton": run.ton() if run is not None and run.meter is not None else None,
                 "werte": self.werte,
                 "zeilen": list(self.zeilen),
                 "chronik": (chronik_payload(run.chronik)
                             if run is not None and run.chronik is not None else None),
+                "scene": latest_scene(run.chronik if run is not None else None,
+                                      self.report, self.empfehlung),
                 "laeuft": run.laeuft if run is not None else {},
                 "fehler": dict(self.fehler),
                 "empfehlung": self.empfehlung,
@@ -314,7 +382,25 @@ class LiveSitrep:
             return None
         return run.stream.latest()
 
-    def overlay(self, frame):
-        """The frame with the people the run tracks boxed and named."""
+    def overlay(self, frame, ratings: bool = False):
+        """The frame with the people the run tracks boxed and named.
+
+        With `ratings`, each person's live values are set beside their box
+        (Prototype 2). A person in view with no recent evidence reads 0, as on
+        Prototype 1.
+        """
         run = self.session
-        return run.overlay(frame) if run is not None else frame
+        if run is None:
+            return frame
+        if not ratings or run.actions is None:
+            return run.overlay(frame)
+        with self._lock:
+            live = {person["name"]: person for person in (self.werte or {}).get("personen", [])}
+        rated = []
+        for box, name in run.actions.visible():
+            values = live.get(name, {})
+            rows = [(RATING_LABELS[rating], values.get(rating, 0),
+                     rating_level(rating, values.get(rating, 0)))
+                    for rating in report.GEMESSEN]
+            rated.append((box, name, rows))
+        return annotate.draw_ratings(frame, rated)

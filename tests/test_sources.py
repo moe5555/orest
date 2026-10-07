@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from interface.app import create_app
 from interface.live import LiveSitrep
+from interface import sources as sources_module
 from interface.sources import Selection, Sources
 from sitrep import devices, ndi_audio, session
 
@@ -68,6 +69,7 @@ def test_the_page_lists_every_device_and_marks_what_a_run_would_open(client):
     assert offered["selection"] == {
         "camera": "NDI Webcam Video 1",
         "sound": {"kind": "microphone", "name": "Microsoft Sound Mapper - Input", "api": "MME"},
+        "cast": None,
         "errors": [],
     }
 
@@ -137,3 +139,41 @@ def test_an_unreadable_saved_selection_starts_from_the_command_line(tmp_path):
     path.write_text("{ not json")
 
     assert Selection.load(path, Sources(video="OBS")).sources == Sources(video="OBS")
+
+
+@pytest.fixture
+def cast_dir(tmp_path, monkeypatch):
+    """A cast folder with two people, the second without photographs."""
+    root = tmp_path / "cast"
+    (root / "Alex").mkdir(parents=True)
+    (root / "Alex" / "1.jpg").write_bytes(b"")
+    (root / "Lena").mkdir()
+    (root / "Lena" / "notes.xml").write_text("")
+    monkeypatch.setattr(sources_module, "CAST_DIR", root)
+    return root
+
+
+def test_the_cast_folder_is_offered_with_the_people_it_enrols(client, cast_dir):
+    [offered] = client.get("/api/sources").json()["casts"]
+    assert offered["path"] == str(cast_dir) and offered["names"] == ["Alex"]
+
+
+def test_a_chosen_cast_is_kept_and_saved(client, selection, cast_dir):
+    response = client.post("/api/sources", json={"video": "OBS Virtual Camera",
+                                                 "cast": str(cast_dir)})
+    assert response.json()["selection"]["cast"]["names"] == ["Alex"]
+    assert selection.sources.cast == str(cast_dir)
+
+
+def test_a_folder_without_photographs_is_refused_as_a_cast(client, tmp_path):
+    (tmp_path / "empty" / "Nobody").mkdir(parents=True)
+    response = client.post("/api/sources", json={"cast": str(tmp_path / "empty")})
+    assert response.status_code == 400
+
+
+def test_a_cast_on_the_command_line_overrides_the_saved_one(tmp_path):
+    path = tmp_path / "sources.json"
+    path.write_text(Sources(cast="C:/old").model_dump_json())
+    args = SimpleNamespace(video=None, audio=None, audio_api=None, audio_ndi=None,
+                           cast=str(tmp_path))
+    assert Selection.load(path, Sources.from_args(args)).sources.cast == str(tmp_path.resolve())

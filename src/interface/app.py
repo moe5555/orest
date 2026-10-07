@@ -8,9 +8,12 @@
     POST /api/sitrep/empfehlung  ask for a recommendation (key E on the page)
     POST /api/sitrep/override    set the recommendation aside (key X on the page);
                                  ?nummer=N only if it is still recommendation N
+    POST /api/sitrep/assign      name a body in view as a cast member, or release
+                                 it to the automatic naming (name null)
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
-    /api/sitrep/video        the camera as an MJPEG stream
+    /api/sitrep/video        the camera as an MJPEG stream; ?ratings=1 sets each
+                             person's live values beside their box (Prototype 2)
     /api/sources             the cameras and microphones on offer, and the selection
     POST /api/sources        select the camera and sound source of the next run
     /api/sources/ndi         the NDI sources on the network (takes two seconds)
@@ -30,6 +33,7 @@ import cv2
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from sitrep import ndi_audio
 
@@ -54,22 +58,31 @@ def _jpeg(frame) -> bytes:
     return buffer.tobytes() if ok else b""
 
 
-async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]]):
+async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]],
+                ratings: bool = False):
     """The camera as multipart JPEG parts, until the viewer leaves or the run ends.
 
     Ends when no run holds the camera; the page reopens the feed when a new
-    run starts.
+    run starts. With `ratings`, the live values are drawn beside each box.
     """
     while not await disconnected():
         frame = live.latest_frame()
         if frame is None:
             return
         # Marking and encoding both run off the event loop.
-        jpeg = await asyncio.to_thread(lambda: _jpeg(live.overlay(frame)))
+        jpeg = await asyncio.to_thread(lambda: _jpeg(live.overlay(frame, ratings)))
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n"
                b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
                + jpeg + b"\r\n")
         await asyncio.sleep(1 / VIDEO_FPS)
+
+
+class Assignment(BaseModel):
+    """A body in view, by the recogniser's track id, and the cast name it is
+    given; None releases it to the automatic naming."""
+
+    body: int
+    name: str | None = None
 
 
 def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
@@ -124,6 +137,14 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
         uebergangen = live.uebergehen(nummer)
         return JSONResponse({"uebergangen": uebergangen, **live.snapshot()})
 
+    @app.post("/api/sitrep/assign")
+    def assign(assignment: Assignment):
+        try:
+            assigned = live.assign(assignment.body, assignment.name)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return JSONResponse({"assigned": assigned, **live.snapshot()})
+
     @app.get("/api/sitrep/state")
     def state():
         return JSONResponse(live.snapshot())
@@ -145,8 +166,8 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
                                  headers={"Cache-Control": "no-store"})
 
     @app.get("/api/sitrep/video")
-    async def video(request: Request):
-        return StreamingResponse(mjpeg(live, request.is_disconnected),
+    async def video(request: Request, ratings: bool = False):
+        return StreamingResponse(mjpeg(live, request.is_disconnected, ratings),
                                  media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-store"})
 

@@ -9,6 +9,8 @@ Video feed displayed on the top third of the page, with bounding boxes and names
 
 > Changed 30.09.26 (Moe): the display is projected in landscape. The video is on the left, the two characters in view on the right, one above the other, with the alarm beneath them.
 
+> Changed 06.10.26 (Moe): more than two people can be in view at once. Up to four (the size of the cast) are followed and shown, one above the other.
+
 Below video feed: Szenen Werte and color coded categorisation word (currently it is often "Ruhig").
 
 Below that, to the left and to the right, the two names of the two characters currently in view (names here match the names over the bounding boxes) and there respective SITREP values, updating continously. 
@@ -19,6 +21,16 @@ We do not see any of the other values, even if they are all still being recorded
 
 Press "R" once and the Reportbericht is displayed center of the page, no other elements visible. Press "R" again and we go back to the regular view. 
 
+### Prototype 2
+Video display in the center. The SITREP values of the people in the scene are displayed next to their bounding box, in the image. 
+
+Below the video are the scene SITREP values - currently Relevanz, Eskalation and Gefahr. 
+
+If an Einschreiten is recommended, place this warning large, in red and as the only element of the page in the center. Once the value changes or the operator presses X, go back to the regular view. 
+
+We do not see any of the other values, even if they are all still being recorded. 
+
+Press "R" once and the Reportbericht is displayed center of the page, no other elements visible. Press "R" again and we go back to the regular view. 
 ---
 
 > **⚠ Written by Claude — draft, not yet reviewed by Moe (2026-09-12).**

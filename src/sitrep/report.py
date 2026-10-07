@@ -92,7 +92,7 @@ SCHWELLE = 6
 # What every prompt says about its sources: the Chronik's context, the
 # transcript and the stills. Kept first and identical, so that Ollama can
 # reuse its cache for the prompt's opening (live_sitrep_latency.md, fix 4).
-QUELLEN = """Du bist Apollon, ein Ueberwachungssystem.
+QUELLEN = """Du bist Apollon, ein militaerisches Aufklaerungs- und Lagesystem.
 
 Quellen:
 - Rueckblick und Abschnitte: das laufende Protokoll der Szene, aelteste
@@ -109,8 +109,16 @@ Quellen:
 Regeln fuer alles:
 - Ausschliesslich, was in diesen Quellen belegt ist. Keine Spekulation,
   keine Ausschmueckung. Erfinde keine Aeusserungen, Stimmen oder Geraeusche.
-- Knapp und nominal, Behoerdenstil. Keine Anrede, keine Erzaehlsaetze.
+- Militaerischer Meldestil wie im Gefechtsstand: knapp, nominal, Lage,
+  Kraefte, Bedrohung, Wirkung. Erfasste Personen sind Kontakte, beim Namen
+  genannt. Einschaetzungen mit Gewissheit: "mit hoher/mittlerer/geringer
+  Sicherheit", "wahrscheinlich", "nahezu sicher". Keine Polizei- oder
+  Verwaltungssprache, keine Anrede, keine Erzaehlsaetze.
 - Ist etwas nicht erkennbar, lass das Feld leer statt zu raten."""
+
+# The register of a measure, shared by the report and the recommendation.
+MASSNAHMEN = ("Etwa: militaerische Intervention, Raum abriegeln, Kontakt "
+              "isolieren, Einsatzkraefte heranfuehren.")
 
 ANWEISUNG = f"""{QUELLEN}
 
@@ -127,7 +135,8 @@ Aufgabe: ein Lagebericht ueber die Szene bis jetzt.
 - Prognose: die drei wahrscheinlichsten Verlaeufe, je ein kurzer Satz, mit
   Wahrscheinlichkeit in Prozent, zusammen hoechstens 100.
 - Empfehlung: nur wenn Eskalation oder Gefahr der Szene ueber {SCHWELLE}
-  liegt, eine konkrete Massnahme zum Einschreiten. Sonst leer."""
+  liegt, eine konkrete militaerische Massnahme zum Einschreiten. {MASSNAHMEN}
+  Sonst leer."""
 
 # Name for a person in frame whom the presence tracker has not followed, e.g.
 # someone who never faced the camera.
@@ -199,7 +208,7 @@ def ueber_schwelle(szene: Szene) -> bool:
     return szene.eskalation > SCHWELLE or szene.gefahr > SCHWELLE
 
 
-EMPFEHLUNG_FELD = (f"Massnahme zum Einschreiten, nur bei Eskalation oder Gefahr "
+EMPFEHLUNG_FELD = (f"Militaerische Massnahme zum Einschreiten, nur bei Eskalation oder Gefahr "
                    f"ueber {SCHWELLE}, sonst leer")
 
 
@@ -501,7 +510,7 @@ gefragt wird.
   den Verlauf: ein einzelner Ausreisser in ruhiger Lage wiegt weniger als
   eine Zuspitzung ueber mehrere Abschnitte.
 - Empfehlung: nur wenn Eskalation oder Gefahr ueber {SCHWELLE} liegt, eine
-  konkrete Massnahme, ein Satz. Sonst leer."""
+  konkrete militaerische Massnahme, ein Satz. {MASSNAHMEN} Sonst leer."""
 
 # Tokens for a recommendation: a sentence, three numbers and a measure.
 EMPFEHLUNG_TOKENS = 250

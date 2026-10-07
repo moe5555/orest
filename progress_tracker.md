@@ -17,7 +17,7 @@ was built and why is in `changelog.md`; open questions are in
 | 4 · Transcription | done — `sitrep.transcribe`; speaker diarisation not implemented |
 | 5 · SITREP JSON | done — `sitrep.report` |
 | 6 · Latency budget | done — `sitrep.benchmark` |
-| 7 · Output | done — operator page (`apollon-ui`): camera with the report beneath it, and display Prototype 1 of `03_render.md` as a second tab; console; NDI video and OSC data to TouchDesigner |
+| 7 · Output | done — operator page (`apollon-ui`): camera with the report beneath it, and display Prototypes 1 and 2 of `03_render.md` as further tabs; console; NDI video and OSC data to TouchDesigner |
 | — · Cast recognition | built — `face`, `sitrep.presence`; the roster names the people in the report |
 | — · Action recognition | in the live SITREP — `sitrep.actions` rates risiko and menschlichkeit per named person from the NTU120 ST-GCN and `action/sitrep_map.csv`; uncalibrated (`todo_with_data.md`) |
 

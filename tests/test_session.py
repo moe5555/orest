@@ -9,11 +9,12 @@ TouchDesigner.
 import threading
 import time
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from sitrep import capture, devices, session
+from sitrep import capture, chronik, devices, presence, session
 
 SAMPLERATE = 16000
 
@@ -107,6 +108,10 @@ class FakeReader:
 
     def between(self, since, until, gain=None):
         """An action recogniser's ratings over a stretch."""
+        return []
+
+    def carried(self, since, until):
+        """Cast names carried by bodies, which the roster adds."""
         return []
 
     def names(self):
@@ -607,3 +612,112 @@ def test_a_source_that_delivers_no_sound_is_reported_silent(monkeypatch, room, r
     assert ton.stumm and ton.quelle == "Fake Mic"
     assert running.live.ton()["stumm"]
     running.stop()
+
+
+# Naming by hand -------------------------------------------------------------
+
+class FakeNaming:
+    """The action recogniser's and face tracker's side of an assignment."""
+
+    def __init__(self, face=None):
+        self.cast = SimpleNamespace(names=["Alex", "Lena"])
+        self.face = face
+        self.given = {}
+        self.taught, self.untaught = [], []
+
+    # actions.ActionRatings
+    def names(self):
+        return {20: "Vielleicht: Helene"}
+
+    def assign(self, body, name):
+        self.given[body] = name
+        return self.face
+
+    def pinned(self, body):
+        return self.given.get(body)
+
+    def carried(self, since, until):
+        return sorted(name for name in self.given.values() if name)
+
+    # presence.PresenceTracker
+    def teach(self, label, name):
+        self.taught.append((label, name))
+        return len(self.taught)
+
+    def unteach(self, lesson):
+        self.untaught.append(lesson)
+
+    def roster(self, since=None, until=None):
+        return [presence.Presence("Alex", "Alex", "Vielleicht: Jonas", 0.6, 3, since, until)]
+
+
+def naming_session(face="Vielleicht: Helene"):
+    """A session reduced to what naming by hand reads, with a real Chronik."""
+    naming = FakeNaming(face)
+    run = object.__new__(session.Session)
+    run.actions = run.tracker = naming
+    run.chronik = chronik.Chronik(laenge=30.0)
+    run._lessons, run._umbenannt = {}, {}
+    run._assigning = threading.Lock()
+    return run, naming
+
+
+def test_naming_a_body_teaches_its_face_and_tells_the_model():
+    run, naming = naming_session()
+    run.assign(20, "Lena")
+    assert naming.given[20] == "Lena"
+    assert naming.taught == [("Vielleicht: Helene", "Lena")]
+    assert "Vielleicht: Helene ist Lena" in run.chronik.kontext()
+
+
+def test_renaming_a_body_replaces_its_lesson_and_keeps_its_first_label():
+    run, naming = naming_session()
+    run.assign(20, "Lena")
+    run.assign(20, "Alex")
+    assert naming.untaught == [1]
+    assert run._zuordnungen() == ["Vielleicht: Helene ist Alex"]
+
+
+def test_releasing_a_body_takes_its_lesson_back():
+    run, naming = naming_session()
+    run.assign(20, "Lena")
+    run.assign(20, None)
+    assert naming.untaught == [1]
+    assert "Lena" not in run.chronik.kontext()
+
+
+def test_a_body_without_a_face_is_named_without_a_lesson():
+    run, naming = naming_session(face=None)
+    run.assign(20, "Lena")
+    assert naming.given[20] == "Lena" and naming.taught == []
+
+
+def test_only_the_cast_can_be_assigned():
+    run, _ = naming_session()
+    with pytest.raises(ValueError, match="Besetzung"):
+        run.assign(20, "Hamlet")
+
+
+def test_a_name_given_by_hand_may_appear_in_the_report():
+    run, _ = naming_session(face=None)
+    run.assign(20, "Lena")
+    now = datetime.now()
+    assert [person.name for person in run._anwesend(now - timedelta(seconds=30), now)] == [
+        "Alex", "Lena"]
+
+
+def test_a_face_seen_later_on_a_named_body_is_learned():
+    run, naming = naming_session(face=None)
+    run.assign(20, "Lena")
+    run._learn(20, "Vielleicht: Rosa", "Lena")
+    assert naming.taught == [("Vielleicht: Rosa", "Lena")]
+
+    run.assign(20, None)
+    assert naming.untaught == [1]
+
+
+def test_a_face_reported_after_the_name_changed_is_not_learned():
+    run, naming = naming_session(face=None)
+    run.assign(20, "Alex")
+    run._learn(20, "Vielleicht: Rosa", "Lena")
+    assert naming.taught == []

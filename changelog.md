@@ -6,6 +6,250 @@ referenced below.
 
 ---
 
+## 2026-10-06 — Live SITREP follows up to four people at once (VSH-ARLT-5090)
+
+Requested by Moe, reversing the two-person limit of 2026-09-28: more than two
+people can be in view at once. `recognizer.MAX_PEOPLE` is now 4, the size of
+the cast enrolled in `data/cast`. This is a design choice not stated in the
+request. Each window classifies at most ten groups: four people alone, and the
+pairs among them that stand close. The GPU entry of 2026-09-28 bounded memory
+for up to 40 groups. Everything that reads the tallest bodies follows the
+limit: naming, the boxes, live values, the Im Bild panel, Prototypes 1 and 2,
+mouth measurement.
+
+- **Speaker attribution** (`speakers.py`, PROCESSING / Sentiment Analysis in
+  `pipeline.md`). It compared the two mouths with the most measurements. It
+  now compares all mouths in view: a line goes to the person whose lips moved
+  at least 1.5 times as much as anyone else's. Otherwise it stays `(unklar)`.
+- **Prototype 1** (`03_render.md`, Live SITREP). With three people or more,
+  the cards are tighter, so four people fit beside the picture with the alarm
+  beneath them at 1920×1080 and 1280×720 (checked in headless Edge against
+  fixed data). The spec in `03_render.md` carries the change.
+
+**Not measured:** whether ten groups a second are classified within the
+one-second step while Gemma shares the GPU.
+
+**Verified:** 3 new tests, 2 updated for four bodies; 549 pass.
+
+---
+
+## 2026-10-06 — Live SITREP speaks in a military register
+
+Requested by Moe: the live SITREP reads like a Palantir/defence-tech
+situation report, not a police one (PROCESSING in `pipeline.md`; the stage
+language follows `knowledge/background/probenueberwachung-briefing.md`, §4,
+"Confidence language" and "The intelligence product").
+
+- **`report.py`, `QUELLEN`** (shared by the report and the recommendation):
+  Apollon is a "militaerisches Aufklaerungs- und Lagesystem". "Behoerdenstil"
+  became a command-post reporting style (Lage, Kraefte, Bedrohung, Wirkung).
+  People are named as Kontakte, and judgements carry estimative confidence
+  ("mit hoher Sicherheit", "wahrscheinlich"). Police and administrative
+  language is ruled out.
+- **Empfehlung**: the measure is a military one, with examples given in
+  `MASSNAHMEN` ("militaerische Intervention", "Raum abriegeln", "Kontakt
+  isolieren", "Einsatzkraefte heranfuehren"). The schema's field description
+  says the same.
+- **`chronik.py`**: the Abschnitt summaries and the Rueckblick use the same
+  register, since the report reads them as context.
+- `speech.py` is unchanged. Its line scoring writes no prose for the SITREP,
+  and its examples are calibrated against the current wording.
+- Not yet checked against a live run.
+
+---
+
+## 2026-10-06 — Face and appearance name people together (VSH-ARLT-5090)
+
+Requested by Moe: combine the face with clothing, so a person keeps their name
+when no face is visible. Decided by Moe: a person re-identification network,
+and one identity per person in which both cues combine, with no separate
+marker. Plan: the background notes' OSNet (`bloom-wise-architecture.md` §3).
+
+**Model.** OSNet-AIN x1.0 trained on all of MSMT17, the Torchreid model zoo's
+cross-domain model (`data/models/osnet/SOURCE.md`; checkpoint SHA-256
+`8a07e8da…`). It turns a body crop into a 512-value description.
+- **Export.** `src/scripts/export_osnet.py` runs once, in a throwaway uv
+  environment (Python 3.12, torch 2.5.1), and takes only the network
+  definition from a pinned Torchreid commit. It writes the ONNX file and a
+  reference.
+- **Parity.** ONNX against torch: 1.1e-5. Apollon's preprocessing matches
+  the export exactly, and OpenCV's resize against Torchreid's PIL resize
+  gives a cosine of 0.9999.
+- **Cost.** Two bodies in 7.5 ms on the RTX 5090, once a second.
+- **Terms.** MSMT17 is for research, as NTU is. Listed in
+  `hardware_issues.md` H-5.
+
+**Naming** (`src/sitrep/appearance.py`, `actions.py`):
+- **One tally.** Each naming describes the bodies in view on the image they
+  were tracked on. A description matching a person adds `APPEARANCE_VOTE`
+  (0.6) to the same tally faces vote in (1 per sighting).
+- **Minimum.** A name needs `MIN_NAME` (1.0) votes: one face, or two
+  appearance matches in a row.
+- **Disagreement.** The face wins, since it votes more per sighting.
+- **Learning.** The memory (`Appearances`, the latest 30 views per person,
+  at most one a second) learns only from bodies named by hand or whose cast
+  face was sighted on them within `SURE_AGE` (3 s). Never from appearance
+  alone, so a mistake does not teach itself.
+- **Failure.** A failure stops the appearance cue alone. Without the model,
+  people are named by face alone.
+- **Report.** Every cast name a body carried joins the roster the report may
+  use (`ActionRatings.carried`, replacing `assigned`).
+
+**Measured** (`python -m sitrep.appearance`) on four two-person scenes of the
+corpus:
+- **Method.** Faces on the bodies give the identities (face tracks linked at
+  0.45, merged at 0.35). Each view is matched against views of the same
+  people on other body tracks at least 10 s earlier, as after leaving and
+  returning.
+- **First run.** Split face identities (4–11 "people" in two-person scenes)
+  made appearance look unreliable (22–30 % wrong). The merge step fixed the
+  labelling.
+
+| Scene | Same person, median | Different people, p95 | At 0.65 / margin 0.05: right · wrong · none |
+|---|---|---|---|
+| Four Dogs | 0.81 | 0.62 | 97.7 % · 0.0 % · 2.3 % |
+| Boom | 0.76 | 0.68 | 94.3 % · 1.0 % · 4.7 % |
+| Election Day | 0.68 | 0.68 | 89.3 % · 0.8 % · 9.9 % |
+| Fool for Love | 0.73 | 0.59 | 97.2 % · 0.0 % · 2.8 % |
+
+`THRESHOLD` 0.65 and `MARGIN` 0.05 are set from this. In a live run a name
+also needs two matches in a row, which lowers wrong names further.
+
+**Not yet checked:**
+- **Live, in the rehearsal room.** The corpus is edited TV footage with cuts
+  and close-ups. A fixed camera should be easier, but coloured stage light
+  can change how clothes look.
+- **The live checks themselves:** a person named from behind, leaving and
+  returning from behind; two actors crossing.
+- **Costume changes.** They are picked up only once a face or the operator
+  names the person again.
+
+19 new tests; 564 pass.
+
+---
+
+## 2026-10-06 — A person named by hand keeps teaching the run (VSH-ARLT-5090)
+
+Requested by Moe: tagging someone as a cast member should teach the running
+session, perhaps from a screenshot. A single screenshot at tagging time adds
+little. A face already seen on the person was learned (entry below), from the
+up to eight clearest faces of their track. A "Körper" is unnamed because no
+face lay on it, so a screenshot then shows no usable face either. Instead,
+learning continues for as long as the name holds:
+
+- **Faces seen later** (`actions.LEARN_SIGHTINGS`). When the same face lies
+  on a body named by hand in 3 namings in a row (about 3 s at the
+  recogniser's 1 s step), it is passed to `Session._learn` and taught under
+  the name. A face crossing the body briefly, as in an embrace, is not
+  learned. Someone named from behind is learned once they turn round.
+- **Clearer views** (`PresenceTracker._refresh_lessons`). A lesson follows
+  its face track. As the track keeps larger faces, the gallery learns those
+  instead of the faces it had when named.
+- **Automatisch** takes back every lesson the body taught.
+
+**Not covered:** someone who never faces the camera. Recognising a person
+from behind would need a re-identification model (build and clothing), which
+Apollon does not have.
+
+**Verified:** 7 new tests; 546 pass. Not yet checked live.
+
+---
+
+## 2026-10-06 — Naming people by hand in the live SITREP; cast chosen on the operator page (VSH-ARLT-5090)
+
+Requested by Moe. In a run with only Alex and Lena on stage, the page showed
+"Vielleicht: Helene" and "Körper 20". The run had been started without
+`--cast`, so every name was a guess. `data/cast` enrols all four people
+(Alessa 5 faces, Alex 5, Lena 8, Nils 3). The highest similarity between two
+different people is 0.26, well below the 0.4 threshold.
+
+**Naming by hand.** The Übersicht has an **Im Bild** panel: each person in
+view, left to right, with a dropdown of the cast and **Automatisch**.
+Decided by Moe: an assignment is absolute until released, and learned faces
+are not saved.
+- **On the body** (`actions.ActionRatings.assign`). The name holds over every
+  vote and leaves any other body in view that carried it. Bodies out of view
+  keep their names. Every reader of body names follows: the boxes, live
+  values, Prototypes 1 and 2, the speaker of new lines. Readings are named
+  when taken (2026-09-28), so the body is rated under the new name on
+  everything since it was first tracked.
+- **On the face** (`presence.PresenceTracker.teach`). If a face was seen on
+  the body, its face track takes the name, with similarity `TAUGHT` (∞), so
+  no match renames it. Its faces join the run's gallery
+  (`gallery.Gallery.extended`), so the person is recognised after leaving and
+  returning. **Automatisch** takes the lesson back (`unteach`). Nothing is
+  written to disk (2026-09-10).
+- **For the model** (`session.Session.assign`). Names given by hand join the
+  roster the report may use (`Session._roster`). Without this, a body named
+  by hand that never showed its face would be rated under the name, but the
+  report could not use it. The Chronik's context ends with "Vom Operator
+  zugeordnet, fruehere Bezeichnungen meinen diese Personen: Körper 20 ist
+  Alex; …", since Abschnitte already written keep the earlier label.
+- `POST /api/sitrep/assign {body, name}`. The snapshot's `in_view` lists the
+  bodies by the recogniser's track id. A name outside the cast is refused.
+
+**Cast on the operator page.** A third dropdown, **Besetzung**: "Ohne
+Besetzung" or `data/cast` with the people it enrols (a folder with at least
+one image). Saved with the camera and sound. `--cast` still works and
+replaces the saved choice.
+
+**Verified:** 26 new tests; 539 pass. Headless Edge rendered the Im Bild
+panel with a fixed snapshot: unnamed bodies and guesses in amber, a name
+given by hand marked "zugeordnet". On a scratch server the operator page
+listed `data/cast` with its four people, and the choice was saved.
+
+**Not yet checked:** a live run with the cast, with a person named by hand
+and then recognised after leaving and returning. Restart `apollon-ui` and
+choose the cast on the operator page first.
+
+---
+
+## 2026-10-06 — Prototype 2: the people's values in the picture, the scene beneath it (VSH-ARLT-5090)
+
+Prototype 2 of `knowledge/components/03_render.md` ("Live SITREP") is a third
+tab on the SITREP page (`#p2`, `static/prototyp2.js`).
+
+- **The picture in the centre**, as large as the window allows with the
+  scene's row beneath it. Moe asked for the picture larger than first laid
+  out.
+- **Each person's live values beside their box, in the picture.** Risiko and
+  Menschlichkeit, 0–5, as pips and the number, coloured as on the page
+  (Risiko amber from 2, red from 4). A person in view without recent evidence
+  reads 0, as on Prototype 1. The server draws them (`annotate.draw_ratings`,
+  `LiveSitrep.overlay(ratings=True)`), because the boxes exist only there and
+  values drawn on the page would trail the video. Only this tab asks for them
+  (`/api/sitrep/video?ratings=1`). The Übersicht and Prototype 1 keep the
+  names only, and the NDI feed stays clean.
+- **The scene's Relevanz, Eskalation and Gefahr beneath the picture**, 0–10,
+  coloured against `report.SCHWELLE`. No source rates the scene continuously
+  (see the Prototype 1 entry of 2026-09-30, "Szene values left out"): the
+  Chronik rates each Abschnitt, the Lagebericht and the Empfehlung rate it
+  when they are made. The snapshot's new `scene` holds the newest of the three
+  (`live.latest_scene`), and the page shows its time and source beneath the
+  bars.
+- **Einschreiten, R and X** behave as on Prototype 1. The spec gives both
+  prototypes the same states, so they now share one implementation
+  (`fullPage` in `sitrep.js`). The page state is `data-screen` (`normal`,
+  `report`, `intervene`, formerly `data-p1`), and the Einschreiten screen is
+  one element (`.intervene`) for both. Prototype 1's look and behaviour are
+  unchanged.
+
+**Fixed:** renaming `.hinweis` on the operator page (entry below) had also
+renamed the SITREP page's `.hinweis` rule, so the report status and the action
+recogniser's notices lost their style. Restored.
+
+**Verified:** 10 new tests; 513 pass. Headless Edge rendered Prototype 2 with
+a fixed snapshot: the picture, the scene's values, and the Einschreiten screen
+in place of everything else. Prototype 1 still lays out as before. A frame
+drawn with two people showed each panel beside its box, moved to the left of
+a box at the frame's right edge. Headless Edge paints no MJPEG, so the rated
+picture was checked on the saved frame.
+
+**Not yet checked:** a live run on this tab, with real people and the
+recogniser's values, and R and X pressed in a browser.
+
+---
+
 ## 2026-10-06 — Camera and sound chosen on the operator page (VSH-ARLT-5090)
 
 Requested by Moe: the operator page has two dropdowns, **Kamera** and **Ton**,

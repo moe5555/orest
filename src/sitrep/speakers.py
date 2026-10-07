@@ -1,13 +1,13 @@
-"""Who said what: speech attributed to the two most visible people by their lips.
+"""Who said what: speech attributed to the most visible people by their lips.
 
 The speaker diarisation that the sentiment analysis of
 knowledge/components/02_processing.md ("Calculating Values") depends on. The
-people are the ones the action recogniser already follows: the two tallest
+people are the ones the action recogniser already follows: the tallest
 bodies (action.recognizer.MAX_PEOPLE), named by the faces the presence tracker
 recognises (actions.py). No voice is identified; a line goes to the person
 whose lips moved while it was spoken.
 
-Mouths. On every frame the recogniser tracks, the head of each of the two
+Mouths. On every frame the recogniser tracks, the head of each of the
 tallest bodies is located from its pose (nose, eyes, ears) and cropped, and
 the 106-point landmark model from the buffalo_l bundle that also detects and
 recognises faces (face/model.py) finds the lips. The mouth's opening is the gap
@@ -16,9 +16,9 @@ depend on how large the face appears.
 
 Attribution. Over each Whisper segment, a person's lip movement is the
 standard deviation of their mouth opening. The segment goes to the person
-whose lips moved at least RATIO times as much as the other's. It stays
-unattributed when fewer than two mouths were seen, since the other person may
-be speaking while turned away, or when neither clearly moved more.
+whose lips moved at least RATIO times as much as anyone else's. It stays
+unattributed when fewer than two mouths were seen, since another person may be
+speaking while turned away, or when no one clearly moved more than the rest.
 
 Measured on 5 min of the test corpus ("Boom", edited footage with frequent
 cuts and close-ups), with both mouths visible in 107 segments: 69 were
@@ -53,7 +53,7 @@ NOSE, EYES, EARS = 0, (1, 2), (3, 4)
 CORNERS = (52, 61)
 INNER = (62, 60)
 
-# How many times as much one person's lips must move as the other's for a
+# How many times as much one person's lips must move as anyone else's for a
 # segment to be theirs.
 RATIO = 1.5
 
@@ -100,7 +100,7 @@ def mouth_opening(image: np.ndarray, centre_x: float, centre_y: float, size: flo
 
 
 class Speakers:
-    """Mouth movement of the two most visible people, and the lines it attributes.
+    """Mouth movement of the most visible people, and the lines it attributes.
 
     `observe` is given every frame the action recogniser tracks, on its thread;
     `attribute` is asked for each report.
@@ -167,12 +167,12 @@ class Speakers:
                     openings.setdefault(track, []).append(opening)
 
             speaker = None
-            seen = sorted((values for values in openings.items() if len(values[1]) >= MIN_SAMPLES),
-                          key=lambda values: -len(values[1]))[:2]
-            if len(seen) == 2:
-                (first, first_values), (second, second_values) = seen
-                movement = {first: float(np.std(first_values)), second: float(np.std(second_values))}
-                louder, quieter = sorted(movement, key=movement.get, reverse=True)
+            movement = {track: float(np.std(values)) for track, values in openings.items()
+                        if len(values) >= MIN_SAMPLES}
+            if len(movement) >= 2:
+                # The most moving mouth against the next: clear of that one, it
+                # is clear of all the others too.
+                louder, quieter = sorted(movement, key=movement.get, reverse=True)[:2]
                 if movement[louder] >= RATIO * movement[quieter] and movement[louder] > 0:
                     speaker = names.get(louder, report.UNBEKANNT)
             lines.append(report.Aeusserung(name=speaker, text=segment.text,

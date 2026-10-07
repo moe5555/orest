@@ -56,6 +56,8 @@ def pass_of(subject, vectors, faces=None, at=START):
         touched = subject._link(faces, stacked, matches, at)
         subject._adopt(touched, matches)
         subject._merge_by_name()
+        if any(track.similarity == presence.TAUGHT for track in touched):
+            subject._refresh_lessons()
     return touched
 
 
@@ -367,3 +369,67 @@ def test_a_replay_starting_at_the_beginning_can_age_its_tracks(tmp_path):
     subject = tracker()
     first = pass_of(subject, [unit((0, 1.0))], at=at)[0]
     assert pass_of(subject, [unit((0, 1.0))], at=at + timedelta(seconds=1))[0] is first
+
+
+# Naming by hand -------------------------------------------------------------
+
+UNKNOWN = unit((5, 1.0))
+
+
+def test_a_taught_name_replaces_a_guess_for_good():
+    subject = tracker(cast_of("klara", "moritz"))
+    track = pass_of(subject, [UNKNOWN])[0]
+    assert presence.guessed(track.label)
+
+    assert subject.teach(track.label, "moritz") is not None
+    # The same person, now also resembling another cast member.
+    pass_of(subject, [unit((5, 1.0), (0, 0.6))], at=START + timedelta(seconds=1))
+    assert track.label == "moritz"
+
+
+def test_a_taught_face_is_recognised_after_its_track_closed():
+    subject = tracker(cast_of("klara"))
+    track = pass_of(subject, [UNKNOWN])[0]
+    subject.teach(track.label, "moritz")
+
+    later = START + timedelta(seconds=presence.FORGET + 5)
+    returned = pass_of(subject, [UNKNOWN], at=later)[0]
+    assert returned is not track
+    assert returned.label == "moritz"
+
+
+def test_a_lesson_taken_back_is_forgotten():
+    subject = tracker(cast_of("klara"))
+    track = pass_of(subject, [UNKNOWN])[0]
+    lesson = subject.teach(track.label, "moritz")
+
+    subject.unteach(lesson)
+    assert presence.guessed(track.label)
+    later = START + timedelta(seconds=presence.FORGET + 5)
+    assert presence.guessed(pass_of(subject, [UNKNOWN], at=later)[0].label)
+    assert subject.cast.names == ["klara"]
+
+
+def test_a_face_can_be_taught_without_an_enrolled_cast():
+    subject = tracker()
+    track = pass_of(subject, [UNKNOWN])[0]
+    subject.teach(track.label, "moritz")
+    later = START + timedelta(seconds=presence.FORGET + 5)
+    assert pass_of(subject, [UNKNOWN], at=later)[0].label == "moritz"
+
+
+def test_teaching_a_label_no_track_carries_does_nothing():
+    subject = tracker(cast_of("klara"))
+    pass_of(subject, [UNKNOWN])
+    assert subject.teach("Vielleicht: Niemand", "klara") is None
+
+
+def test_a_lesson_learns_the_clearer_faces_its_track_sees_later():
+    subject = tracker(cast_of("klara"))
+    track = pass_of(subject, [UNKNOWN], faces=[Face(size=40.0)])[0]
+    subject.teach(track.label, "moritz")
+    assert subject.cast.counts()["moritz"] == 1
+
+    turned = unit((5, 1.0), (6, 0.5))
+    pass_of(subject, [turned], faces=[Face(size=120.0)], at=START + timedelta(seconds=1))
+    assert subject.cast.counts()["moritz"] == 2

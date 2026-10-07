@@ -147,6 +147,7 @@ everything**, so it is cheap now and expensive after the first rehearsal week.
 | `gemma4:26b` | 18 GB | Ollama registry | live SITREP | yes |
 | Whisper `large-v3-turbo` | ~1.6 GB | Hugging Face | transcription | yes |
 | ST-GCN NTU120 2D (`data/models/ntu120_stgcn/`) | 12.5 MB | OpenMMLab | action recognition | yes |
+| OSNet-AIN x1.0 MSMT17 (`data/models/osnet/`) | 8.7 MB | Torchreid model zoo (Google Drive) | appearance cue for naming | yes |
 | Qwen3-VL-Embedding-2B | 4.0 GB | Hugging Face | deferred, see H-2 | no |
 | SigLIP2-512 + MS CLAP | small | Hugging Face | Smart Search | not checked |
 

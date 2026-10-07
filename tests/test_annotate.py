@@ -58,3 +58,35 @@ def test_a_tag_near_the_right_edge_stays_inside_the_frame():
     original = frame()
     marked = annotate.draw_names(original, [(box(600, 150, 639, 220), "Vielleicht: Valentina")])
     assert changed(original, marked)[:150, :600].any()
+
+
+RATED = [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm")]
+
+
+def test_a_frame_with_nobody_to_rate_is_returned_unmarked():
+    original = frame()
+    assert annotate.draw_ratings(original, []) is original
+
+
+def test_ratings_are_set_beside_the_box_and_the_source_frame_stays_clean():
+    original = frame()
+    copy = original.copy()
+    marked = annotate.draw_ratings(original, [(box(100, 150, 160, 300), "Klara", RATED)])
+    assert np.array_equal(original, copy)
+    touched = changed(original, marked)
+    assert touched[150:300, 165:].any()          # panel right of the box
+    assert not touched[:, :95].any()             # nothing left of it
+
+
+def test_ratings_of_a_box_at_the_right_edge_are_set_left_of_it():
+    original = frame()
+    marked = annotate.draw_ratings(original, [(box(560, 150, 639, 300), "Klara", RATED)])
+    assert changed(original, marked)[150:300, :555].any()
+
+
+def test_a_high_risiko_is_drawn_in_red():
+    original = frame()
+    marked = annotate.draw_ratings(original, [(box(100, 150, 160, 300), "Klara", RATED)])
+    red = annotate.LEVEL["red"]
+    rgb = marked[..., ::-1]
+    assert np.all(rgb == red, axis=2).any()
