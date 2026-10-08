@@ -41,6 +41,72 @@ Requested by Moe, on the Live SITREP display (`03_render.md`, "Live SITREP").
 
 ---
 
+## 2026-10-07 — Voice cue for speaker attribution: model, enrolment, measurement (VSH-ARLT-5090)
+
+Requested by Moe: tell apart what Alex says from what Lena says. Lip movement
+(`speakers.py`) is the only cue so far, and on the Probebühne wide shot the
+lips are a few pixels.
+
+**Sound source.**
+- Each actor wears a microphone into the Scarlett 2i2's two inputs.
+  Recorded on both channels, the two are nearly independent (correlation
+  0.03–0.10), and per 100 ms the speaker's channel leads by 10–26 dB.
+- The run opens the device with one channel (`capture.listen`, MME), most
+  likely a mix of both.
+- Whether the run will get the two channels is unclear, so Moe decided to
+  work with the one channel as it is. Voices are told apart by how they
+  sound. Speaker diarisation, step 4 of the Realtime-SITREP in
+  `02_processing.md`.
+
+**Model.**
+- WeSpeaker ResNet34-LM, trained on VoxCeleb2, CC BY 4.0
+  (`data/models/voice/SOURCE.md`). It turns a stretch of speech into a
+  256-value voice vector.
+- WeSpeaker publishes it as ONNX, so it runs on onnxruntime with no export.
+- **Filterbanks** (80 mel bins, Hamming window, 16-bit scale, mean-normalised,
+  as WeSpeaker computes them) are a numpy port of
+  `torchaudio.compliance.kaldi.fbank`, since `kaldi-native-fbank` has no
+  Python 3.14 wheel for Windows. `src/scripts/export_voice.py` writes the
+  reference: at most 1.5e-4 deviation, and the vector has cosine 1.0 to
+  torchaudio's.
+- **Cost:** 6.8 ms per 2 s line on the GPU, with a live run sharing it.
+
+**`src/sitrep/voices.py`:**
+- **Enrolment.** It reads `data/cast/<Name>/voice/*.wav` beside the photos.
+  Clips are cut into speech with the run's own VAD and segmenter
+  (`utterances.Vad`, `Segmenter`), then into windows of about 2 s.
+- **Voices.** A person's voice is the mean of their windows' vectors.
+- **Matching.** A stretch of at least `MIN_VOICE` (1 s) is named when its
+  cosine to a voice reaches `THRESHOLD` (0.5) and leads the next by `MARGIN`
+  (0.1). Otherwise it names no one. **All three constants are provisional**
+  until the cast's clips are measured.
+
+**Measurement: `python -m sitrep.voices data/cast`.**
+- `--test DIR` matches held-out clips (one folder per person). It prints the
+  cosine for same and other people, % right / wrong / unsure per person and
+  per length, and a threshold × margin sweep.
+- `--dialogue d.wav --write-labels d.csv` cuts and transcribes a dialogue
+  into a CSV whose `speaker` column Moe fills in.
+- `--labels d.csv` measures against it. A speaker not enrolled counts as
+  right when no one is named.
+- Run end to end on stand-in clips from the corpus. Those numbers say
+  nothing about the cast.
+
+**Not yet:** the live run does not use the voices. Wiring them into
+`speakers.attribute` (voice first, lips otherwise) follows once the constants
+are measured on the cast.
+
+**Needed from Moe**, recorded through the run's own input (Scarlett, MME, one
+channel):
+- per person, about 90 s for enrolment: ordinary, loud and quiet speech
+- per person, 30–60 s held out
+- an Alex–Lena dialogue of 3–5 min, with a short stretch of someone else
+  speaking
+
+12 new tests; 576 pass.
+
+---
+
 ## 2026-10-06 — Live SITREP follows up to four people at once (VSH-ARLT-5090)
 
 Requested by Moe, reversing the two-person limit of 2026-09-28: more than two

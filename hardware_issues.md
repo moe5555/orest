@@ -148,6 +148,7 @@ everything**, so it is cheap now and expensive after the first rehearsal week.
 | Whisper `large-v3-turbo` | ~1.6 GB | Hugging Face | transcription | yes |
 | ST-GCN NTU120 2D (`data/models/ntu120_stgcn/`) | 12.5 MB | OpenMMLab | action recognition | yes |
 | OSNet-AIN x1.0 MSMT17 (`data/models/osnet/`) | 8.7 MB | Torchreid model zoo (Google Drive) | appearance cue for naming | yes |
+| WeSpeaker ResNet34-LM (`data/models/voice/`) | 26 MB | Hugging Face | voice cue for speaker attribution | yes |
 | Qwen3-VL-Embedding-2B | 4.0 GB | Hugging Face | deferred, see H-2 | no |
 | SigLIP2-512 + MS CLAP | small | Hugging Face | Smart Search | not checked |
 
