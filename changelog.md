@@ -6,6 +6,54 @@ referenced below.
 
 ---
 
+## 2026-10-08 — Body search video wall in TouchDesigner (VSH-ARLT-5090)
+
+Requested by Moe. A full-screen wall of 1–9 tiles looping body search results
+in `Apollon_TD_New.toe`: the `CUT → STAGE` step of the RENDER graph in
+`knowledge/source_of_truth/pipeline.md`. As `03_render.md` ("How many results
+reach the stage") sets out, Apollon sends a fixed maximum and TouchDesigner
+chooses how many to show.
+
+- **Built by a script, not by hand.** `TouchDesigner/code/build_wall.py`, run
+  once from the Textport, creates a master player `tile`, a Replicator COMP
+  making one copy per tile, a Layout TOP grid (`ceil(sqrt(n))` columns) and a
+  Window COMP set as the Perform Window. The tile count is the `Tiles`
+  parameter on `bodysearch`. Each copy takes its rank from its order among the
+  copies, which holds however the replicator numbers them. Menu parameters are
+  set by label, since TouchDesigner's parameter help documents labels only.
+- **Keys** (`code/wall_keys.py`, Perform Window only): space held captures,
+  released searches, sending the existing `/apollon/body/start` and `/stop`;
+  1–9 set the tile count. `body-live` ignores a start while capturing, which
+  absorbs key repeat. No change on the Apollon side.
+- **Changeover** (`code/bodysearch_osc.py`): a new search no longer clears
+  `results`. Each hit overwrites its rank's row once its clip exists, so every
+  tile loops its old clip until its new one is ready, and rows the new search
+  didn't reach are removed at its end. Players wait for a new clip's first
+  frame (Always Load Initial Frame).
+- 7 new tests run `bodysearch_osc.py` against a stand-in Table DAT with
+  Apollon's own messages. 611 pass.
+
+Still unverified inside TouchDesigner: tile order on screen and that a tile
+restarts its new clip at frame 0. Guide:
+`TouchDesigner/2026-10-08_video_wall_setup.md`.
+
+**Later the same day, requested by Moe: two-digit tile counts.** A digit
+pressed while another digit key is held adds a digit (hold 1, press 6, release
+both → 16); the count is set when the last digit key is released. `Tiles` now
+runs to 99. The grid lists its tiles by number instead of by `tile*`
+wildcard, so the on-screen order stays in rank order beyond nine. The build
+script needed "Cycle" as the label for looping (Extend Right) in this
+TouchDesigner build. 7 more tests, 618 pass.
+
+The first version of that list, an expression calling `op()` inside a
+generator, left the wall at one tile although the replicator had made 29.
+The list is now written by the replicator's own callbacks
+(`code/tiles_callbacks.py`) on every replication and removal. A digit
+entry also starts afresh 5 s after the last digit press, so a lost key release
+can't hold an entry open. 622 tests pass.
+
+---
+
 ## 2026-10-08 — Search clips are cut from disk, not through WISE (VSH-ARLT-5090)
 
 Pointed out by Moe: body search results reached TouchDesigner slowly, with a
