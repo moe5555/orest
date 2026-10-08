@@ -53,13 +53,13 @@ def test_block_omits_the_transcript_when_nothing_was_said(sitrep):
 def test_block_lists_every_person_with_every_rating(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
     assert "Klara" in block and "Vielleicht: Jakob" in block
-    for name in ("risiko", "menschlichkeit", "auffaelligkeit"):
+    for name in ("risiko", "menschlichkeit", "vorhersehbarkeit"):
         assert name in block
 
 
 def test_block_shows_an_unmeasured_rating_as_a_dash(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
-    assert "risiko – · menschlichkeit – · auffaelligkeit 4" in block
+    assert "risiko – · menschlichkeit – · vorhersehbarkeit –" in block
 
 
 def test_block_names_the_action_behind_a_measured_rating(sitrep):

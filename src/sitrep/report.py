@@ -34,8 +34,9 @@ Risiko and Menschlichkeit are measured too: the action recogniser rates each
 named person from what their body does (actions.py), a separate text-only
 request rates what each line says (speech.py), and a person's rating is the
 higher of the two. Where the room was louder than the session's normal
-speech, Risiko evidence from both is amplified (loudness.py). The report's
-model rates only Auffälligkeit.
+speech, Risiko evidence from both is amplified (loudness.py).
+Vorhersehbarkeit is measured from the same bodies, against the rehearsal
+corpus (predictability.py). The model rates none of a person's values.
 
 Whether to intervene is decided here, not by the model: a scene rated above
 SCHWELLE for escalation or danger triggers the recommendation, and below it
@@ -98,7 +99,9 @@ Quellen:
 - Rueckblick und Abschnitte: das laufende Protokoll der Szene, aelteste
   zuerst, mit Eskalation und Gefahr (0-10) und Tendenz je Abschnitt.
 - Gemessen jetzt: Risiko und Menschlichkeit (0-5) je Person aus
-  Aktionserkennung und Sprache, mit Anlass und Alter.
+  Aktionserkennung und Sprache, mit Anlass und Alter; Vorhersehbarkeit
+  (-5 bis 5) je Person: wie sehr ihre Bewegung den Proben gleicht, -5 nie
+  so geprobt, 5 oft geprobt.
 - Transkript: das Woertliche der letzten Abschnitte. Vor jeder Aeusserung
   steht, wer sie gesagt hat. "(unklar)" heisst, der Sprecher ist nicht
   bestimmt. "(laut)" oder "(geschrien)" nach dem Namen ist die gemessene
@@ -128,8 +131,6 @@ Aufgabe: ein Lagebericht ueber die Szene bis jetzt.
 - Beschreibung: die Lage jetzt, kurz: was geschieht, wer was tut.
 - Personen: den Namen aus dem Schild ueber dem Gesicht uebernehmen. Wer ohne
   Schild zu sehen ist, heisst "Unbekannt". Beschreibung ein kurzer Satz.
-- Auffaelligkeit je Person 0-5: wie stark das Verhalten der Person von dem
-  der anderen Anwesenden abweicht. 0 gar nicht, 5 sehr stark.
 - Szene: Relevanz, Eskalation und Gefahr der Lage jetzt, 0-10, von niedrig
   bis hoch.
 - Prognose: die drei wahrscheinlichsten Verlaeufe, je ein kurzer Satz, mit
@@ -146,18 +147,15 @@ UNBEKANNT = "Unbekannt"
 class Person(BaseModel):
     name: str = Field(description="Name aus dem Schild ueber dem Gesicht")
     beschreibung: str = Field(description="Wie die Person wahrgenommen wird, knapp")
-    # Rated by the model against the others in the window, the only reference
-    # it has. The deviation from a person's past behaviour is to be measured
-    # outside the model (knowledge/components/02_processing.md, Auffälligkeit).
-    auffaelligkeit: int = Field(ge=0, le=5)
 
 
 class Handlung(BaseModel):
     """What the action recogniser measured for one person over a window.
 
-    Ratings are 0-5, as the model's are. Each `anlass_` field names the class
+    Risiko and Menschlichkeit are 0-5. Each `anlass_` field names the class
     that contributed most to that rating, with its probability; it is empty
-    when the rating is 0.
+    when the rating is 0. Vorhersehbarkeit is the mean of the person's scores
+    against the rehearsals, -5 to +5, and None without a reference.
     """
 
     name: str
@@ -169,19 +167,20 @@ class Handlung(BaseModel):
     lesungen: int
     # The loudness gain on the reading that set Risiko (loudness.py).
     verstaerkung: float = 1.0
+    vorhersehbarkeit: int | None = Field(default=None, ge=-5, le=5)
 
 
-# Ratings measured from the action recogniser (actions.py) rather than
-# generated, and the ratings the model generates. Both are derived from their
-# models so that renaming a category cannot leave a renderer addressing a
-# field that no longer exists.
+# Ratings measured as evidence, 0-5, from the action recogniser (actions.py)
+# and from speech. Derived from the model so that renaming a category cannot
+# leave a renderer addressing a field that no longer exists.
 GEMESSEN = tuple(name for name, field in Handlung.model_fields.items()
                  if field.annotation is int and name not in ("lesungen",))
-GENERIERT = tuple(name for name, field in Person.model_fields.items()
-                  if field.annotation is int)
 
-# Every 0-5 rating per person, in the order renderers show them.
-BEWERTUNGEN = GEMESSEN + GENERIERT
+# The rating measured against the rehearsal corpus, -5 to +5 (predictability.py).
+VORHERSEHBARKEIT = "vorhersehbarkeit"
+
+# Every rating per person, in the order renderers show them.
+BEWERTUNGEN = GEMESSEN + (VORHERSEHBARKEIT,)
 
 
 class Verlauf(BaseModel):
@@ -389,14 +388,17 @@ class Sitrep(BaseModel):
         return max(found, key=lambda candidate: candidate[0])
 
     def bewertungen(self, person: Person) -> dict[str, int | None]:
-        """A person's ratings in BEWERTUNGEN order, measured and generated.
+        """A person's ratings in BEWERTUNGEN order.
 
-        A measured rating is None when neither the recogniser nor speech
-        attribution caught anything of the person, e.g. a face seen without
-        its body and saying nothing, which is not the same as a reading of 0.
+        A rating is None when it was not measured: Risiko and Menschlichkeit
+        when neither the recogniser nor speech attribution caught anything of
+        the person, e.g. a face seen without its body and saying nothing, which
+        is not the same as a reading of 0; Vorhersehbarkeit when the person
+        was never classified alone against a reference.
         """
+        handlung = self.handlung(person.name)
         return {**{name: self.bewertung(person.name, name)[0] for name in GEMESSEN},
-                **{name: getattr(person, name) for name in GENERIERT}}
+                VORHERSEHBARKEIT: handlung.vorhersehbarkeit if handlung else None}
 
 
 def _prompt(anweisung: str, transcript: str, anwesend: list[Anwesend] = (),

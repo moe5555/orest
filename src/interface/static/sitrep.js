@@ -19,8 +19,11 @@ const FEED_TEXT = {
   error: "Kein Bild.",
 };
 
-const PERSON_RATINGS = ["risiko", "menschlichkeit", "auffaelligkeit"];
+const PERSON_RATINGS = ["risiko", "menschlichkeit", "vorhersehbarkeit"];
+// Ratings measured as evidence from actions and lines, 0-5.
 const LIVE_RATINGS = ["risiko", "menschlichkeit"];
+// Ratings shown per person live: the evidence and Vorhersehbarkeit, -5 to +5.
+const LIVE_SHOWN = [...LIVE_RATINGS, "vorhersehbarkeit"];
 
 // A recommendation older than this is shown dimmed.
 const EMPFEHLUNG_FRISCH_MS = 60000;
@@ -51,11 +54,16 @@ function sceneLevel(value, schwelle) {
   return "calm";
 }
 
-// Per-person risk on its 0-5 scale; the other ratings stay neutral.
+// Per-person risk on its 0-5 scale, and Vorhersehbarkeit mirrored on its
+// -5 to +5; the other ratings stay neutral.
 function personLevel(name, value) {
-  if (name !== "risiko") return "calm";
-  return value >= 4 ? "red" : value >= 2 ? "amber" : "calm";
+  if (name === "risiko") return value >= 4 ? "red" : value >= 2 ? "amber" : "calm";
+  if (name === "vorhersehbarkeit") return value <= -4 ? "red" : value <= -2 ? "amber" : "calm";
+  return "calm";
 }
+
+// A whole rating as text, a negative one with a typographic minus.
+const ratingText = (value) => (value < 0 ? `−${-value}` : String(value));
 
 const clock = (iso) => (iso ? iso.slice(11, 19) : "");
 
@@ -82,7 +90,8 @@ function meter(name, value, max, levelName, tickAt) {
   return row;
 }
 
-// One rating as pips and its number; null means not measured.
+// One rating as pips and its number; null means not measured. A negative
+// value fills as many pips as its magnitude.
 function ratingRow(name, value) {
   const row = el("div", "rating");
   const pips = el("span", "pips");
@@ -92,12 +101,12 @@ function ratingRow(name, value) {
     pips.title = "nicht gemessen";
   } else {
     row.dataset.level = personLevel(name, value);
-    for (let i = 1; i <= 5; i++) pips.append(el("span", i <= value ? "pip on" : "pip"));
-    pips.title = `${value} / 5`;
+    for (let i = 1; i <= 5; i++) pips.append(el("span", i <= Math.abs(value) ? "pip on" : "pip"));
+    pips.title = name === "vorhersehbarkeit" ? `${ratingText(value)} (−5 bis 5)` : `${value} / 5`;
   }
   // The number as well as the pips: a 0 shows as empty pips alone.
   row.append(el("span", null, name), pips,
-             el("span", "value num", value === null || value === undefined ? "–" : String(value)));
+             el("span", "value num", value === null || value === undefined ? "–" : ratingText(value)));
   return row;
 }
 
@@ -168,7 +177,7 @@ function renderLivePersonen(werte) {
     const card = el("div", "person");
     card.append(el("h3", null, person.name));
     const ratings = el("div", "ratings");
-    for (const name of LIVE_RATINGS) ratings.append(ratingRow(name, person[name]));
+    for (const name of LIVE_SHOWN) ratings.append(ratingRow(name, person[name]));
     card.append(ratings);
     const anlass = LIVE_RATINGS.filter((name) => person[`anlass_${name}`])
       .map((name) => `${name}: ${person[`anlass_${name}`]}`);
@@ -300,6 +309,9 @@ function gemessenCard(handlung) {
   card.append(title,
     meter("risiko", handlung.risiko, 5, personLevel("risiko", handlung.risiko)),
     meter("menschlichkeit", handlung.menschlichkeit, 5, "calm"));
+  if (handlung.vorhersehbarkeit !== null) {
+    card.append(ratingRow("vorhersehbarkeit", handlung.vorhersehbarkeit));
+  }
   const anlass = LIVE_RATINGS
     .filter((name) => handlung[`anlass_${name}`])
     .map((name) => `${name}: ${handlung[`anlass_${name}`]}`);

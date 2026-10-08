@@ -126,13 +126,13 @@ The source name can be changed with `--ndi-name`.
    | Operator | Name | Contents |
    |---|---|---|
    | Table DAT | `sitrep_meta` | One row: `id nummer beginn ende dauer_s bilder abschnitte latenz_s personen prognosen verlauf beschreibung gesagt relevanz eskalation gefahr einschreiten massnahme` |
-   | Table DAT | `sitrep_personen` | One row per person: `zeile name vermutet beschreibung risiko menschlichkeit auffaelligkeit` |
+   | Table DAT | `sitrep_personen` | One row per person: `zeile name vermutet beschreibung risiko menschlichkeit vorhersehbarkeit` |
    | Table DAT | `sitrep_prognose` | The three forecasts, most likely first: `rang wahrscheinlichkeit verlauf` |
    | Text DAT | `sitrep_text` | The whole report as readable text |
    | Table DAT | `presence_meta` | One row: `tick zeit anwesend` |
    | Table DAT | `presence` | One row per person present: `zeile label name vermutet aehnlichkeit sichtungen seit dauer_s` |
    | Table DAT | `live_meta` | Optional. One row, whenever a live value changes: `tick zeit personen alarm alarm_wert alarm_wer alarm_anlass` |
-   | Table DAT | `live_personen` | Optional. One row per person: `zeile name risiko menschlichkeit anlass_risiko anlass_menschlichkeit` |
+   | Table DAT | `live_personen` | Optional. One row per person: `zeile name risiko menschlichkeit anlass_risiko anlass_menschlichkeit vorhersehbarkeit` |
    | Table DAT | `live_zeilen` | Optional. The last 20 lines, newest last: `beginn ende name text lautstaerke risiko menschlichkeit bewertet`; a line arrives with `bewertet` 0 and is replaced once rated |
    | Table DAT | `live_empfehlung` | Optional. The latest recommendation: `nummer zeit einschreiten eskalation gefahr lage massnahme anlass latenz_s` |
    | Table DAT | `chronik` | Optional. The last 20 summarised stretches: `beginn ende eskalation gefahr tendenz zusammenfassung` |
@@ -224,7 +224,10 @@ uv run apollon-sitrep --send-ndi --send-td --model gemma4:26b --cast data/cast  
   action. The model doesn't decide it.
 - **`risiko` and `menschlichkeit` can be -1.** They're measured by the action
   recogniser, and -1 means it read nothing of that person, e.g. a face seen
-  without its body. A 0 is a measurement. `auffaelligkeit` is always 0–5.
+  without its body. A 0 is a measurement.
+- **`vorhersehbarkeit` is −5 to 5, or empty.** −1 is a value on its scale, so
+  a person not measured (no rehearsal reference, or never seen alone) has an
+  empty cell.
 - **Rating columns are fixed in `sitrep_osc.py`.** `PERSON_HEADER` follows
   `report.BEWERTUNGEN` in `src/sitrep/report.py`. If a rating is renamed
   there, update the header by hand.

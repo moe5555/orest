@@ -137,15 +137,19 @@ ZEILEN_SHOWN = 12
 
 # The live ratings drawn beside each person on Prototype 2's picture, with the
 # names the page gives them.
-RATING_LABELS = {"risiko": "Risiko", "menschlichkeit": "Menschlichkeit"}
+RATING_LABELS = {"risiko": "Risiko", "menschlichkeit": "Menschlichkeit",
+                 "vorhersehbarkeit": "Vorhersehbarkeit"}
 
 
 def rating_level(name: str, value: int) -> str:
     """A person's rating as the page colours it (sitrep.js, personLevel):
-    Risiko amber from 2 and red from 4 on its 0-5 scale, the rest neutral."""
-    if name != "risiko":
-        return "calm"
-    return "red" if value >= 4 else "amber" if value >= 2 else "calm"
+    Risiko amber from 2 and red from 4 on its 0-5 scale, Vorhersehbarkeit
+    likewise from -2 and -4 on its -5 to +5, the rest neutral."""
+    if name == "risiko":
+        return "red" if value >= 4 else "amber" if value >= 2 else "calm"
+    if name == "vorhersehbarkeit":
+        return "red" if value <= -4 else "amber" if value <= -2 else "calm"
+    return "calm"
 
 
 def latest_scene(kept: chronik.Chronik | None, bericht: dict | None,
@@ -409,7 +413,7 @@ class LiveSitrep:
             values = live.get(name, {})
             rows = [(RATING_LABELS[rating], values.get(rating, 0),
                      rating_level(rating, values.get(rating, 0)))
-                    for rating in report.GEMESSEN] if name in cast else []
+                    for rating in report.BEWERTUNGEN] if name in cast else []
             rated.append((box, name, rows))
         if not strip:
             return annotate.draw_ratings(frame, rated)
@@ -417,4 +421,4 @@ class LiveSitrep:
         slots = self.slots.assign([(name, float(box[0] + box[2]) / 2 / width)
                                    for box, name, rows in rated if rows], time.monotonic())
         return annotate.draw_ratings_strip(frame, rated, slots,
-                                           [RATING_LABELS[rating] for rating in report.GEMESSEN])
+                                           [RATING_LABELS[rating] for rating in report.BEWERTUNGEN])

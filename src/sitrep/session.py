@@ -42,7 +42,7 @@ from pydantic import BaseModel
 
 from . import (actions, annotate, capture, chronik, cli, devices, feed, lage, llm, loudness,
                ndi_audio, presence, report, speakers, speech, td, transcribe, utterances)
-from . import appearance
+from . import appearance, predictability
 
 
 def resolve_sources(args) -> tuple[devices.VideoDevice, devices.AudioDevice | ndi_audio.NdiAudio]:
@@ -274,6 +274,7 @@ class Session:
         self.tracker = None
         self.actions = None
         self.speakers = None
+        self.reference = None
         self.frames = None
         self.utterances = None
         self.chronik = None
@@ -328,10 +329,18 @@ class Session:
             if appearances is None:
                 print("appearance model missing: people are named by face alone "
                       "(src/scripts/export_osnet.py)", file=sys.stderr)
+            # Vorhersehbarkeit is measured where a rehearsal reference has
+            # been built (predictability.py), as appearance is used where its
+            # model is installed.
+            self.reference = predictability.load() if predictability.available() else None
+            if self.reference is None:
+                print("no rehearsal reference: vorhersehbarkeit not measured "
+                      "(python -m sitrep.predictability --project ...)", file=sys.stderr)
             self.actions = actions.ActionRatings(self.stream, self.tracker,
                                                  on_frame=self.speakers.observe,
                                                  on_learn=self._learn,
-                                                 appearances=appearances).start()
+                                                 appearances=appearances,
+                                                 reference=self.reference).start()
 
         if self.options.send_td:
             self.sender = td.Sender()
@@ -680,8 +689,11 @@ class Session:
             lines.append(f"osc:    {self.sender.host}:{self.sender.port}")
         if self.actions:
             lines.append(f"action: NTU120 ST-GCN on {actions.model.active_provider()}")
+            if self.reference is not None:
+                lines.append(f"vorhersehbarkeit: {predictability.describe(self.reference)}")
         else:
-            lines.append("action: off, risiko and menschlichkeit not measured")
+            lines.append("action: off, risiko, menschlichkeit and vorhersehbarkeit "
+                         "not measured")
         if self.tracker.cast:
             lines.append(f"cast:   {', '.join(self.tracker.cast.names)}")
         else:

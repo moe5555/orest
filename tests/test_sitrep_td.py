@@ -67,7 +67,8 @@ def test_the_live_values_are_framed_by_their_tick():
     assert only(built, sitrep_td.LIVE_BEGIN)[0][2:] == [1, 1, 4, "Klara",
                                                          "kicking other person 0.90"]
     assert only(built, sitrep_td.LIVE_PERSON)[0] == [12, 1, "Klara", 4, 0,
-                                                      "kicking other person 0.90", ""]
+                                                      "kicking other person 0.90", "",
+                                                      sitrep_td.NOT_MEASURED_SIGNED]
 
 
 def test_no_alarm_is_sent_as_zero_with_nobody_named():
@@ -160,12 +161,14 @@ def test_a_person_row_carries_the_ratings_in_the_order_bewertungen_names(sitrep)
     person = sitrep.bericht.personen[0]
     arguments = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_PERSON)[0]
     assert arguments[-len(report.BEWERTUNGEN):] == list(sitrep.bewertungen(person).values())
+    assert arguments[-1] == -2
 
 
-def test_a_rating_that_was_not_measured_is_sent_as_minus_one(sitrep):
+def test_a_rating_that_was_not_measured_is_sent_as_a_marker_off_its_scale(sitrep):
+    """-1 is off the 0-5 scales but a value of Vorhersehbarkeit's -5 to +5."""
     jakob = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_PERSON)[1]
     assert jakob[-len(report.BEWERTUNGEN):] == [
-        sitrep_td.NICHT_GEMESSEN, sitrep_td.NICHT_GEMESSEN, 4]
+        sitrep_td.NICHT_GEMESSEN, sitrep_td.NICHT_GEMESSEN, sitrep_td.NOT_MEASURED_SIGNED]
 
 
 def test_one_report_shares_one_id(sitrep):

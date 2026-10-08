@@ -70,7 +70,8 @@ RUECKBLICK_TOKENS = 400
 ANWEISUNG = """Du bist Apollon, ein militaerisches Lagesystem, und fuehrst das
 laufende Protokoll einer Szene.
 Du erhaeltst das Protokoll bisher, Standbilder aus dem neuesten Abschnitt,
-was dort an Handlungen gemessen wurde, und sein Transkript. In den Bildern
+was dort an Handlungen gemessen wurde (Vorhersehbarkeit -5 bis 5: wie sehr
+die Bewegung den Proben gleicht), und sein Transkript. In den Bildern
 steht der Name jeder erfassten Person ueber ihrem Gesicht. Vor jeder
 Aeusserung steht, wer sie gesagt hat, "(unklar)" wenn das nicht bestimmt ist,
 und "(laut)" oder "(geschrien)", wenn sie lauter war als sonst im Raum.
@@ -261,6 +262,7 @@ class Chronik:
             f"{f' ({handlung.anlass_risiko})' if handlung.anlass_risiko else ''}, "
             f"menschlichkeit {handlung.menschlichkeit}"
             f"{f' ({handlung.anlass_menschlichkeit})' if handlung.anlass_menschlichkeit else ''}"
+            f"{f', vorhersehbarkeit {handlung.vorhersehbarkeit}' if handlung.vorhersehbarkeit is not None else ''}"
             for handlung in abschnitt.handlungen) or "(nichts gemessen)"
         prompt = "\n\n".join([
             ANWEISUNG,

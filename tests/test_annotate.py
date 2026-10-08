@@ -60,7 +60,8 @@ def test_a_tag_near_the_right_edge_stays_inside_the_frame():
     assert changed(original, marked)[:150, :600].any()
 
 
-RATED = [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm")]
+RATED = [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm"),
+         ("Vorhersehbarkeit", -3, "amber")]
 
 
 def test_a_frame_with_nobody_to_rate_is_returned_unmarked():
@@ -92,7 +93,7 @@ def test_a_high_risiko_is_drawn_in_red():
     assert np.all(rgb == red, axis=2).any()
 
 
-LABELS = ["Risiko", "Menschlichkeit"]
+LABELS = ["Risiko", "Menschlichkeit", "Vorhersehbarkeit"]
 
 
 def test_the_strip_lies_beneath_the_picture_and_keeps_its_height():
@@ -107,13 +108,15 @@ def test_the_strip_lies_beneath_the_picture_and_keeps_its_height():
 
 
 def test_ratings_in_the_strip_stand_in_their_slot_tied_to_the_box_by_a_white_line():
-    original = frame()
-    marked = annotate.draw_ratings_strip(original, [(box(400, 150, 460, 300), "Klara", RATED)],
+    # 720p: at 640 px a slot is narrower than three rating rows at the
+    # smallest legible size.
+    original = frame(720, 1280)
+    marked = annotate.draw_ratings_strip(original, [(box(800, 300, 920, 600), "Klara", RATED)],
                                          {"Klara": 3}, LABELS)
-    strip = marked[360:]
-    assert np.any(strip[:, 480:] != 0)                       # slot 3 of 4
-    assert not np.any(strip[:, :480] != 0)                   # the others stay empty
-    white = np.all(marked[301:360] == 255, axis=2)           # between box foot and strip
+    strip = marked[720:]
+    assert np.any(strip[:, 960:] != 0)                       # slot 3 of 4
+    assert not np.any(strip[:, :960] != 0)                   # the others stay empty
+    white = np.all(marked[601:720] == 255, axis=2)           # between box foot and strip
     assert white.any()
 
 

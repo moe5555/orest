@@ -16,12 +16,10 @@ def bericht() -> report.Lagebericht:
             report.Person(
                 name="Klara",
                 beschreibung="Dunkles Hemd, kurze Haare, steht mittig, zugewandt",
-                auffaelligkeit=3,
             ),
             report.Person(
                 name="Vielleicht: Jakob",
                 beschreibung="Sitzt am Tisch, notiert",
-                auffaelligkeit=4,
             ),
         ],
         szene=report.Szene(relevanz=6, eskalation=3, gefahr=2),
@@ -61,7 +59,8 @@ def sitrep(bericht) -> report.Sitrep:
         # Klara's body was read; Jakob's face was seen without it.
         handlungen=[
             report.Handlung(name="Klara", risiko=0, menschlichkeit=4,
-                            anlass_menschlichkeit="hugging other person 0.81", lesungen=12),
+                            anlass_menschlichkeit="hugging other person 0.81", lesungen=12,
+                            vorhersehbarkeit=-2),
         ],
         latenz_s=5.8,
         bericht=bericht,

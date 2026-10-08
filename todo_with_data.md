@@ -100,9 +100,11 @@ are not calibrated yet.
   ("touch other person's pocket" during conversation).
 - **Should ratings carry over between reports?** Each report is rated
   independently for now, so a blow counts only in the report it falls in.
-- **Auffälligkeit is still the model's.** Measuring it as a Mahalanobis
-  distance needs a baseline from the corpus and from each person's own
-  history.
+- **Is Vorhersehbarkeit calibrated well on the real corpus?** It replaced
+  Auffälligkeit on 2026-10-07 and is measured against the whole rehearsal
+  corpus, not each person's own history. Check on footage that rehearsed
+  movement sits near 0 and that the Probebühne camera's angle does not push
+  everything negative.
 - **What if lips can't be read?** A line stays `(unklar)` whenever only one
   mouth is visible or neither moves clearly more. Voice enrolment of the cast
   (a voice embedding per person, matched per segment) would attribute those

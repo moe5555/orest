@@ -364,14 +364,17 @@ def test_ratings_are_drawn_beside_the_recognised_people_in_view(monkeypatch, run
                         lambda frame, rated: drawn.append(rated) or frame)
     controller = LiveSitrep(lambda: run)
     controller.session = run
-    controller.werte = {"personen": [{"name": "Klara", "risiko": 4, "menschlichkeit": 1}]}
+    controller.werte = {"personen": [{"name": "Klara", "risiko": 4, "menschlichkeit": 1,
+                                      "vorhersehbarkeit": -4}]}
 
     controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
 
     (rated,) = drawn
     assert [(name, rows) for _, name, rows in rated] == [
-        ("Klara", [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm")]),
-        ("Orest", [("Risiko", 0, "calm"), ("Menschlichkeit", 0, "calm")]),
+        ("Klara", [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm"),
+                   ("Vorhersehbarkeit", -4, "red")]),
+        ("Orest", [("Risiko", 0, "calm"), ("Menschlichkeit", 0, "calm"),
+                   ("Vorhersehbarkeit", 0, "calm")]),
         ("Körper 7", []),
         ("Vielleicht: Ida", []),
     ]
@@ -389,7 +392,7 @@ def test_on_the_strip_only_recognised_people_take_a_slot(monkeypatch, run):
 
     controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
 
-    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit"])]
+    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit", "Vorhersehbarkeit"])]
 
 
 def test_the_overview_feed_carries_names_only(monkeypatch, run):
@@ -501,11 +504,12 @@ def test_the_page_payload_marks_guessed_names_only(sitrep):
     assert "einschreiten" in rendered["bericht"]
 
 
-def test_the_page_payload_joins_measured_and_generated_ratings(sitrep):
+def test_the_page_payload_joins_each_persons_measured_ratings(sitrep):
     klara, jakob = live_module.payload(sitrep, 1)["bericht"]["personen"]
-    assert (klara["risiko"], klara["menschlichkeit"], klara["auffaelligkeit"]) == (0, 4, 3)
+    assert (klara["risiko"], klara["menschlichkeit"], klara["vorhersehbarkeit"]) == (0, 4, -2)
     assert klara["anlass"] == ["menschlichkeit: hugging other person 0.81"]
-    assert (jakob["risiko"], jakob["menschlichkeit"], jakob["auffaelligkeit"]) == (None, None, 4)
+    assert (jakob["risiko"], jakob["menschlichkeit"],
+            jakob["vorhersehbarkeit"]) == (None, None, None)
     assert jakob["anlass"] == []
 
 

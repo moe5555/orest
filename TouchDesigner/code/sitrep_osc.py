@@ -22,7 +22,7 @@ skipped:
 	presence_meta      one row: tick, time, number present
 	presence           one row per person the tracker sees
 	live_meta          one row: tick, time, people, alarm and its cause
-	live_personen      one row per person: live risiko and menschlichkeit
+	live_personen      one row per person: live risiko, menschlichkeit, vorhersehbarkeit
 	live_zeilen        the last LIVE_ZEILEN lines said, newest last
 	live_empfehlung    one row: the latest recommendation
 	chronik            the last CHRONIK_ZEILEN summarised stretches, newest last
@@ -38,10 +38,10 @@ META_HEADER = ['id', 'nummer', 'beginn', 'ende', 'dauer_s', 'bilder', 'abschnitt
 			   'einschreiten', 'massnahme']
 
 # Rating columns follow report.BEWERTUNGEN in Apollon, in the same order.
-# risiko and menschlichkeit are -1 when the action recogniser read nothing of
-# the person.
+# risiko and menschlichkeit are 0-5, and -1 when nothing of the person was
+# measured. vorhersehbarkeit is -5 to 5, and empty when it was not measured.
 PERSON_HEADER = ['zeile', 'name', 'vermutet', 'beschreibung',
-				 'risiko', 'menschlichkeit', 'auffaelligkeit']
+				 'risiko', 'menschlichkeit', 'vorhersehbarkeit']
 
 PROGNOSE_HEADER = ['rang', 'wahrscheinlichkeit', 'verlauf']
 
@@ -57,7 +57,7 @@ LIVE_META_HEADER = ['tick', 'zeit', 'personen', 'alarm', 'alarm_wert', 'alarm_we
 					'alarm_anlass']
 
 LIVE_PERSON_HEADER = ['zeile', 'name', 'risiko', 'menschlichkeit', 'anlass_risiko',
-					  'anlass_menschlichkeit']
+					  'anlass_menschlichkeit', 'vorhersehbarkeit']
 
 ZEILE_HEADER = ['beginn', 'ende', 'name', 'text', 'lautstaerke', 'risiko', 'menschlichkeit',
 				'bewertet']
@@ -82,6 +82,13 @@ _rosters = {}
 _last_tick = 0
 _live = {}
 _last_live = 0
+
+
+def _rating_text(column, value):
+	"""A person's rating as the text table shows it, '-' when not measured."""
+	if column == 'vorhersehbarkeit':
+		return '-' if value == '' else str(value)
+	return '-' if int(value) < 0 else str(value)
 
 
 def handle(address, args):
@@ -161,7 +168,8 @@ def _as_text(report):
 		if int(vermutet) and name != UNBEKANNT:
 			name = '{} (vermutet)'.format(name)
 		lines.append('PERSON        {} - {}   [{}]'.format(
-			name, beschreibung, ' '.join('-' if int(r) < 0 else str(r) for r in ratings)))
+			name, beschreibung, ' '.join(_rating_text(column, value) for column, value
+										  in zip(PERSON_HEADER[4:], ratings))))
 	relevanz, eskalation, gefahr = report['szene']
 	lines.append('SZENE         relevanz {} . eskalation {} . gefahr {}'.format(
 		relevanz, eskalation, gefahr))

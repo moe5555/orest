@@ -6,6 +6,79 @@ referenced below.
 
 ---
 
+## 2026-10-07 — Vorhersehbarkeit measured against the rehearsal corpus (VSH-ARLT-5090)
+
+Requested by Moe. Vorhersehbar in `02_processing.md` (Realtime-SITREP,
+categories per person) replaces the model's Auffälligkeit. It is measured,
+−5 to +5, per person.
+
+**Reference: the rehearsal corpus, not the session.** Decided with Moe. With
+the live session as the baseline, everything would become more predictable
+the longer a run lasts, because nearest-neighbour distances can only shrink as
+the reference grows, and the first minutes would be unpredictable by
+construction. Against the fixed corpus a value means the same at minute 1 as
+at minute 90. Each person is compared with the whole corpus, not their own
+rehearsals: the pose index keeps one body per segment and does not know who
+it is (changelog 2026-09-11). Per-scene references are left for the per-scene
+config.
+
+**Score** (`src/sitrep/predictability.py`). Each body the action recogniser
+classifies alone is encoded over the same 4 s window with the `apollon_pose`
+encoder the WISE index was built with. Its score is the similarity to its
+nearest corpus segment (`bloom-wise-architecture.md`, "Distance to nearest
+neighbour is the unpredictability score"). Nearest neighbour rather than the
+Mahalanobis distance the spec first named: rehearsed movement has many modes,
+and a fall rehearsed ten times lies far from any single mean.
+- **Calibration.** Each corpus segment is matched against the rest of the
+  corpus, leaving out its own recording within 30 s (`EXCLUDE`), where
+  overlapping segments of a held posture would find themselves. A live
+  similarity is placed in that distribution as a percentile and spread over
+  −5…+5 through the normal quantile: the corpus median reads 0, half the
+  corpus lies within ±1.5, and only the outer 1 % at each end reaches ±5.
+- **Report:** a person's mean score over the report's readings
+  (`Handlung.vorhersehbarkeit`), not a peak, since one window far from the
+  corpus is as often a tracking slip as a new movement. **Live:** the mean
+  over the last 8 s (`lage.SMOOTHING`), with no decay. It plays no part in
+  the alarm.
+
+**Building the reference.** `python -m sitrep.predictability --project
+hitl_database` runs `src/scripts/export_pose_reference.py` in WISE's
+environment (Apollon's has no Faiss), calibrates and writes
+`data/predictability/reference.npz`. A run loads it when it exists, as it uses
+the appearance model when installed. Without it, Vorhersehbarkeit is `–`.
+Checked on the finished CLIP store of `hitl_database` (56,068 vectors, 17
+recordings): export works, 8,000 segments calibrate in 0.5 s, and scoring four
+people takes 2 ms. **Built for pose on 2026-10-08** from `hitl_database`:
+14,006 segments, of which 13,674 held a body, from 17 recordings. The nearest
+repetition of a rehearsed movement has a median similarity of 0.94; the
+poorest 1 % lie below 0.53, the best 1 % at 1.00.
+
+**Where it shows.**
+- Report and Chronik: per person beside Risiko and Menschlichkeit. The model
+  is told what the value means and no longer rates anyone's values
+  (`report.GENERIERT` removed).
+- Operator page, Prototypes 1–3: a third row. A negative value fills as many
+  pips as its magnitude and carries its sign. Amber from −2, red from −4,
+  mirroring Risiko.
+- OSC: `/apollon/sitrep/person` carries `vorhersehbarkeit` where
+  `auffaelligkeit` was, and `/apollon/live/person` gains it as a last column.
+  An unmeasured value travels as an empty string, because −1 lies on its
+  scale. **TouchDesigner: `sitrep_personen`'s last column is renamed and
+  `live_personen` gains a seventh column** (`sitrep_osc.py` updated).
+
+599 tests pass (15 new in `tests/test_predictability.py`). The strip test now
+draws on a 720p frame: at 640 px a quarter-width slot cannot hold three rows,
+"Vorhersehbarkeit" among them, at the smallest legible size.
+
+**Open:**
+- **Calibration on real footage.** Whether rehearsed movement sits near 0, and
+  whether the Probebühne camera's angle shifts everything negative. The
+  embedding is 2D and so depends on viewpoint.
+- **The corpus encodes the largest body per frame.** In a two-person shot the
+  largest can switch between people, so some corpus vectors mix two bodies.
+
+---
+
 ## 2026-10-07 — Prototype 3 of the Live SITREP display
 
 Completes Prototype 3 in `03_render.md` ("Live SITREP"): Prototype 2, but the

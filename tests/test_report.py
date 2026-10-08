@@ -12,13 +12,12 @@ from sitrep import loudness, report
 
 
 def test_bewertungen_are_the_rating_fields_of_person_in_order():
-    assert report.BEWERTUNGEN == ("risiko", "menschlichkeit", "auffaelligkeit")
+    assert report.BEWERTUNGEN == ("risiko", "menschlichkeit", "vorhersehbarkeit")
 
 
-def test_bewertungen_are_the_measured_ratings_then_the_generated_ones():
+def test_bewertungen_are_the_evidence_ratings_then_vorhersehbarkeit():
     assert report.GEMESSEN == ("risiko", "menschlichkeit")
-    assert report.GENERIERT == ("auffaelligkeit",)
-    assert report.BEWERTUNGEN == report.GEMESSEN + report.GENERIERT
+    assert report.BEWERTUNGEN == report.GEMESSEN + (report.VORHERSEHBARKEIT,)
 
 
 def test_the_action_table_carries_exactly_the_measured_ratings():
@@ -27,26 +26,26 @@ def test_the_action_table_carries_exactly_the_measured_ratings():
 
 def test_the_model_is_not_asked_for_a_measured_rating():
     person = report.schema()["$defs"]["Person"]["properties"]
-    assert not set(report.GEMESSEN) & set(person)
+    assert not set(report.BEWERTUNGEN) & set(person)
 
 
-def test_every_rating_is_bounded_zero_to_five():
-    for name in report.GENERIERT:
+def test_every_rating_is_bounded_to_its_scale():
+    for value in (-6, 6):
         with pytest.raises(ValidationError):
-            report.Person(name="Klara", beschreibung="",
-                          **{**dict.fromkeys(report.GENERIERT, 0), name: 6})
+            report.Handlung(name="Klara", lesungen=1, risiko=0, menschlichkeit=0,
+                            vorhersehbarkeit=value)
     for name in report.GEMESSEN:
         with pytest.raises(ValidationError):
             report.Handlung(name="Klara", lesungen=1,
                             **{**dict.fromkeys(report.GEMESSEN, 0), name: 6})
 
 
-def test_a_persons_ratings_join_what_was_measured_and_what_was_generated(sitrep):
+def test_a_persons_ratings_are_what_was_measured_of_them(sitrep):
     klara, jakob = sitrep.bericht.personen
-    assert sitrep.bewertungen(klara) == {"risiko": 0, "menschlichkeit": 4, "auffaelligkeit": 3}
+    assert sitrep.bewertungen(klara) == {"risiko": 0, "menschlichkeit": 4, "vorhersehbarkeit": -2}
     # Nothing measured is not a measurement of 0.
     assert sitrep.bewertungen(jakob) == {"risiko": None, "menschlichkeit": None,
-                                         "auffaelligkeit": 4}
+                                         "vorhersehbarkeit": None}
 
 
 def test_an_unknown_person_is_never_given_someone_elses_measurement(sitrep):

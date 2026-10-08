@@ -17,7 +17,7 @@
     const card = el("article", "p1-person");
     card.append(el("h2", null, name));
     const ratings = el("div", "ratings");
-    for (const rating of LIVE_RATINGS) ratings.append(ratingRow(rating, gemessen?.[rating] ?? 0));
+    for (const rating of LIVE_SHOWN) ratings.append(ratingRow(rating, gemessen?.[rating] ?? 0));
     card.append(ratings);
     return card;
   }

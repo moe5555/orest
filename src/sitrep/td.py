@@ -14,15 +14,16 @@ end, with one message per table row between them:
     /apollon/sitrep/beschreibung  <id> <beschreibung>
     /apollon/sitrep/gesagt        <id> <gesagt>
     /apollon/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
-                                <risiko> <menschlichkeit> <auffaelligkeit>
+                                <risiko> <menschlichkeit> <vorhersehbarkeit>
     /apollon/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
     /apollon/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
     /apollon/sitrep/empfehlung    <id> <einschreiten> <massnahme>
     /apollon/sitrep/end           <id>
 
 A person's ratings follow report.BEWERTUNGEN. `risiko` and `menschlichkeit`
-are measured by the action recogniser and are -1 when it read nothing of the
-person; `auffaelligkeit` is the model's.
+are 0-5 and -1 when nothing of the person was measured. `vorhersehbarkeit` is
+-5 to +5, where -1 is a value, and travels as an empty string when it was not
+measured (no reference built, or the person never classified alone).
 
 `begin` carries the row counts so TouchDesigner can size its tables before the
 rows arrive, as `/apollon/results/begin` does for a search. The report id tells
@@ -54,6 +55,7 @@ or 1, `alarm_wer` empty for a line of unknown speaker:
                             <alarm_wer> <alarm_anlass>
     /apollon/live/person      <tick> <zeile> <name> <risiko> <menschlichkeit>
                             <anlass_risiko> <anlass_menschlichkeit>
+                            <vorhersehbarkeit>
     /apollon/live/end         <tick>
 
 Each line as soon as it is transcribed, with `bewertet` 0, and again once it
@@ -103,8 +105,10 @@ LIVE_ZEILE = "/apollon/live/zeile"
 LIVE_EMPFEHLUNG = "/apollon/live/empfehlung"
 CHRONIK_ABSCHNITT = "/apollon/chronik/abschnitt"
 
-# A person's rating that was not measured.
+# A person's rating that was not measured: -1 on the 0-5 scales, an empty
+# string on Vorhersehbarkeit's -5 to +5.
 NICHT_GEMESSEN = -1
+NOT_MEASURED_SIGNED = ""
 
 # Seconds between roster messages. Matches the tracker's own pass rate: sending
 # faster would repeat a roster that has not changed.
@@ -141,9 +145,11 @@ def messages(document: report.Sitrep, nummer: int,
         # Ratings are read off BEWERTUNGEN rather than named here, so renaming
         # a category cannot leave TouchDesigner reading a column that no longer
         # exists -- the reason report.py derives them in the first place. OSC
-        # has no null, so a rating that was not measured travels as -1.
-        ratings = [NICHT_GEMESSEN if value is None else value
-                   for value in document.bewertungen(person).values()]
+        # has no null, so a rating that was not measured travels as a marker.
+        ratings = [value if value is not None
+                   else NOT_MEASURED_SIGNED if rating == report.VORHERSEHBARKEIT
+                   else NICHT_GEMESSEN
+                   for rating, value in document.bewertungen(person).items()]
         built.append((SITREP_PERSON, [sitrep_id, zeile, person.name,
                                       int(not document.erkannt(person.name)),
                                       person.beschreibung, *ratings]))
@@ -184,9 +190,12 @@ def werte_messages(stand, tick: int) -> list[Message]:
     built = [(LIVE_BEGIN, [tick, _clock(stand.zeit), len(stand.personen), int(alarm.aktiv),
                            alarm.wert, alarm.wer or "", alarm.anlass])]
     for zeile, (name, werte) in enumerate(stand.personen.items(), start=1):
+        vorhersehbarkeit = werte.get(report.VORHERSEHBARKEIT)
         built.append((LIVE_PERSON, [tick, zeile, name,
                                     *(werte[rating].wert for rating in report.GEMESSEN),
-                                    *(werte[rating].anlass for rating in report.GEMESSEN)]))
+                                    *(werte[rating].anlass for rating in report.GEMESSEN),
+                                    NOT_MEASURED_SIGNED if vorhersehbarkeit is None
+                                    else vorhersehbarkeit.wert]))
     built.append((LIVE_END, [tick]))
     return built
 

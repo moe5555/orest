@@ -17,8 +17,9 @@ A pair class has no direction: NTU does not record which of the two people
 acts, so "punching/slapping other person" describes the one who hits and the
 one who is hit alike.
 
-`auffaelligkeit` has no column. It measures a deviation from past behaviour,
-not a property of any one activity.
+`vorhersehbarkeit` has no column. It measures how closely a movement
+resembles the rehearsals (sitrep/predictability.py), not a property of any
+one activity.
 
 The table holds evidence only. How it is weighed against the transcript,
 trigger words and loudness is the SITREP formula's concern.

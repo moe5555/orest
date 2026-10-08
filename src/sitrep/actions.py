@@ -1,4 +1,4 @@
-"""Risiko and Menschlichkeit per person, measured from what bodies do.
+"""Risiko, Menschlichkeit and Vorhersehbarkeit per person, measured from what bodies do.
 
 The Pose route under "Calculating Values" in
 knowledge/components/02_processing.md. The action recogniser (src/action) runs
@@ -56,6 +56,13 @@ Rating. Each rating is the peak evidence among the readings a person took part
 in, rounded and clipped to 0-5. The peak rather than the mean, because one
 blow makes a person dangerous however calm the rest of the window was.
 
+Vorhersehbarkeit. Given a rehearsal reference (predictability.py), each
+person classified alone is also encoded over the same window and scored
+against the corpus, -5 to +5. A person's Vorhersehbarkeit over a stretch is
+the mean of those scores, not a peak: it describes how the person moved over
+the stretch, and a single window far from the corpus is as often a tracking
+slip as a new movement.
+
 Readings are kept for KEEP seconds and read, never consumed: the live
 values (lage.py) read the last few seconds, each stretch of the scene's
 summary (chronik.py) and a report asked for read theirs.
@@ -71,7 +78,7 @@ import numpy as np
 
 from action import model, recognizer, sitrep_map, tracking
 
-from . import appearance, loudness, presence, report
+from . import appearance, loudness, predictability, presence, report
 
 # Seconds a face box stays usable for naming a body: two passes of the
 # presence tracker, so one missed detection does not leave a body unnamed.
@@ -169,6 +176,9 @@ class Evidence:
     members: tuple[int, ...]        # body track ids
     values: np.ndarray              # (len(sitrep_map.RATINGS),)
     causes: tuple[str, ...]         # per rating: strongest class and its probability
+    # A single person's movement scored against the rehearsals, -5 to +5;
+    # None for a pair, or without a reference.
+    vorhersehbarkeit: float | None = None
 
 
 @dataclass(frozen=True)
@@ -229,8 +239,20 @@ def rate(records: list[Evidence], names: dict[int, str],
                 if gains[id(peak)] > 1.0:
                     cause += f" · laut ×{gains[id(peak)]:.1f}"
             fields[f"anlass_{rating}"] = cause
+        fields[report.VORHERSEHBARKEIT] = mean_predictability(own)
         rated.append(report.Handlung(name=name, lesungen=len(own), **fields))
     return rated
+
+
+def mean_predictability(records: list[Evidence]) -> int | None:
+    """The mean Vorhersehbarkeit of the readings that carry one, rounded, or
+    None if none does."""
+    scores = [record.vorhersehbarkeit for record in records
+              if record.vorhersehbarkeit is not None]
+    if not scores:
+        return None
+    return int(np.clip(np.floor(float(np.mean(scores)) + 0.5),
+                       -predictability.SCALE, predictability.SCALE))
 
 
 class ActionRatings:
@@ -244,8 +266,11 @@ class ActionRatings:
     def __init__(self, source, faces: presence.PresenceTracker,
                  mapping: sitrep_map.Mapping | None = None, on_frame=None,
                  on_learn: Callable[[int, str, str], None] | None = None,
-                 appearances: appearance.Appearances | None = None):
+                 appearances: appearance.Appearances | None = None,
+                 reference: predictability.Reference | None = None):
         self.mapping = mapping or sitrep_map.load()
+        # The rehearsal corpus each person's movement is scored against.
+        self.reference = reference
         self._faces = faces
         self._names: dict[int, str] = {}
         # Per body, in recogniser time: votes for each cast name, when they
@@ -391,7 +416,22 @@ class ActionRatings:
         frames = self.recognizer.tracker.frames
         if frames:
             self.name(frames[-1], self._faces.faces(FACE_AGE), self._describe(frames[-1]))
-        self.record(readings, datetime.now())
+        self.record(readings, datetime.now(), self._predictability(readings))
+
+    def _predictability(self, readings: list[recognizer.Reading]) -> dict[int, float]:
+        """Vorhersehbarkeit of each body classified alone, by track id, over
+        the window its reading covers."""
+        alone = [reading.members[0] for reading in readings if len(reading.members) == 1]
+        if self.reference is None or not alone:
+            return {}
+        at = readings[0].at
+        frames = self.recognizer.tracker.window(at - recognizer.WINDOW, at)
+        encoded = {track: predictability.window_embedding(frames, track) for track in alone}
+        encoded = {track: vector for track, vector in encoded.items() if vector is not None}
+        if not encoded:
+            return {}
+        scores = self.reference.score(self.reference.similarity(np.stack(list(encoded.values()))))
+        return {track: float(value) for track, value in zip(encoded, scores)}
 
     def _describe(self, frame: tracking.Frame) -> dict[int, np.ndarray]:
         """Descriptions of the bodies in view, on the image the frame was tracked on.
@@ -547,14 +587,21 @@ class ActionRatings:
                          self._faces_seen, self._face_sure):
                 kept.pop(track, None)
 
-    def record(self, readings: list[recognizer.Reading], at: datetime):
-        """Weigh readings and keep them under the bodies they are of."""
+    def record(self, readings: list[recognizer.Reading], at: datetime,
+               scores: dict[int, float] | None = None):
+        """Weigh readings and keep them under the bodies they are of.
+
+        `scores` holds the Vorhersehbarkeit of bodies classified alone, by
+        track id.
+        """
+        scores = scores or {}
         with self._lock:
             names = dict(self._names)
         kept, seen = [], []
         for reading in readings:
             values, causes = weigh(reading.probabilities, self.mapping)
-            kept.append(Evidence(at, reading.members, values, causes))
+            alone = reading.members[0] if len(reading.members) == 1 else None
+            kept.append(Evidence(at, reading.members, values, causes, scores.get(alone)))
             top = int(reading.probabilities.argmax())
             seen.append(Recognised(
                 tuple(names.get(member, f"Körper {member}") for member in reading.members),

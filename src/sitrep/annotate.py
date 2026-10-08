@@ -109,6 +109,8 @@ class _RatingRows:
     """Rating rows set in one font: the label, five pips and the number.
 
     Measured on the labels given, so panels drawn with one instance line up.
+    A negative value (Vorhersehbarkeit, -5 to +5) fills as many pips as its
+    magnitude and is set with its sign.
     """
 
     def __init__(self, draw: ImageDraw.ImageDraw, font: ImageFont.FreeTypeFont,
@@ -120,7 +122,7 @@ class _RatingRows:
         self.gap = max(2, self.pip // 3)
         self.label_width = max((draw.textlength(label, font=font) for label in labels), default=0)
         self.width = int(3 * padding + self.label_width + PIPS * (self.pip + self.gap)
-                         + self.gap + draw.textlength("5", font=font))
+                         + self.gap + draw.textlength(_number(-PIPS), font=font))
 
     def height(self, count: int) -> int:
         """Height of `count` rows, without the panel's padding."""
@@ -140,17 +142,22 @@ class _RatingRows:
             pip_top = row_top + (self.row - self.pip) // 2
             for slot in range(PIPS):
                 left = pips_left + slot * (self.pip + self.gap)
-                colour = LEVEL.get(level, LEVEL["calm"]) if slot < value else PIP_OFF
+                colour = LEVEL.get(level, LEVEL["calm"]) if slot < abs(value) else PIP_OFF
                 draw.rectangle((left, pip_top, left + self.pip, pip_top + self.pip), fill=colour)
             self.text(draw, pips_left + PIPS * (self.pip + self.gap) + self.gap, row_top,
-                      str(value), LEVEL["red"] if level == "red" else TEXT)
+                      _number(value), LEVEL["red"] if level == "red" else TEXT)
+
+
+def _number(value: int) -> str:
+    """A rating as set beside its pips, a negative one with a typographic minus."""
+    return f"−{-value}" if value < 0 else str(value)
 
 
 def draw_ratings(frame: np.ndarray,
                  rated: list[tuple[np.ndarray, str, list[tuple[str, int, str]]]]) -> np.ndarray:
     """A copy of a BGR frame with each person boxed and named, and their ratings beside the box.
 
-    Each person comes with rows of (label, value 0-5, level), the level being
+    Each person comes with rows of (label, value -5 to 5, level), the level being
     "calm", "amber" or "red" as the page colours it. A row shows the label,
     five pips and the number. The panel sits against the box's right edge, at
     its top, or against its left edge where the frame ends.

@@ -115,6 +115,21 @@ def executable() -> Path:
     )
 
 
+def python() -> Path:
+    """The Python interpreter of the WISE environment, which can import Faiss.
+
+    Beside the console script on POSIX (bin/), one level above it on Windows
+    (Scripts/ holds the script, the environment root the interpreter).
+    """
+    override = os.environ.get("APOLLON_WISE_PYTHON")
+    if override:
+        return Path(override)
+    script = executable()
+    if sys.platform == "win32":
+        return script.parent.parent / "python.exe"
+    return script.parent / "python"
+
+
 def ffmpeg() -> Path:
     """Locate an ffmpeg executable for cutting clips.
 

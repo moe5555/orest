@@ -16,9 +16,10 @@ Overview: components/pipeline.md
   - categories per person, 0–5:
     - **Risiko**: how dangerous a person is, e.g. punching someone, saying something threatening or dark, aggressive or radical behaviour.
     - **Menschlichkeit**: pro-social behaviour, e.g. giving someone something, helping, saying something positive.
-    - Risiko and Menschlichkeit are measured from the action classifier (`src/sitrep/actions.py`) and from what each person says (`src/sitrep/speech.py`); a person's rating is the higher of the two. Loudness amplifies the Risiko evidence of both (`src/sitrep/loudness.py`).
-    - **Auffälligkeit**: how far a person's behaviour deviates from their past behaviour, e.g. as a Mahalanobis distance. Until that is measured, the model rates it against the others in the window.
+    - **Vorhersehbar**: how far a person's behaviour deviates from their past behaviour, e.g. as a nearest neighour distance. Measured, −5 to +5, by comparing each person's last 4 s of pose with the whole rehearsal corpus, not with the live session or the person's own rehearsals (`src/sitrep/predictability.py`); per-scene references follow with the per-scene config.
   - prediction of what might happen next. 
+  - Risiko and Menschlichkeit are measured from the action classifier (`src/sitrep/actions.py`) and from what each person says (`src/sitrep/speech.py`); a person's rating is the higher of the two. Loudness amplifies the Risiko evidence of both (`src/sitrep/loudness.py`).
+    
   - whether to interfere, if so, what to do. 
 - prioritises low latency over accuracy 
 - the system should be able to understand when it is spoken to. If the system is directly spoken to, e.g. via "System" or "Apollon", it should be able to react. 
