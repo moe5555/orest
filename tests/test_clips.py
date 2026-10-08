@@ -1,5 +1,6 @@
 """Clip naming and the ffmpeg command lines that cut search results."""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,44 @@ def make_hit(**changes) -> Hit:
 
 def test_the_source_is_wises_media_route_without_the_browser_fragment():
     assert clips.source_url(make_hit()) == "http://127.0.0.1:9670/probe/media/1"
+
+
+def make_project(root: Path, location: Path, recordings: dict[int, str]) -> Path:
+    """A WISE project database holding only the tables the path lookup reads."""
+    project = root / "probe"
+    (project / "metadata").mkdir(parents=True)
+    database = sqlite3.connect(project / "metadata" / "internal.db")
+    database.execute("CREATE TABLE source_collections (id INTEGER, location TEXT, type TEXT)")
+    database.execute("CREATE TABLE media (id INTEGER, source_collection_id INTEGER, path TEXT)")
+    database.execute("INSERT INTO source_collections VALUES (1, ?, 'DIR')", (str(location),))
+    database.executemany("INSERT INTO media VALUES (?, 1, ?)", recordings.items())
+    database.commit()
+    database.close()
+    return project
+
+
+def test_recordings_are_found_under_the_folder_they_were_added_from(tmp_path):
+    project = make_project(tmp_path, tmp_path / "footage", {1: "Othello 2022.mp4", 2: "week1/day2.mp4"})
+    assert clips.recording_paths(project) == {
+        "1": tmp_path / "footage" / "Othello 2022.mp4",
+        "2": tmp_path / "footage" / "week1" / "day2.mp4",
+    }
+
+
+def test_a_project_without_a_local_database_has_no_recordings(tmp_path):
+    assert clips.recording_paths(tmp_path / "elsewhere") == {}
+
+
+def test_a_recording_on_disk_is_read_directly(tmp_path):
+    recording = tmp_path / "Othello 2022.mp4"
+    recording.write_bytes(b"")
+    assert clips.source(make_hit(), {"1": recording}) == str(recording)
+
+
+def test_a_recording_missing_from_disk_is_read_through_wise(tmp_path):
+    missing = {"1": tmp_path / "moved.mp4"}
+    assert clips.source(make_hit(), missing) == "http://127.0.0.1:9670/probe/media/1"
+    assert clips.source(make_hit(), {}) == "http://127.0.0.1:9670/probe/media/1"
 
 
 def test_the_same_moment_always_maps_to_the_same_clip():
@@ -118,6 +157,22 @@ def test_a_clip_appears_under_its_final_name_only_once_ffmpeg_succeeds(tmp_path,
     assert seen["final_during_write"] is False
     assert clip.path.read_bytes() == b"clip"
     assert not list(tmp_path.glob("*.part"))
+
+
+def test_a_clip_is_cut_from_the_recording_on_disk(tmp_path, monkeypatch):
+    recording = tmp_path / "Othello 2022.mp4"
+    recording.write_bytes(b"")
+    inputs = []
+
+    def fake_ffmpeg(argv, check):
+        inputs.append(argv[argv.index("-i") + 1])
+        Path(argv[-1]).write_bytes(b"clip")
+
+    monkeypatch.setattr(clips.config, "ffmpeg", lambda: Path("ffmpeg"))
+    monkeypatch.setattr(clips.subprocess, "run", fake_ffmpeg)
+    monkeypatch.setattr(clips, "preroll", lambda path: 0.0)
+    clips.cut(make_hit(), clips.FAST, tmp_path / "clips", recordings={"1": recording})
+    assert inputs == [str(recording)]
 
 
 def test_clips_are_cut_and_yielded_in_rank_order(tmp_path, monkeypatch):

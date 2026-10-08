@@ -17,14 +17,18 @@ Two modes, sharing file naming and delivery:
   keyframe on the exact frame in any player. Measured at about 1s per 8 seconds
   of 1080p and 3.5s per 8 seconds of 4K on the development laptop.
 
-The source is read through WISE's media route rather than from disk. WISE keeps
-the source location to itself, and its route serves byte ranges, which ffmpeg
-seeks with; this costs under 0.1s per clip and yields byte-identical output, and
-it leaves nothing to configure about where recordings live on the machine
-running Apollon.
+The source is read from disk, at the path the WISE project registered for the
+recording in its metadata database, so nothing about where recordings live
+needs configuring. Reading through WISE's media route instead costs one HTTP
+request per seek, and ffmpeg seeks between the audio and video samples of an
+interleaved recording hundreds of times per clip: 3.4 s against 0.15 s for a
+four-second clip of a 1080p OBS recording, 28.5 s against 0.3 s for an
+84-second one. The media route remains the fallback when the project database
+or the recording is not on this machine.
 """
 
 import os
+import sqlite3
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,6 +72,35 @@ def source_url(hit: Hit) -> str:
     the request.
     """
     return hit.media_url.split("#", 1)[0]
+
+
+def recording_paths(project: Path) -> dict[str, Path]:
+    """Every recording a WISE project indexes, by media id.
+
+    WISE stores each recording's path relative to the folder it was added from,
+    and that folder as a source collection. Empty when the project's database
+    is not on this machine.
+    """
+    database_path = project / "metadata" / "internal.db"
+    if not database_path.exists():
+        return {}
+    database = sqlite3.connect(f"file:{database_path.as_posix()}?mode=ro", uri=True)
+    try:
+        rows = database.execute(
+            "SELECT media.id, source_collections.location, media.path FROM media "
+            "JOIN source_collections ON media.source_collection_id = source_collections.id")
+        return {str(media_id): Path(location) / path for media_id, location, path in rows}
+    finally:
+        database.close()
+
+
+def source(hit: Hit, recordings: dict[str, Path]) -> str:
+    """What ffmpeg reads a hit's recording from: the file on disk if present,
+    otherwise WISE's media route."""
+    path = recordings.get(hit.media_id)
+    if path is not None and path.is_file():
+        return str(path)
+    return source_url(hit)
 
 
 def clip_name(hit: Hit, mode: str) -> str:
@@ -125,8 +158,12 @@ def preroll(clip: Path) -> float:
     return parse_preroll(result.stdout)
 
 
-def cut(hit: Hit, mode: str, directory: Path, encoder: str = LIBX264) -> Clip:
+def cut(hit: Hit, mode: str, directory: Path, encoder: str = LIBX264,
+        recordings: dict[str, Path] | None = None) -> Clip:
     """Cut one hit into a clip in `directory`, reusing a clip already there.
+
+    `recordings` maps media ids to files on disk (`recording_paths`); a hit
+    whose recording is missing from it is read through WISE's media route.
 
     ffmpeg writes to a temporary name that is renamed once the clip is
     complete, so a clip interrupted mid-write is never mistaken for a finished
@@ -136,18 +173,20 @@ def cut(hit: Hit, mode: str, directory: Path, encoder: str = LIBX264) -> Clip:
     if not destination.exists():
         directory.mkdir(parents=True, exist_ok=True)
         partial = destination.with_name(destination.name + ".part")
-        command = cut_command(source_url(hit), hit.ts, hit.seconds, partial, mode, encoder)
+        command = cut_command(source(hit, recordings or {}), hit.ts, hit.seconds,
+                              partial, mode, encoder)
         subprocess.run([str(config.ffmpeg()), *command], check=True)
         os.replace(partial, destination)
     return Clip(destination, preroll(destination))
 
 
 def cut_all(hits: Iterable[Hit], mode: str, directory: Path,
-            encoder: str = LIBX264) -> Iterator[tuple[int, Hit, Clip]]:
+            encoder: str = LIBX264,
+            recordings: dict[str, Path] | None = None) -> Iterator[tuple[int, Hit, Clip]]:
     """Cut hits in rank order, yielding each clip as soon as it is written.
 
     Yielding per clip rather than returning the batch lets the best result be
     announced while the rest are still being cut.
     """
     for rank, hit in enumerate(hits, start=1):
-        yield rank, hit, cut(hit, mode, directory, encoder)
+        yield rank, hit, cut(hit, mode, directory, encoder, recordings)

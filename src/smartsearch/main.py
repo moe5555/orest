@@ -43,10 +43,18 @@ def _extractors(parser: argparse.ArgumentParser):
                         help="still-image feature extractor; repeatable")
 
 
+# Cut mode when --send-td is given without --cut. Precise clips begin on their
+# own keyframe. A fast clip begins up to a keyframe interval (10 s in OBS's
+# default) ahead of the hit, and TouchDesigner, which has to decode up to its
+# trim point on every start and loop, skips those frames past its read timeout
+# and shows black or a held frame.
+TD_CUT = clips.PRECISE
+
+
 def _delivery(parser: argparse.ArgumentParser):
     parser.add_argument("--cut", choices=clips.MODES,
                         help="cut each result into a clip: fast copies the stream, "
-                             "precise re-encodes it (default with --send-td: fast)")
+                             f"precise re-encodes it (default with --send-td: {TD_CUT})")
     parser.add_argument("--encoder", choices=clips.ENCODERS, default=clips.LIBX264,
                         help=f"H.264 encoder for precise clips (default: {clips.LIBX264})")
     parser.add_argument("--send-td", action="store_true",
@@ -179,7 +187,9 @@ def deliver(hits: list[client.Hit], project: str, mode: str, encoder: str,
     query_id = td.new_query_id()
     if sender:
         sender.send(td.begin_message(query_id, len(hits)))
-    for rank, hit, clip in clips.cut_all(hits, mode, config.clips_dir(project), encoder):
+    recordings = clips.recording_paths(config.project_dir(project))
+    for rank, hit, clip in clips.cut_all(hits, mode, config.clips_dir(project), encoder,
+                                         recordings):
         print(f"{rank:>3}  {clip.path}  preroll {clip.preroll:.3f}s", flush=True)
         if sender:
             sender.send(td.hit_message(query_id, rank, clip, hit))
@@ -227,7 +237,7 @@ def live_session(wise: client.Wise, args) -> int:
             return
         print(format_hits(hits), flush=True)
         if args.cut or args.send_td:
-            deliver(hits, args.project, args.cut or clips.FAST, args.encoder, args.send_td)
+            deliver(hits, args.project, args.cut or TD_CUT, args.encoder, args.send_td)
 
     try:
         while not recorder.ready:
@@ -309,7 +319,7 @@ def main(argv=None) -> int:
                 )
                 print(format_hits(hits))
                 if args.cut or args.send_td:
-                    deliver(hits, args.project, args.cut or clips.FAST,
+                    deliver(hits, args.project, args.cut or TD_CUT,
                             args.encoder, args.send_td)
                 return 0
 
@@ -324,7 +334,7 @@ def main(argv=None) -> int:
             )
             print(format_hits(hits))
             if args.cut or args.send_td:
-                deliver(hits, args.project, args.cut or clips.FAST,
+                deliver(hits, args.project, args.cut or TD_CUT,
                         args.encoder, args.send_td)
             return 0
         except httpx.HTTPStatusError as error:

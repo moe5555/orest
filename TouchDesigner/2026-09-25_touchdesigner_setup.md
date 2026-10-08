@@ -93,11 +93,12 @@ on port 10001.
    `op('results')[1, 'clip_path']` for the best result. Use row 2 for the
    second-best result, and so on.
 
-Fast clips begin at the keyframe before the hit. `preroll` is the number of
-seconds to skip, and TouchDesigner has to trim them itself, because it ignores
-the edit list that hides them in other players. Trimming on the Movie File In
-TOP is not verified yet (`changelog.md`, 2026-09-17). Clips cut with
-`--cut precise` have a preroll of 0.
+With `--send-td`, clips are re-encoded (`--cut precise`) and start exactly on
+the hit, with a preroll of 0. Clips cut with `--cut fast` begin at the keyframe
+before the hit. `preroll` is the number of seconds to skip, and TouchDesigner
+has to trim them itself, because it ignores the edit list that hides them in
+other players. Long prerolls make the player show black or a held frame
+(`changelog.md`, 2026-10-08).
 
 Save as `TouchDesigner/bodysearch.tox`.
 

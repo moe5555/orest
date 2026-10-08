@@ -467,20 +467,25 @@ In TouchDesigner, an **OSC In DAT** on port 10000 receives:
     /apollon/results/end    <query_id>
 
     uv run apollon-search query "zwei Personen streiten" --send-td
-    uv run apollon-search query "zwei Personen streiten" --cut precise --send-td
+    uv run apollon-search query "zwei Personen streiten" --cut fast --send-td
     uv run apollon-search body <clip.mp4> --at 90 --send-td
-    uv run apollon-search query "zwei Personen streiten" --cut fast
+    uv run apollon-search query "zwei Personen streiten" --cut precise
 
-`--cut fast` (the default with `--send-td`) copies the stream: about 0.1s per
-clip, in the recording's own codec. A fast clip file begins at the keyframe
-before the hit; `preroll` is the seconds to skip, which TouchDesigner must trim
-since it ignores the MP4 edit list that hides them from other players.
-`--cut precise` re-encodes to H.264: about
-1s per 8 seconds of 1080p and 3.5s per 8 seconds of 4K; `--encoder h264_nvenc`
-is faster where the GPU is free. Clips cover exactly the range WISE returned,
+`--cut precise` (the default with `--send-td`) re-encodes to H.264, so every
+clip begins on its own keyframe with a `preroll` of 0. On the RTX 5090 machine
+this takes about 0.6 s for a 4-second clip and 1.2 s for a 17-second one at
+1080p; `--encoder h264_nvenc` is about as fast there and helps more on 4K.
+`--cut fast` copies the stream: about 0.15 s per clip, in the recording's own
+codec. A fast clip file begins at the keyframe before the hit; `preroll` is the
+seconds to skip, which TouchDesigner must trim since it ignores the MP4 edit
+list that hides them from other players. With OBS's default 10-second keyframe
+interval that is up to 10 s of frames TouchDesigner decodes on every start and
+loop, and its players then show black or a held frame. Clips cover exactly the range WISE returned,
 are written to `data/clips/<project>/`, and are reused when a later search finds
 the same moment. Each clip is announced as soon as it is written, best result
-first. The WISE server must be running, since clips are read through it.
+first. Clips are cut from the recordings on disk, at the paths the WISE project
+registered. Where a recording isn't on this machine, it is read through the WISE
+server instead, which is much slower.
 
 ffmpeg is taken from PATH or the `wise` conda environment. Overrides:
 `APOLLON_FFMPEG_EXE`, `APOLLON_CLIPS_DIR`, `APOLLON_TD_HOST`, `APOLLON_TD_PORT`.

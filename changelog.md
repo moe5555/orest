@@ -6,6 +6,46 @@ referenced below.
 
 ---
 
+## 2026-10-08 — Search clips are cut from disk, not through WISE (VSH-ARLT-5090)
+
+Pointed out by Moe: body search results reached TouchDesigner slowly, with a
+long wait before the first clip and between each following one. Concerns the
+HITS → CUT step of the RENDER graph in `knowledge/source_of_truth/pipeline.md`.
+
+**Cause.** Clips were read through WISE's media route (2026-09-17 entry, "Clips
+are read through WISE's media route"). On the `HITL_Database` recordings (1080p
+OBS MP4, AAC audio) ffmpeg seeks between audio and video samples hundreds of
+times per clip, and each seek is a new HTTP request: 316 for one four-second
+clip. Without audio the same cut took 0.2 s. The server itself serves a range
+at 1.2 GB/s. Keeping the connection open (`-multiple_requests 1`) changed
+nothing.
+
+| Fast cut, `2026-10-05 12-44-18.mp4` | Through WISE | From disk |
+|---|---|---|
+| 4 s hit, 23.5 MB | 3.4 s | 0.15 s |
+| 84 s merged hit, 274 MB | 28.5 s | 0.3 s |
+
+**Change.** `clips.recording_paths()` reads each recording's path from the
+project's `metadata/internal.db` (source collection folder + media path), as
+`src/scripts/export_pose_reference.py` already does, and `clips.source()` hands
+ffmpeg that file. The media route remains the fallback when the database or the
+file isn't on this machine. Five real clips now arrive 0.6 s apart. About 0.4 s
+of that is the `ffprobe` call reading each clip's preroll. 604 tests pass, 5 of
+them new.
+
+**Precise clips are now the default for TouchDesigner.** One of the three
+players in `Apollon_TD_New.toe` regularly showed black or a held frame. The
+`HITL_Database` recordings have a keyframe every 10 s (OBS default), so fast
+clips carry a median 4 s and up to 8 s of preroll, and a short clip holds a
+single keyframe. TouchDesigner decodes from it to Trim Start on every start and
+loop, and frames that exceed its Frame Read Timeout are skipped. With
+`--cut precise` the effect disappeared (confirmed by Moe), so `--send-td`
+without `--cut` now re-encodes (`main.TD_CUT`): 0.6 s for a 4 s clip, 1.2 s for
+a 17 s clip on this machine. `--cut fast` stays available. With a 1–2 s
+keyframe interval set in OBS, it would be usable for future recordings.
+
+---
+
 ## 2026-10-07 — Vorhersehbarkeit measured against the rehearsal corpus (VSH-ARLT-5090)
 
 Requested by Moe. Vorhersehbar in `02_processing.md` (Realtime-SITREP,
