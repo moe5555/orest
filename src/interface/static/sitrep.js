@@ -165,9 +165,7 @@ function renderEmpfehlung(empfehlung, laeuft, fehler) {
   $("empfehlung-anlass").textContent = `Anlass: ${empfehlung.anlass}`;
 }
 
-// Strongest first; people measured at 0 on everything share one line, since
-// on footage without a cast the same performer can appear under several
-// guessed names.
+// Strongest first; people measured at 0 on everything share one line.
 function renderLivePersonen(werte) {
   const list = $("live-personen");
   const strength = (person) => Math.max(...LIVE_RATINGS.map((name) => person[name] ?? 0));
@@ -322,7 +320,6 @@ function gemessenCard(handlung) {
 function personCard(person) {
   const card = el("div", "person");
   const title = el("h3", null, person.name);
-  if (person.vermutet) title.append(el("span", "guess", "vermutet"));
   card.append(title);
   if (person.beschreibung) card.append(el("p", null, person.beschreibung));
   const ratings = el("div", "ratings");
@@ -532,7 +529,7 @@ function render(snapshot) {
        quelle.aktionen ? "Aktionserkennung an" : "Aktionserkennung aus",
        quelle.auto_empfehlung ? "Empfehlung bei Alarm" : "Empfehlung nur auf E",
        quelle.besetzung.length ? `Besetzung: ${quelle.besetzung.join(", ")}`
-                               : "ohne Besetzung, Namen vermutet"].join(" · ")
+                               : "ohne Besetzung, niemand erkannt"].join(" · ")
     : "";
 
   const active = running || status === "starting";

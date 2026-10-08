@@ -135,10 +135,9 @@ def test_a_probability_is_a_percentage():
 def test_the_schema_limits_names_to_those_present():
     """The grammar is what stops the model inventing a name, so the list it is
     given must be exactly who is present, plus the one fallback."""
-    anwesend = [report.Anwesend(name="Klara", erkannt=True),
-                report.Anwesend(name="Vielleicht: Jakob", erkannt=False)]
+    anwesend = [report.Anwesend(name="Klara"), report.Anwesend(name="Jakob")]
     names = report.schema(anwesend)["$defs"]["Person"]["properties"]["name"]["enum"]
-    assert names == ["Klara", "Vielleicht: Jakob", report.UNBEKANNT]
+    assert names == ["Klara", "Jakob", report.UNBEKANNT]
 
 
 def test_with_nobody_present_the_only_name_is_unbekannt():
@@ -149,12 +148,6 @@ def test_with_nobody_present_the_only_name_is_unbekannt():
 def test_the_schema_asks_for_exactly_three_forecasts():
     prognose = report.schema()["properties"]["prognose"]
     assert prognose["minItems"] == prognose["maxItems"] == report.PROGNOSEN
-
-
-def test_sitrep_marks_only_recognised_names_as_recognised(sitrep):
-    assert sitrep.erkannt("Klara")
-    assert not sitrep.erkannt("Vielleicht: Jakob")
-    assert not sitrep.erkannt(report.UNBEKANNT)
 
 
 def test_transcript_is_carried_verbatim(sitrep):
@@ -173,12 +166,10 @@ def test_prompt_marks_silence_rather_than_leaving_it_blank():
     assert "(keine Sprache erkannt)" in report._prompt(report.ANWEISUNG, "")
 
 
-def test_prompt_lists_who_is_present_and_how_certain_the_name_is():
+def test_prompt_lists_who_is_present():
     prompt = report._prompt(report.ANWEISUNG, "",
-                            [report.Anwesend(name="Klara", erkannt=True),
-                             report.Anwesend(name="Vielleicht: Jakob", erkannt=False)])
-    assert "- Klara (erkannt)" in prompt
-    assert "- Vielleicht: Jakob (vermutet)" in prompt
+                            [report.Anwesend(name="Klara"), report.Anwesend(name="Jakob")])
+    assert "Anwesenheitsliste:\n- Klara\n- Jakob" in prompt
 
 
 def test_prompt_tells_the_model_where_the_names_are_and_the_threshold():
@@ -228,7 +219,7 @@ def test_a_report_asked_for_reads_the_chronik_and_the_last_lines(monkeypatch, be
 
     monkeypatch.setattr(report, "analyse", analyse)
     lines = [line("Du lügst.", 10), line("Raus hier!", 20, name=None, lautstaerke="geschrien")]
-    anwesend = [report.Anwesend(name="Klara", erkannt=True)]
+    anwesend = [report.Anwesend(name="Klara")]
 
     document = report.bericht(beginn=T0, ende=T0 + timedelta(seconds=300), frames=[b"a", b"b"],
                               aeusserungen=lines, anwesend=anwesend,
@@ -316,5 +307,5 @@ def test_a_line_that_stood_out_is_marked_for_the_model():
 def test_the_schema_lists_each_person_at_most_once():
     """Without the cap the model was seen to list "Unbekannt" until the token
     cap cut the reply off."""
-    anwesend = [report.Anwesend(name="Klara", erkannt=True)]
+    anwesend = [report.Anwesend(name="Klara")]
     assert report.schema(anwesend)["properties"]["personen"]["maxItems"] == 2

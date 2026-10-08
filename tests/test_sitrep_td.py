@@ -123,10 +123,12 @@ def test_rows_are_numbered_from_one_in_document_order(sitrep):
         person.name for person in sitrep.bericht.personen]
 
 
-def test_a_person_row_marks_a_guessed_name(sitrep):
-    """A guess is not a recognition, as on the roster."""
-    rows = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_PERSON)
-    assert [row[3] for row in rows] == [0, 1]
+def test_a_person_row_marks_only_unbekannt_as_not_recognised(sitrep):
+    unbekannt = report.Person(name=report.UNBEKANNT, beschreibung="")
+    document = sitrep.model_copy(update={"bericht": sitrep.bericht.model_copy(update={
+        "personen": [*sitrep.bericht.personen, unbekannt]})})
+    rows = only(sitrep_td.messages(document, 1), sitrep_td.SITREP_PERSON)
+    assert [row[3] for row in rows] == [0, 0, 1]
 
 
 def test_forecasts_are_ranked_most_likely_first(sitrep):
@@ -191,7 +193,7 @@ def test_the_transcript_is_sent_even_when_nothing_was_said(sitrep):
 def person(label="klara", name="klara", similarity=0.72, sightings=9,
            seconds=4.0) -> presence.Presence:
     return presence.Presence(
-        label=label, name=name, guess="Vielleicht: Jakob", similarity=similarity,
+        label=label, name=name, similarity=similarity,
         sightings=sightings, first_seen=AT, last_seen=AT + timedelta(seconds=seconds))
 
 
@@ -216,14 +218,11 @@ def test_a_recognised_person_carries_their_name():
     assert arguments[4] == 0
 
 
-def test_a_guessed_person_is_marked_and_carries_no_name():
-    """A guess is not a recognition, and TouchDesigner sets the two apart."""
-    guessed = person(label="Vielleicht: Jakob", name=None, similarity=0.0)
-    arguments = only(sitrep_td.roster_messages([guessed], 1, AT),
-                     sitrep_td.PRESENCE_PERSON)[0]
-    assert arguments[2] == "Vielleicht: Jakob"
-    assert arguments[3] == ""
-    assert arguments[4] == 1
+def test_an_unrecognised_face_is_left_off_the_roster():
+    unrecognised = person(label="#4", name=None, similarity=0.0)
+    built = sitrep_td.roster_messages([person(), unrecognised], 1, AT)
+    assert only(built, sitrep_td.PRESENCE_BEGIN)[0][2] == 1
+    assert [arguments[2] for arguments in only(built, sitrep_td.PRESENCE_PERSON)] == ["klara"]
 
 
 def test_a_roster_row_carries_how_long_the_person_has_been_seen():

@@ -94,7 +94,7 @@ def test_a_threat_raises_risiko_above_a_calm_body(sitrep):
 def test_speech_alone_gives_a_person_measured_ratings(sitrep):
     """Jakob's body was never read; what he said still counts, clipped to 0-5."""
     document = sitrep.model_copy(update={"aeusserungen": [
-        line("Vielleicht: Jakob", "Beruhig dich.", begruendung="Beruhigt.", risiko=-2,
+        line("Jakob", "Beruhig dich.", begruendung="Beruhigt.", risiko=-2,
              menschlichkeit=2)]})
     jakob = document.bericht.personen[1]
     assert document.bewertungen(jakob)["risiko"] == 0

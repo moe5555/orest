@@ -150,7 +150,7 @@ m.handle('/apollon/sitrep/begin', ['t1', 1, '2026-09-25T12:00:00', '2026-09-25T1
 m.handle('/apollon/sitrep/verlauf', ['t1', 'Ruhiger Beginn, seit 12:00 Streit.'])
 m.handle('/apollon/sitrep/beschreibung', ['t1', 'Testbericht.'])
 m.handle('/apollon/sitrep/gesagt', ['t1', ''])
-m.handle('/apollon/sitrep/person', ['t1', 1, 'Vielleicht: Jakob', 1, 'Steht mittig.', 3, 4, 2, 3, 0])
+m.handle('/apollon/sitrep/person', ['t1', 1, 'Unbekannt', 1, 'Steht mittig.', 3, 4, 2, 3, 0])
 m.handle('/apollon/sitrep/szene', ['t1', 5, 7, 2])
 m.handle('/apollon/sitrep/prognose', ['t1', 1, 60, 'Fortsetzung.'])
 m.handle('/apollon/sitrep/prognose', ['t1', 2, 30, 'Abgang.'])
@@ -211,9 +211,9 @@ uv run apollon-sitrep --send-ndi --send-td --model gemma4:26b --cast data/cast  
   `Unbekannt`, for someone in frame whose face wasn't tracked. Apollon draws
   each name above its face in the frames the model sees, so the model reads
   who is who. The NDI picture in TouchDesigner stays unmarked.
-- **`vermutet = 1` means not recognised.** In `sitrep_personen` it marks a
-  guessed name (`Vielleicht: Jakob`) or `Unbekannt`. In `presence` it marks a
-  guessed name, and `name` is then empty.
+- **`vermutet = 1` means not recognised.** In `sitrep_personen` it marks
+  `Unbekannt`. `presence` lists recognised cast members only, so it is 0
+  there.
 - **Forecasts are ranked.** `sitrep_prognose` always has three rows, `rang` 1
   being the most likely. Apollon sorts them, so the order doesn't depend on how
   the model listed them.

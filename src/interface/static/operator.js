@@ -79,7 +79,7 @@ function renderCasts() {
   const selected = selection?.cast;
   if (selected && !listed.some((cast) => cast.path === selected.path)) listed.push(selected);
   select.replaceChildren(
-    option("Ohne Besetzung: Namen werden vermutet", ""),
+    option("Ohne Besetzung: niemand wird erkannt", ""),
     ...listed.map((cast) => option(`${cast.label} · ${cast.names.join(", ")}`, cast.path)),
   );
   select.value = selected?.path ?? "";

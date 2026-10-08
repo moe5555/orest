@@ -228,7 +228,7 @@ class Chronik:
             lines = [line for line in self._zeilen if beginn < line.ende <= now]
         abschnitt = Abschnitt(
             beginn=beginn, ende=now,
-            anwesend=[report.Anwesend(name=person.label, erkannt=person.known)
+            anwesend=[report.Anwesend(name=person.label)
                       for person in (self._roster(beginn, now) if self._roster else [])],
             handlungen=self._handlungen(beginn, now) if self._handlungen else [],
             aeusserungen=lines)

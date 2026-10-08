@@ -28,8 +28,9 @@ measured (no reference built, or the person never classified alone).
 `begin` carries the row counts so TouchDesigner can size its tables before the
 rows arrive, as `/apollon/results/begin` does for a search. The report id tells
 one report's rows from the previous report's. Forecasts arrive most likely
-first, `rang` 1 being the most likely. `vermutet` and `einschreiten` are 0 or
-1; `einschreiten` is 1 when the scene's `eskalation` or `gefahr` exceeds
+first, `rang` 1 being the most likely. `vermutet` is 1 for Unbekannt and 0
+for a name, since every name is a recognised cast member. `einschreiten` is 0
+or 1, and 1 when the scene's `eskalation` or `gefahr` exceeds
 report.SCHWELLE, and `massnahme` is empty otherwise.
 
 The roster is a second, faster stream. It is not folded into the report
@@ -151,7 +152,7 @@ def messages(document: report.Sitrep, nummer: int,
                    else NICHT_GEMESSEN
                    for rating, value in document.bewertungen(person).items()]
         built.append((SITREP_PERSON, [sitrep_id, zeile, person.name,
-                                      int(not document.erkannt(person.name)),
+                                      int(person.name == report.UNBEKANNT),
                                       person.beschreibung, *ratings]))
 
     szene = bericht.szene
@@ -170,11 +171,14 @@ def messages(document: report.Sitrep, nummer: int,
 
 def roster_messages(roster: list[presence.Presence], tick: int,
                     at: datetime) -> list[Message]:
-    """One reading of who is in the room."""
+    """One reading of who is in the room: the cast members recognised.
+
+    `name` equals `label` and `vermutet` is 0; both columns are kept so the
+    tables in TouchDesigner keep their layout.
+    """
+    roster = [person for person in roster if person.known]
     built = [(PRESENCE_BEGIN, [tick, _clock(at), len(roster)])]
     for zeile, person in enumerate(roster, start=1):
-        # A guessed name is not a recognition, and TouchDesigner should be able
-        # to set the two differently: `name` is empty unless the cast matched.
         built.append((PRESENCE_PERSON, [
             tick, zeile, person.label, person.name or "", int(not person.known),
             person.similarity, person.sightings, _clock(person.first_seen),

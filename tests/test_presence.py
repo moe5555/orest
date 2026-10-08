@@ -71,9 +71,10 @@ def test_a_track_keeps_the_box_of_its_latest_sighting():
     assert touched[0].box.tolist() == [100, 0, 150, 50]
 
 
-def test_naming_a_frame_pairs_each_face_with_its_track_label(monkeypatch):
+def test_naming_a_frame_pairs_each_recognised_face_with_its_name(monkeypatch):
     """name_faces is what annotate.py draws, so each box must carry the name
-    of the track its face joined, in detection order."""
+    of the track its face joined, in detection order. An unrecognised face is
+    left unnamed."""
     subject = tracker(cast_of("klara"))
     faces = [Face(bbox=(0, 0, 50, 50)), Face(bbox=(100, 0, 150, 50))]
     monkeypatch.setattr(presence.detect, "detect", lambda frame, size: faces)
@@ -82,45 +83,36 @@ def test_naming_a_frame_pairs_each_face_with_its_track_label(monkeypatch):
 
     named = subject.name_faces(np.zeros((200, 200, 3), dtype=np.uint8))
 
-    assert [box.tolist() for box, _ in named] == [[0, 0, 50, 50], [100, 0, 150, 50]]
-    assert named[0][1] == "klara"
-    assert named[1][1].startswith(presence.UNSURE)
+    assert [(box.tolist(), name) for box, name in named] == [([0, 0, 50, 50], "klara")]
     assert subject.passes == 1
 
 
 def test_each_new_face_starts_its_own_track():
     subject = tracker()
     touched = pass_of(subject, [unit((0, 1.0)), unit((1, 1.0))])
-    assert len({track.guess for track in touched}) == 2
+    assert len({track.key for track in touched}) == 2
 
 
-def test_an_unrecognised_face_is_guessed_at_rather_than_numbered():
+def test_an_unrecognised_face_carries_a_key_and_no_name():
     subject = tracker(cast_of("klara"))
     track = pass_of(subject, [unit((6, 1.0))])[0]
     assert track.name is None
-    assert track.guess.startswith(presence.UNSURE)
-    assert track.guess.removeprefix(presence.UNSURE).strip() in presence.NAMES
-    assert track.label == track.guess
+    assert presence.unnamed(track.label)
+    assert track.label == track.key
 
 
-def test_a_guess_holds_for_the_life_of_the_track():
+def test_a_key_holds_for_the_life_of_the_track():
     subject = tracker()
     first = pass_of(subject, [unit((0, 1.0))])[0]
-    guess = first.guess
+    key = first.key
     pass_of(subject, [unit((0, 1.0))], at=START + timedelta(seconds=1))
-    assert first.guess == guess
+    assert first.key == key
 
 
-def test_two_people_are_never_guessed_at_alike_at_once():
-    subject = tracker()
-    touched = pass_of(subject, [unit(*[(index, 1.0)]) for index in range(8)])
-    assert len({track.guess for track in touched}) == 8
-
-
-def test_a_guess_gives_way_to_the_real_name():
+def test_a_key_gives_way_to_the_real_name():
     subject = tracker()
     track = pass_of(subject, [unit((0, 1.0))])[0]
-    assert track.label == track.guess
+    assert track.label == track.key
 
     subject.cast = cast_of("klara")
     pass_of(subject, [unit((0, 1.0))], at=START + timedelta(seconds=1))
@@ -266,7 +258,7 @@ def test_the_roster_reports_everyone_currently_tracked():
     roster = subject.roster()
     assert [person.known for person in roster] == [True, False]
     assert roster[0].label == "klara"
-    assert roster[1].label.startswith(presence.UNSURE)
+    assert presence.unnamed(roster[1].label)
 
 
 def test_the_roster_excludes_people_who_left_before_the_window():
@@ -275,7 +267,7 @@ def test_the_roster_excludes_people_who_left_before_the_window():
     window = START + timedelta(seconds=10)
     pass_of(subject, [unit((5, 1.0))], at=window)
     roster = subject.roster(since=window)
-    assert [person.guess for person in roster] == [subject._tracks[-1].guess]
+    assert [person.label for person in roster] == [subject._tracks[-1].key]
 
 
 def test_the_roster_clips_times_to_the_window_it_reports_on():
@@ -293,7 +285,7 @@ def test_the_roster_is_ordered_by_first_appearance():
     subject = tracker()
     pass_of(subject, [unit((3, 1.0))])
     pass_of(subject, [unit((3, 1.0)), unit((0, 1.0))], at=START + timedelta(seconds=1))
-    assert [person.guess for person in subject.roster()] == [track.guess for track in subject._tracks]
+    assert [person.label for person in subject.roster()] == [track.key for track in subject._tracks]
 
 
 def test_every_face_reaches_the_roster_at_once():
@@ -343,7 +335,7 @@ def test_two_tracks_that_turn_out_to_be_one_person_are_merged():
     assert len(subject._tracks) == 1
     survivor = subject._tracks[0]
     assert survivor is first
-    assert survivor.guess == first.guess
+    assert survivor.key == first.key
     assert survivor.sightings == 2
     assert survivor.similarity == 0.7
     assert survivor.last_seen == second.last_seen
@@ -376,10 +368,10 @@ def test_a_replay_starting_at_the_beginning_can_age_its_tracks(tmp_path):
 UNKNOWN = unit((5, 1.0))
 
 
-def test_a_taught_name_replaces_a_guess_for_good():
+def test_a_taught_name_replaces_a_key_for_good():
     subject = tracker(cast_of("klara", "moritz"))
     track = pass_of(subject, [UNKNOWN])[0]
-    assert presence.guessed(track.label)
+    assert presence.unnamed(track.label)
 
     assert subject.teach(track.label, "moritz") is not None
     # The same person, now also resembling another cast member.
@@ -404,9 +396,9 @@ def test_a_lesson_taken_back_is_forgotten():
     lesson = subject.teach(track.label, "moritz")
 
     subject.unteach(lesson)
-    assert presence.guessed(track.label)
+    assert presence.unnamed(track.label)
     later = START + timedelta(seconds=presence.FORGET + 5)
-    assert presence.guessed(pass_of(subject, [UNKNOWN], at=later)[0].label)
+    assert presence.unnamed(pass_of(subject, [UNKNOWN], at=later)[0].label)
     assert subject.cast.names == ["klara"]
 
 
@@ -421,7 +413,7 @@ def test_a_face_can_be_taught_without_an_enrolled_cast():
 def test_teaching_a_label_no_track_carries_does_nothing():
     subject = tracker(cast_of("klara"))
     pass_of(subject, [UNKNOWN])
-    assert subject.teach("Vielleicht: Niemand", "klara") is None
+    assert subject.teach("#999", "klara") is None
 
 
 def test_a_lesson_learns_the_clearer_faces_its_track_sees_later():

@@ -52,7 +52,7 @@ def test_block_omits_the_transcript_when_nothing_was_said(sitrep):
 
 def test_block_lists_every_person_with_every_rating(sitrep):
     block = main.format_sitrep(sitrep, use_colour=False)
-    assert "Klara" in block and "Vielleicht: Jakob" in block
+    assert "Klara" in block and "Jakob" in block
     for name in ("risiko", "menschlichkeit", "vorhersehbarkeit"):
         assert name in block
 
@@ -67,21 +67,6 @@ def test_block_names_the_action_behind_a_measured_rating(sitrep):
     assert "menschlichkeit: hugging other person 0.81" in block
     # A rating of 0 has no cause to show.
     assert "risiko:" not in block
-
-
-def test_block_marks_a_guessed_name_and_not_a_recognised_one(sitrep):
-    lines = main.format_sitrep(sitrep, use_colour=False).splitlines()
-    assert any(line.rstrip().endswith("Vielleicht: Jakob (vermutet)") for line in lines)
-    assert not any("Klara (vermutet)" in line for line in lines)
-
-
-def test_block_does_not_call_an_unknown_person_a_guess(sitrep):
-    bericht = sitrep.bericht.model_copy(update={"personen": [
-        sitrep.bericht.personen[0].model_copy(update={"name": report.UNBEKANNT})]})
-    block = main.format_sitrep(sitrep.model_copy(update={"bericht": bericht}),
-                               use_colour=False)
-    assert "Unbekannt" in block
-    assert "(vermutet)" not in block
 
 
 def test_block_shows_the_forecasts_most_likely_first_with_percentages(sitrep):

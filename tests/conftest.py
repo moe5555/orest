@@ -18,7 +18,7 @@ def bericht() -> report.Lagebericht:
                 beschreibung="Dunkles Hemd, kurze Haare, steht mittig, zugewandt",
             ),
             report.Person(
-                name="Vielleicht: Jakob",
+                name="Jakob",
                 beschreibung="Sitzt am Tisch, notiert",
             ),
         ],
@@ -53,8 +53,8 @@ def sitrep(bericht) -> report.Sitrep:
         quelle=report.Quelle(bilder=2, abschnitte=4, woertlich_s=12.5),
         gesagt="Noch einmal von vorne, bitte.",
         anwesend=[
-            report.Anwesend(name="Klara", erkannt=True),
-            report.Anwesend(name="Vielleicht: Jakob", erkannt=False),
+            report.Anwesend(name="Klara"),
+            report.Anwesend(name="Jakob"),
         ],
         # Klara's body was read; Jakob's face was seen without it.
         handlungen=[

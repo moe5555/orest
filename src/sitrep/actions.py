@@ -14,10 +14,10 @@ face box the presence tracker saw within FACE_AGE seconds is sighted as that
 face's name. A body's cast name is weighed on its sightings rather than taken
 from the latest: each sighting is a vote, votes fade with VOTE_HALF_LIFE, and
 another cast name replaces the one a body carries only once it leads by SWITCH
-votes. A single wrong face, a face track split by a turned head, or a guess
-at an unrecognised face therefore does not rename a body the cast gallery
-has named; a body the tracker has confused with another person is renamed
-within a few seconds. A guess names a body only while no cast name does.
+votes. A single wrong face, a face track split by a turned head, or an
+unrecognised face therefore does not rename a body the cast gallery has
+named; a body the tracker has confused with another person is renamed within
+a few seconds. A body with no cast name is labelled "Körper <id>".
 A cast name belongs to one body in view, the one that holds it unless
 another leads it by SWITCH votes for that name. A body that has left the
 frame keeps its name for what it did while it was there, so a camera cut or a
@@ -274,14 +274,12 @@ class ActionRatings:
         self._faces = faces
         self._names: dict[int, str] = {}
         # Per body, in recogniser time: votes for each cast name, when they
-        # were last faded, the latest guess a face sighting made, and when a
-        # face was last sighted on it.
+        # were last faded, and when a face was last sighted on it.
         self._votes: dict[int, dict[str, float]] = {}
         self._voted_at: dict[int, float] = {}
-        self._guesses: dict[int, str] = {}
         self._sighted_at: dict[int, float] = {}
-        # Per body: the face label last sighted on it, and the name the
-        # operator gave it.
+        # Per body: the face label (cast name or track key) last sighted on
+        # it, and the name the operator gave it.
         self._faces_seen: dict[int, str] = {}
         self._pinned: dict[int, str] = {}
         # Per body named by hand: the face lying on it, and in how many
@@ -379,7 +377,7 @@ class ActionRatings:
             self._steady.pop(track, None)
             if name is None:
                 self._pinned.pop(track, None)
-                # The next naming pass names it from its votes or guess again.
+                # The next naming pass names it from its votes again.
                 self._names.pop(track, None)
             else:
                 for other in [other for other, pinned in self._pinned.items()
@@ -407,8 +405,7 @@ class ActionRatings:
             active = {member for record in self._records if since < record.at <= until
                       for member in record.members}
             return sorted({name for track, name in self._names.items()
-                           if (track in active or track in in_view)
-                           and not presence.guessed(name)})
+                           if track in active or track in in_view})
 
     def _on_readings(self, readings: list[recognizer.Reading]):
         # Runs on the recogniser's thread between two of its frames, so its
@@ -483,8 +480,9 @@ class ActionRatings:
                         learned.append((track, label, pinned))
                 else:
                     self._steady.pop(track, None)
-                if presence.guessed(label):
-                    self._guesses[track] = label
+                # An unrecognised face names no body; it is kept above only
+                # so a hand-given name can teach the face tracker.
+                if presence.unnamed(label):
                     continue
                 if track not in self._votes:
                     self._votes[track] = {}
@@ -514,8 +512,6 @@ class ActionRatings:
                     self._names[track] = self._pinned[track]
                 elif cast is not None and cast not in pinned:
                     self._names[track] = cast
-                elif track in self._guesses:
-                    self._names[track] = self._guesses[track]
                 elif track in self._votes:
                     # Its cast name went to another body in view.
                     self._names.pop(track, None)
@@ -580,10 +576,10 @@ class ActionRatings:
                     chosen[track] = None
 
     def _drop_stale_votes(self, frame: tracking.Frame):
-        """Forget the votes and guess of bodies unsighted and out of view for VOTES_KEPT."""
+        """Forget the votes of bodies unsighted and out of view for VOTES_KEPT."""
         for track in [track for track, at in self._sighted_at.items()
                       if track not in frame.bodies and frame.at - at > VOTES_KEPT]:
-            for kept in (self._sighted_at, self._votes, self._voted_at, self._guesses,
+            for kept in (self._sighted_at, self._votes, self._voted_at,
                          self._faces_seen, self._face_sure):
                 kept.pop(track, None)
 
@@ -620,7 +616,6 @@ class ActionRatings:
             self._names = {}
             self._votes = {}
             self._voted_at = {}
-            self._guesses = {}
             self._sighted_at = {}
             self._faces_seen = {}
             self._pinned = {}

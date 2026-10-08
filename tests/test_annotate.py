@@ -56,7 +56,7 @@ def test_a_name_with_umlauts_is_drawn():
 
 def test_a_tag_near_the_right_edge_stays_inside_the_frame():
     original = frame()
-    marked = annotate.draw_names(original, [(box(600, 150, 639, 220), "Vielleicht: Valentina")])
+    marked = annotate.draw_names(original, [(box(600, 150, 639, 220), "Valentina Hoffmann")])
     assert changed(original, marked)[:150, :600].any()
 
 

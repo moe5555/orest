@@ -357,7 +357,7 @@ def test_ratings_are_drawn_beside_the_recognised_people_in_view(monkeypatch, run
     bodies without a cast name carry no values."""
     boxes = [np.array([10 * i, 10, 10 * i + 8, 90]) for i in range(4)]
     run.actions = SimpleNamespace(visible=lambda: list(zip(
-        boxes, ["Klara", "Orest", "Körper 7", "Vielleicht: Ida"])))
+        boxes, ["Klara", "Orest", "Körper 7", "Körper 8"])))
     run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Klara", "Orest"]))
     drawn = []
     monkeypatch.setattr(live_module.annotate, "draw_ratings",
@@ -376,7 +376,7 @@ def test_ratings_are_drawn_beside_the_recognised_people_in_view(monkeypatch, run
         ("Orest", [("Risiko", 0, "calm"), ("Menschlichkeit", 0, "calm"),
                    ("Vorhersehbarkeit", 0, "calm")]),
         ("Körper 7", []),
-        ("Vielleicht: Ida", []),
+        ("Körper 8", []),
     ]
 
 
@@ -490,17 +490,11 @@ def test_the_video_feed_ends_when_the_viewer_leaves(live, run):
     assert asyncio.run(asyncio.wait_for(watch(), timeout=5)) == []
 
 
-def test_the_page_payload_marks_guessed_names_only(sitrep):
-    guessed = report.Person(name=report.UNBEKANNT, beschreibung="", auffaelligkeit=0)
-    document = sitrep.model_copy(update={"bericht": sitrep.bericht.model_copy(update={
-        "personen": [*sitrep.bericht.personen, guessed]})})
-
-    rendered = live_module.payload(document, 3)
+def test_the_page_payload_carries_the_number_and_threshold(sitrep):
+    rendered = live_module.payload(sitrep, 3)
 
     assert rendered["nummer"] == 3
     assert rendered["schwelle"] == report.SCHWELLE
-    assert [person["vermutet"] for person in rendered["bericht"]["personen"]] == [
-        False, True, False]
     assert "einschreiten" in rendered["bericht"]
 
 

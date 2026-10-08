@@ -154,11 +154,7 @@ def format_sitrep(document: report.Sitrep, width=78, use_colour=True) -> str:
 
     personen = []
     for person in bericht.personen:
-        # A recognised name stands alone; a guessed one is marked as such.
-        name = _paint(person.name, "bold", use_colour)
-        if person.name != report.UNBEKANNT and not document.erkannt(person.name):
-            name += _paint(" (vermutet)", "dim", use_colour)
-        personen.append(name)
+        personen.append(_paint(person.name, "bold", use_colour))
         personen += [f"  {line}" for line in _wrap(person.beschreibung, value_width - 2)]
         personen += [f"  {line}" for line in _bewertungen(
             document.bewertungen(person), value_width - 2, use_colour)]
@@ -338,7 +334,7 @@ def main(argv=None) -> int:
     parser.add_argument("--model", default=report.MODEL)
     parser.add_argument("--cast", type=pathlib.Path,
                         help="folder of enrolment images; recognises the cast by "
-                             "name, everyone else is given a guessed name")
+                             "name, everyone else is reported as Unbekannt")
     parser.add_argument("--audio-ndi", metavar="SOURCE",
                         help="take the sound from this NDI source instead of a "
                              'microphone, e.g. "VSH-ARLT-5090 (OBS PGM)"')

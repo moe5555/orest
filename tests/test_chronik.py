@@ -75,7 +75,7 @@ def test_an_abschnitt_holds_what_its_stretch_held(asked):
     span = (T0, T0 + timedelta(seconds=30))
     assert seen == {"roster": span, "handlungen": span, "bilder": (*span, chronik.BILDER)}
     assert [spoken.text for spoken in abschnitt.aeusserungen] == ["Du lügst."]
-    assert abschnitt.anwesend == [report.Anwesend(name="Klara", erkannt=True)]
+    assert abschnitt.anwesend == [report.Anwesend(name="Klara")]
     assert abschnitt.bilder == 2
     assert abschnitt.zusammenfassung.szene.eskalation == 3
     prompt = asked[0]["messages"][0]["content"]

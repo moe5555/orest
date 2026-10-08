@@ -82,14 +82,14 @@ def test_only_risiko_that_points_to_danger_is_amplified():
 
 def test_a_loud_line_raises_its_speakers_risiko(sitrep):
     at = sitrep.zeitfenster.beginn
-    shouted = report.Aeusserung(name="Vielleicht: Jakob", text="Ich hasse dich.", beginn=at,
+    shouted = report.Aeusserung(name="Jakob", text="Ich hasse dich.", beginn=at,
                                 ende=at, begruendung="Hass.", risiko=3, menschlichkeit=-3,
                                 verstaerkung=1.5)
     document = sitrep.model_copy(update={"aeusserungen": [shouted]})
-    value, cause = document.bewertung("Vielleicht: Jakob", "risiko")
+    value, cause = document.bewertung("Jakob", "risiko")
     assert value == 5 and cause.endswith("laut ×1.5")
     # Menschlichkeit is left as the model read it.
-    assert document.bewertung("Vielleicht: Jakob", "menschlichkeit")[0] == 0
+    assert document.bewertung("Jakob", "menschlichkeit")[0] == 0
 
 
 def test_a_loud_moment_raises_the_risiko_of_an_action_in_it():

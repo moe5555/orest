@@ -6,6 +6,31 @@ referenced below.
 
 ---
 
+## 2026-10-08 — No more guessed names: cast name or Körper (VSH-ARLT-5090)
+
+Requested by Moe, for the live SITREP (`03_render.md`, "Live SITREP"; "who is
+in the scene" in `02_processing.md`). A person is either recognised as a cast
+member or labelled by their body, `Körper <id>`. The invented
+`Vielleicht: <Name>` guesses (2026-09-24) are gone.
+
+- **Face tracker** (`presence.py`). An unrecognised track carries no name,
+  only a key (`#7`, `presence.UNNAMED`). It still lets the operator's naming
+  by hand teach that face (`teach`). The key is never shown: the model's
+  frames tag recognised faces only (`name_faces`).
+- **Bodies** (`actions.py`). An unrecognised face no longer names a body. The
+  body stays `Körper <id>` until a cast name is voted onto it or given by hand.
+- **Report and roster.** Only recognised people are listed as present
+  (`session._roster`, `td.roster_messages`), so the model calls everyone else
+  `Unbekannt`. `report.Anwesend.erkannt`, `Sitrep.erkannt` and the "vermutet"
+  marks on the page and the command line are removed. The OSC layout is
+  unchanged: `vermutet` is 1 only for `Unbekannt` in a report row and 0 on the
+  roster.
+- The Chronik now says e.g. "Körper 20 ist Lena" when the operator names a body.
+
+629 tests pass. Not yet checked live.
+
+---
+
 ## 2026-10-08 — Size limit for cut clips (VSH-ARLT-5090)
 
 Requested by Moe. Clips (`HITS → CUT` in `pipeline.md`) were never deleted:

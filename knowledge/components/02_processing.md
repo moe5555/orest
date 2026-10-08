@@ -24,6 +24,7 @@ Overview: components/pipeline.md
 - prioritises low latency over accuracy 
 - the system should be able to understand when it is spoken to. If the system is directly spoken to, e.g. via "System" or "Apollon", it should be able to react. 
 - hand gun detection. The system should recognize whether someone is holding a handgun. TBD how this effects the scene. 
+- per scene config. I
 
 Implementation Steps: 
 1. Install Gemma-4b and deploy via Ollama

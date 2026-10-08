@@ -276,8 +276,8 @@ def test_closing_twice_is_harmless(room):
 
 
 def test_faces_are_followed_with_or_without_a_cast(room, readers, tmp_path):
-    """Every person in a report carries a name, so the tracker runs on every
-    run; a cast only turns guesses into recognitions."""
+    """The tracker runs on every run, so faces can be named by hand even
+    without an enrolled cast."""
     video, audio, _, _, _ = room
     with session.Session(video, audio) as live:
         assert live.tracker is readers["tracker"]
@@ -377,10 +377,10 @@ def test_the_startup_lines_name_every_open_channel(room, readers, tmp_path, monk
     assert "klara" in described
 
 
-def test_the_startup_lines_say_when_every_name_will_be_a_guess(room, readers):
+def test_the_startup_lines_say_when_nobody_will_be_recognised(room, readers):
     video, audio, _, _, _ = room
     with session.Session(video, audio) as live:
-        assert "every name is a guess" in live.describe()
+        assert "nobody is recognised" in live.describe()
 
 
 def test_enrolment_images_without_a_face_are_reported(room, readers, tmp_path):
@@ -627,7 +627,7 @@ class FakeNaming:
 
     # actions.ActionRatings
     def names(self):
-        return {20: "Vielleicht: Helene"}
+        return {}
 
     def assign(self, body, name):
         self.given[body] = name
@@ -648,10 +648,11 @@ class FakeNaming:
         self.untaught.append(lesson)
 
     def roster(self, since=None, until=None):
-        return [presence.Presence("Alex", "Alex", "Vielleicht: Jonas", 0.6, 3, since, until)]
+        return [presence.Presence("Alex", "Alex", 0.6, 3, since, until),
+                presence.Presence("#4", None, 0.0, 2, since, until)]
 
 
-def naming_session(face="Vielleicht: Helene"):
+def naming_session(face="#3"):
     """A session reduced to what naming by hand reads, with a real Chronik."""
     naming = FakeNaming(face)
     run = object.__new__(session.Session)
@@ -666,8 +667,8 @@ def test_naming_a_body_teaches_its_face_and_tells_the_model():
     run, naming = naming_session()
     run.assign(20, "Lena")
     assert naming.given[20] == "Lena"
-    assert naming.taught == [("Vielleicht: Helene", "Lena")]
-    assert "Vielleicht: Helene ist Lena" in run.chronik.kontext()
+    assert naming.taught == [("#3", "Lena")]
+    assert "Körper 20 ist Lena" in run.chronik.kontext()
 
 
 def test_renaming_a_body_replaces_its_lesson_and_keeps_its_first_label():
@@ -675,7 +676,7 @@ def test_renaming_a_body_replaces_its_lesson_and_keeps_its_first_label():
     run.assign(20, "Lena")
     run.assign(20, "Alex")
     assert naming.untaught == [1]
-    assert run._zuordnungen() == ["Vielleicht: Helene ist Alex"]
+    assert run._zuordnungen() == ["Körper 20 ist Alex"]
 
 
 def test_releasing_a_body_takes_its_lesson_back():
@@ -698,7 +699,7 @@ def test_only_the_cast_can_be_assigned():
         run.assign(20, "Hamlet")
 
 
-def test_a_name_given_by_hand_may_appear_in_the_report():
+def test_a_name_given_by_hand_may_appear_in_the_report_and_an_unrecognised_face_does_not():
     run, _ = naming_session(face=None)
     run.assign(20, "Lena")
     now = datetime.now()
@@ -709,8 +710,8 @@ def test_a_name_given_by_hand_may_appear_in_the_report():
 def test_a_face_seen_later_on_a_named_body_is_learned():
     run, naming = naming_session(face=None)
     run.assign(20, "Lena")
-    run._learn(20, "Vielleicht: Rosa", "Lena")
-    assert naming.taught == [("Vielleicht: Rosa", "Lena")]
+    run._learn(20, "#5", "Lena")
+    assert naming.taught == [("#5", "Lena")]
 
     run.assign(20, None)
     assert naming.untaught == [1]
@@ -719,5 +720,5 @@ def test_a_face_seen_later_on_a_named_body_is_learned():
 def test_a_face_reported_after_the_name_changed_is_not_learned():
     run, naming = naming_session(face=None)
     run.assign(20, "Alex")
-    run._learn(20, "Vielleicht: Rosa", "Lena")
+    run._learn(20, "#5", "Lena")
     assert naming.taught == []

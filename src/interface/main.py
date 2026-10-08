@@ -42,7 +42,7 @@ def main(argv=None) -> int:
     parser.add_argument("--model", default=report.MODEL)
     parser.add_argument("--cast", type=pathlib.Path,
                         help="folder of enrolment images; recognises the cast by "
-                             "name, everyone else is given a guessed name")
+                             "name, everyone else is reported as Unbekannt")
     parser.add_argument("--audio-ndi", metavar="SOURCE",
                         help="take the sound from this NDI source instead of a "
                              'microphone, e.g. "VSH-ARLT-5090 (OBS PGM)"')

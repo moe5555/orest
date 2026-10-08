@@ -17,11 +17,10 @@ is already computed in order to identify the face. Box position links only the
 faces the embedding leaves unplaced, which are the turned, covered and badly
 lit views where the embedding is weakest.
 
-A track that matches the enrolled cast carries that name. Everyone else is
-guessed at: the system accounts for every person in the room, so an
-unrecognised face is given an invented name marked as a guess, rather than left
-as a number. The guess holds for as long as the track does, and gives way to
-the real name if the person is later recognised.
+A track that matches the enrolled cast carries that name. A track the cast
+gallery does not match carries no name, only a key (UNNAMED) by which the
+operator can name it. Unrecognised people are shown by their body instead
+("Körper <id>", actions.py) and reported as Unbekannt.
 
 The operator can name a track by hand (`teach`). The name is final for that
 track, and its faces join the cast gallery for the rest of the run, so the
@@ -41,7 +40,6 @@ import argparse
 import itertools
 import math
 import pathlib
-import random
 import sys
 import threading
 import time
@@ -85,25 +83,14 @@ PLACE_AGE = 2 * INTERVAL
 # after turning away for the rest of it.
 FORGET = 30.0
 
-# What an unrecognised person is called: a guess, marked as one. The names are
-# German first names of no particular person, drawn at random, and a guess
-# lasts only as long as the track — the same face seen again after an absence
-# is guessed at afresh.
-UNSURE = "Vielleicht:"
+# Prefix of the key an unrecognised track is held under ("#7"). The key
+# identifies the track for `teach` and is never shown as a name.
+UNNAMED = "#"
 
 
-def guessed(label: str) -> bool:
-    """Whether a label is a guess at an unrecognised person rather than a cast name."""
-    return label.startswith(UNSURE)
-
-
-NAMES = (
-    "Alma", "Anton", "Antonia", "Bastian", "Carla", "Elias", "Elisa", "Emil",
-    "Felix", "Frieda", "Greta", "Hedda", "Helene", "Ida", "Jakob", "Johanna",
-    "Jonas", "Jonathan", "Juno", "Kilian", "Lena", "Linus", "Lukas", "Marlene",
-    "Mathilda", "Matthias", "Nora", "Oskar", "Paul", "Rafael", "Rosa", "Simon",
-    "Sophie", "Theo", "Tobias", "Valentina", "Vincent", "Wilma",
-)
+def unnamed(label: str) -> bool:
+    """Whether a label is the key of an unrecognised track rather than a cast name."""
+    return label.startswith(UNNAMED)
 
 # Arbitrary reference a replay counts footage time from, so that a position in
 # a recording becomes a datetime the tracker can age a track against. Only
@@ -125,7 +112,7 @@ TRACK_VECTORS = 8
 class Track:
     """One person, followed across passes for as long as they keep appearing."""
 
-    guess: str
+    key: str
     first_seen: datetime
     last_seen: datetime
     sightings: int = 1
@@ -138,8 +125,8 @@ class Track:
 
     @property
     def label(self) -> str:
-        """What the report calls this person: their name, or the guess at it."""
-        return self.name or self.guess
+        """The track's name, or its key while the cast gallery has not named it."""
+        return self.name or self.key
 
     def remember(self, vector: np.ndarray, size: float):
         """Keep a face, discarding the smallest once the track is full."""
@@ -176,7 +163,6 @@ class Presence:
 
     label: str
     name: str | None
-    guess: str
     similarity: float
     sightings: int
     first_seen: datetime
@@ -217,11 +203,12 @@ class PresenceTracker:
         self._detector_size = detector_size
 
         self._tracks: list[Track] = []
+        self._track_ids = itertools.count(1)
         self._lock = threading.Lock()
         # Serialises whole passes. The tracker's own thread and a caller naming
         # a frame both run passes; interleaved, each could see a new face as
-        # unknown and start a track for it, leaving one person on the roster
-        # twice under two guessed names. Re-entrant, since name_faces holds it
+        # unknown and start a track for it, leaving one person tracked twice.
+        # Re-entrant, since name_faces holds it
         # across the pass it runs.
         self._pass = threading.RLock()
         self._stop = threading.Event()
@@ -278,7 +265,7 @@ class PresenceTracker:
                 return touched
 
     def name_faces(self, frame) -> list[tuple[np.ndarray, str]]:
-        """Each face in a frame with the name its track carries.
+        """Each recognised face in a frame with the name its track carries.
 
         Runs a full pass over this exact frame rather than reusing the boxes of
         the tracker's last pass, so every box lies on the face it names even
@@ -287,7 +274,7 @@ class PresenceTracker:
         with self._pass:
             touched = self.observe(frame)
             with self._lock:
-                return [(track.box, track.label) for track in touched]
+                return [(track.box, track.name) for track in touched if track.name]
 
     def clear(self):
         """Delete every track and every lesson, with the face embeddings they hold."""
@@ -348,7 +335,7 @@ class PresenceTracker:
         self.cast = base.extended(additions)
 
     def faces(self, within: float, at: datetime | None = None) -> list[tuple[np.ndarray, str]]:
-        """The face box and name of every track sighted in the `within` seconds before `at`.
+        """The face box and label of every track sighted in the `within` seconds before `at`.
 
         Reads the boxes of past passes without running one, for a reader that
         needs to know where each named person is but cannot afford a pass of
@@ -432,7 +419,7 @@ class PresenceTracker:
         for row, (face, vector) in enumerate(zip(faces, vectors)):
             track = assigned.get(row)
             if track is None:
-                track = Track(self._invent(), at, at,
+                track = Track(f"{UNNAMED}{next(self._track_ids)}", at, at,
                               vectors=[vector], sizes=[face.size])
                 self._tracks.append(track)
             else:
@@ -440,16 +427,6 @@ class PresenceTracker:
             track.box = face.bbox
             touched.append(track)
         return touched
-
-    def _invent(self) -> str:
-        """A name for a face the cast gallery does not know.
-
-        Drawn from names no one currently in the room is already being called,
-        so two people are never guessed at alike at the same moment.
-        """
-        taken = {track.guess for track in self._tracks}
-        free = [name for name in NAMES if f"{UNSURE} {name}" not in taken]
-        return f"{UNSURE} {random.choice(free or NAMES)}"
 
     def _adopt(self, tracks: list[Track], matches):
         """Give each track the enrolled name its clearest face matches.
@@ -470,7 +447,7 @@ class PresenceTracker:
         member are one person whose track was split — typically because they
         were first seen too small to recognise and were named only later, by
         which time a second track had formed. The earliest track absorbs the
-        others, keeping its guessed name and its first sighting.
+        others, keeping its key and its first sighting.
         """
         keepers: dict[str, Track] = {}
         survivors = []
@@ -502,7 +479,7 @@ class PresenceTracker:
             tracks = [track for track in self._tracks
                       if (since is None or track.last_seen >= since)
                       and (until is None or track.first_seen <= until)]
-            return [Presence(track.label, track.name, track.guess,
+            return [Presence(track.label, track.name,
                              round(track.similarity, 3), track.sightings,
                              max(track.first_seen, since) if since else track.first_seen,
                              min(track.last_seen, until) if until else track.last_seen)

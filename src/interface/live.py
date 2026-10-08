@@ -29,7 +29,7 @@ def payload(document: report.Sitrep, nummer: int) -> dict:
     """A report as the page renders it.
 
     The document as JSON, plus what the page cannot work out for itself: the
-    report's number within the run, which names are guesses, each person's
+    report's number within the run, each person's
     ratings joined from what was measured and what was generated (null where
     nothing was measured), and the threshold the scene ratings are read
     against.
@@ -38,8 +38,6 @@ def payload(document: report.Sitrep, nummer: int) -> dict:
     rendered["nummer"] = nummer
     rendered["schwelle"] = report.SCHWELLE
     for person, source in zip(rendered["bericht"]["personen"], document.bericht.personen):
-        person["vermutet"] = (person["name"] != report.UNBEKANNT
-                              and not document.erkannt(person["name"]))
         person.update(document.bewertungen(source))
         person["anlass"] = [f"{name}: {document.bewertung(source.name, name)[1]}"
                             for name in report.GEMESSEN
@@ -395,8 +393,8 @@ class LiveSitrep:
 
         With `ratings`, each recognised person's live values are set beside
         their box (Prototype 2); a recognised person with no recent evidence
-        reads 0, as on Prototype 1. Bodies not carrying a cast name (an unnamed
-        Körper, a guessed name) are boxed and labelled without values. With
+        reads 0, as on Prototype 1. A body not carrying a cast name is boxed
+        and labelled "Körper <id>", without values. With
         `strip` as well, the values stand in fixed slots on a strip beneath
         the picture, each tied to its box by a line (Prototype 3).
         """

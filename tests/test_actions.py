@@ -148,14 +148,15 @@ def test_a_body_named_by_the_cast_is_not_renamed_by_a_single_other_name(ratings)
     assert set(shown) == {"Klara"}
 
 
-def test_a_guess_does_not_replace_a_cast_name(ratings):
-    shown = names_after(ratings, ["Klara", "Vielleicht: Theo", "Vielleicht: Rosa"])
+def test_an_unrecognised_face_does_not_replace_a_cast_name(ratings):
+    shown = names_after(ratings, ["Klara", "#3", "#4"])
     assert shown == ["Klara"] * 3
 
 
-def test_a_guess_names_a_body_the_cast_has_not(ratings):
-    shown = names_after(ratings, ["Vielleicht: Theo", "Vielleicht: Rosa", "Klara"])
-    assert shown == ["Vielleicht: Theo", "Vielleicht: Rosa", "Klara"]
+def test_an_unrecognised_face_leaves_a_body_unnamed(ratings):
+    """A body carries a cast name or none, and is then shown as "Körper <id>"."""
+    shown = names_after(ratings, ["#3", "#4", "Klara"])
+    assert shown == [None, None, "Klara"]
 
 
 def test_a_body_seen_steadily_as_someone_else_is_renamed(ratings):
@@ -249,8 +250,8 @@ def test_a_released_body_is_named_by_its_faces_again(ratings):
 
 
 def test_assigning_reports_the_face_last_seen_on_the_body(ratings):
-    names_after(ratings, ["Vielleicht: Theo"])
-    assert ratings.assign(1, "Klara") == "Vielleicht: Theo"
+    names_after(ratings, ["#3"])
+    assert ratings.assign(1, "Klara") == "#3"
     assert ratings.assign(2, "Jakob") is None
 
 
@@ -258,7 +259,7 @@ def test_carried_names_are_those_of_bodies_active_in_a_stretch(ratings):
     ratings.record([reading(7, kicking_other_person=1.0), reading(9)], T0)
     ratings.assign(7, "Klara")
     ratings.assign(8, "Jakob")
-    names_after(ratings, ["Vielleicht: Theo"], track=9)
+    names_after(ratings, ["#3"], track=9)
     assert ratings.carried(EARLIER, T0) == ["Klara"]
 
 
@@ -274,12 +275,12 @@ def learning(sightings: list[str], pinned: str | None = "Klara"):
 
 
 def test_a_face_staying_on_a_named_body_is_learned_under_its_name():
-    assert learning(["Vielleicht: Theo"] * 5) == [(1, "Vielleicht: Theo", "Klara")]
+    assert learning(["#3"] * 5) == [(1, "#3", "Klara")]
 
 
 def test_a_face_crossing_a_named_body_briefly_is_not_learned():
-    assert learning(["Vielleicht: Theo", "Vielleicht: Theo", "Vielleicht: Rosa",
-                     "Vielleicht: Theo"]) == []
+    assert learning(["#3", "#3", "#4",
+                     "#3"]) == []
 
 
 def test_a_face_already_carrying_the_name_is_not_learned_again():
@@ -287,4 +288,4 @@ def test_a_face_already_carrying_the_name_is_not_learned_again():
 
 
 def test_faces_on_bodies_not_named_by_hand_are_not_learned():
-    assert learning(["Vielleicht: Theo"] * 5, pinned=None) == []
+    assert learning(["#3"] * 5, pinned=None) == []

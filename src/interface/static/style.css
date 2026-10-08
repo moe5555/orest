@@ -299,8 +299,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 .live { align-content: start; }
 .live .panel { padding: 14px 16px; }
 
-/* People in view, each with the cast name to give it. Unnamed bodies and
-   guesses stand out, since they are what the operator names. */
+/* People in view, each with the cast name to give it. Unnamed bodies stand
+   out, since they are what the operator names. */
 .in-view { display: grid; gap: 6px; margin-top: 10px; }
 .in-view-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .in-view-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -73,9 +73,8 @@ class Options(BaseModel):
     # speaks German; test footage in another language needs its own code.
     language: str = transcribe.LANGUAGE
 
-    # Enrolment folder. Faces are followed on every run, so every person in the
-    # report carries a name; given a cast, enrolled people are recognised
-    # rather than guessed at.
+    # Enrolment folder. Enrolled people are recognised by name; everyone else
+    # is "Körper <id>" in the picture and Unbekannt in the report.
     cast: pathlib.Path | None = None
 
     # Rate Risiko and Menschlichkeit from the action recogniser. Off, they are
@@ -521,13 +520,13 @@ class Session:
         return [f"{alt} ist {neu}" for alt, neu in self._umbenannt.values()]
 
     def _roster(self, since: datetime, until: datetime) -> list[presence.Presence]:
-        """Who was present: the faces tracked, and cast members named on a
-        body without a face tracked, by appearance or by hand, so the report
-        may name them."""
-        roster = self.tracker.roster(since, until)
+        """Who was present: the cast faces recognised, and cast members named
+        on a body without a face recognised, by appearance or by hand, so the
+        report may name them. Unrecognised people are reported as Unbekannt."""
+        roster = [person for person in self.tracker.roster(since, until) if person.known]
         if self.actions is not None:
             present = {person.label for person in roster}
-            roster += [presence.Presence(name, name, name, 1.0, 0, since, until)
+            roster += [presence.Presence(name, name, 1.0, 0, since, until)
                        for name in self.actions.carried(since, until) if name not in present]
         return roster
 
@@ -608,7 +607,7 @@ class Session:
         return self.frames.between(since, until, count)
 
     def _anwesend(self, since: datetime, until: datetime) -> list[report.Anwesend]:
-        return [report.Anwesend(name=person.label, erkannt=person.known)
+        return [report.Anwesend(name=person.label)
                 for person in self._roster(since, until)]
 
     def _einschaetzen(self, aeusserungen, vorher):
@@ -697,7 +696,7 @@ class Session:
         if self.tracker.cast:
             lines.append(f"cast:   {', '.join(self.tracker.cast.names)}")
         else:
-            lines.append("cast:   none, every name is a guess")
+            lines.append("cast:   none, nobody is recognised")
         return "\n".join(lines)
 
     def __enter__(self) -> "Session":

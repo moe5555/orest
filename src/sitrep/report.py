@@ -24,8 +24,8 @@ report verbatim as "gesagt" rather than generated, so what was said cannot be
 embellished.
 
 Who is present is measured in the same way: the presence tracker
-(presence.py) names every face it follows, from the cast enrolment or as a
-marked guess, and the model may only use those names. The grammar holds each
+(presence.py) names the faces the cast enrolment recognises, and the model may
+only use those names, or Unbekannt for anyone else. The grammar holds each
 person's name to that list, so the model cannot invent one, and each name is
 drawn above its face in the frames (annotate.py), so the model reads which
 person carries which name rather than guessing it.
@@ -306,11 +306,9 @@ class Pegel(BaseModel):
 
 
 class Anwesend(BaseModel):
-    """One person the presence tracker saw during the window."""
+    """One cast member recognised during the window."""
 
     name: str
-    # False for a guessed name ("Vielleicht: Jakob"), which is not a recognition.
-    erkannt: bool
 
 
 class Zeitfenster(BaseModel):
@@ -344,10 +342,6 @@ class Sitrep(BaseModel):
     pegel: Pegel | None = None
     latenz_s: float
     bericht: Lagebericht
-
-    def erkannt(self, name: str) -> bool:
-        """Whether a name in the report is a recognition rather than a guess."""
-        return any(person.erkannt for person in self.anwesend if person.name == name)
 
     def handlung(self, name: str) -> Handlung | None:
         """What was measured for a named person, or None if nothing was."""
@@ -405,8 +399,7 @@ def _prompt(anweisung: str, transcript: str, anwesend: list[Anwesend] = (),
             kontext: str = "", werte: str = "", anlass: str = "") -> str:
     """The prompt, fixed part first: instructions, then the roster, the
     Chronik, the live values and the transcript, which change most."""
-    liste = "\n".join(f"- {person.name} ({'erkannt' if person.erkannt else 'vermutet'})"
-                      for person in anwesend) or "(niemand erfasst)"
+    liste = "\n".join(f"- {person.name}" for person in anwesend) or "(niemand erfasst)"
     parts = [anweisung, f"Anwesenheitsliste:\n{liste}"]
     if kontext:
         parts.append(kontext)

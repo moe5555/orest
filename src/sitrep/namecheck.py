@@ -59,12 +59,8 @@ class WatchedGallery:
 
 
 def kind(label: str, cast: set[str]) -> str:
-    """Whether a label is a cast name, a guess, or an unnamed body."""
-    if label in cast:
-        return "cast"
-    if label.startswith(presence.UNSURE):
-        return "guess"
-    return "unnamed"
+    """Whether a label is a cast name, or an unrecognised face or body."""
+    return "cast" if label in cast else "unnamed"
 
 
 def overlaps(a: np.ndarray, b: np.ndarray) -> bool:

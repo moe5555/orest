@@ -111,10 +111,10 @@ or gefahr is above 6 (`report.SCHWELLE`). Apollon applies that rule itself, not
 the model.
 
 Faces are tracked on every run, and person names come from that tracking. With
-`--cast data/cast`, enrolled people are recognised by name; everyone else gets
-a guessed name such as `Vielleicht: Jakob`. Each name is drawn above its face
-in the frames the model sees, and the model may only use those names, or
-`Unbekannt`. The NDI picture sent to TouchDesigner stays unmarked.
+`--cast data/cast`, enrolled people are recognised by name; everyone else is
+`Körper <id>` in the operator's picture and `Unbekannt` in the report. Each
+recognised name is drawn above its face in the frames the model sees, and the
+model may only use those names, or `Unbekannt`. The NDI picture sent to TouchDesigner stays unmarked.
 
 **risiko** and **menschlichkeit** are measured, not generated. The NTU120
 action recogniser (`src/action/`) runs on the camera at 25 fps beside the
@@ -195,7 +195,7 @@ named, any face that stays on them for about three seconds later (someone
 named from behind is learned once they turn round), and the clearer views of
 that face as they come. They are then recognised by name after leaving and
 returning. The model is told which earlier label (e.g.
-`Körper 20`, `Vielleicht: Helene`) now means whom. Learned faces last for the
+`Körper 20`) now means whom. Learned faces last for the
 run only; nothing is saved. Without a cast the dropdowns are empty.
 
 People are named by face and appearance together. While a cast member's face
@@ -293,9 +293,8 @@ framed by a rising `tick`:
                            <aehnlichkeit> <sichtungen> <seit> <dauer_s>
     /apollon/presence/end    <tick>
 
-In the roster, `name` is empty and `vermutet` is 1 when the cast gallery did
-not recognise the person, so a guess can be set apart from a recognition. In a
-report, `vermutet` is 1 for a guessed name and for `Unbekannt`. A report `name`
+The roster lists recognised cast members only, so `name` equals `label` and
+`vermutet` is 0. In a report, `vermutet` is 1 for `Unbekannt`. A report `name`
 is always a roster `label` from the report's window, or `Unbekannt`.
 Forecasts arrive most likely first. `einschreiten` is 1 when the scene's
 `eskalation` or `gefahr` is above 6; `massnahme` is empty otherwise.
@@ -345,8 +344,9 @@ Then watch who the system sees, live or over a recording:
     uv run python -m sitrep.presence --cast data/cast
     uv run python -m sitrep.presence --cast data/cast --recording rehearsal.mp4 --start 300
 
-A face the enrolment does not match is given an invented name marked as a
-guess, such as `Vielleicht: Jakob`, which holds until that person leaves.
+A face the enrolment does not match is listed under a key such as `#7`,
+which holds until that person leaves. The key is never shown in the live
+SITREP: there the person is `Körper <id>`.
 
 The models download on first use (288 MB) to `~/.cache/apollon/`. Nothing in
 `data/` is tracked by git: the photographs are of identifiable people and the
