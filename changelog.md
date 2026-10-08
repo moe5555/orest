@@ -6,6 +6,24 @@ referenced below.
 
 ---
 
+## 2026-10-08 — Size limit for cut clips (VSH-ARLT-5090)
+
+Requested by Moe. Clips (`HITS → CUT` in `pipeline.md`) were never deleted:
+`data/clips/hitl_database` had reached 2,197 clips and 38 GB after one day,
+much of it fast clips carrying up to 10 s of preroll.
+
+After each search, `main.deliver` calls `clips.prune`, which deletes the
+project's least recently used clips until they take at most
+`APOLLON_CLIPS_MAX_GB` (default 10, `config.CLIPS_MAX_GB`; 0 disables). A
+reused clip has its modification time refreshed in `clips.cut`, so clips
+found often are deleted last. Kept regardless: the clips of the search just
+delivered, which the players are showing, and any clip that can't be deleted
+(on Windows, one a player holds open). Temporary `.part` files untouched for an
+hour are deleted too. The limit is per project folder, the folder `deliver`
+writes to. 7 new tests, 633 pass.
+
+---
+
 ## 2026-10-08 — Body search results spread across time and rehearsals (VSH-ARLT-5090)
 
 Pointed out by Moe: the video wall filled with clips from the same few seconds

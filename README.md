@@ -490,8 +490,14 @@ first. Clips are cut from the recordings on disk, at the paths the WISE project
 registered. Where a recording isn't on this machine, it is read through the WISE
 server instead, which is much slower.
 
+A project's clips may take up to 10 GB. After each search the least recently
+used clips are deleted down to that size; the clips of that search and any
+clip a player has open are kept. A clip found again counts as used.
+`APOLLON_CLIPS_MAX_GB` sets the limit, 0 turns it off.
+
 ffmpeg is taken from PATH or the `wise` conda environment. Overrides:
-`APOLLON_FFMPEG_EXE`, `APOLLON_CLIPS_DIR`, `APOLLON_TD_HOST`, `APOLLON_TD_PORT`.
+`APOLLON_FFMPEG_EXE`, `APOLLON_CLIPS_DIR`, `APOLLON_CLIPS_MAX_GB`,
+`APOLLON_TD_HOST`, `APOLLON_TD_PORT`.
 
 **Merged spans or segments.** By default a result is a span of neighbouring
 matches merged into one moment, which can run to a minute or more where a long

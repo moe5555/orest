@@ -53,6 +53,11 @@ PORT = int(os.environ.get("APOLLON_WISE_PORT", "9670"))
 # ignores: clips are footage of identifiable people, like the corpus itself.
 CLIPS_ROOT = Path(os.environ.get("APOLLON_CLIPS_DIR", REPO_ROOT / "data" / "clips"))
 
+# Most space one project's clips may take, in GB. After each search the least
+# recently used clips are deleted down to it; 0 disables the limit. A precise
+# four-second 1080p clip is 4-7 MB, so 10 GB holds roughly 2000 of them.
+CLIPS_MAX_GB = float(os.environ.get("APOLLON_CLIPS_MAX_GB", "10"))
+
 # Where TouchDesigner is reached, and where Apollon is reached from it. Defined
 # in the `osc` package and re-exported here, because the live SITREP addresses
 # the same OSC In DAT and two definitions of one receiver would drift apart.

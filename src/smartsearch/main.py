@@ -185,19 +185,29 @@ def format_hits(hits: list[client.Hit]) -> str:
 
 def deliver(hits: list[client.Hit], project: str, mode: str, encoder: str,
             send_td: bool):
-    """Cut hits into clips in rank order, announcing each one as it is written."""
+    """Cut hits into clips in rank order, announcing each one as it is written.
+
+    Afterwards the project's clips are trimmed to the size limit, sparing the
+    clips of this search, which are the ones on screen.
+    """
     sender = td.Sender() if send_td else None
     query_id = td.new_query_id()
     if sender:
         sender.send(td.begin_message(query_id, len(hits)))
     recordings = clips.recording_paths(config.project_dir(project))
-    for rank, hit, clip in clips.cut_all(hits, mode, config.clips_dir(project), encoder,
-                                         recordings):
+    directory = config.clips_dir(project)
+    delivered = []
+    for rank, hit, clip in clips.cut_all(hits, mode, directory, encoder, recordings):
         print(f"{rank:>3}  {clip.path}  preroll {clip.preroll:.3f}s", flush=True)
+        delivered.append(clip.path)
         if sender:
             sender.send(td.hit_message(query_id, rank, clip, hit))
     if sender:
         sender.send(td.end_message(query_id))
+    if config.CLIPS_MAX_GB > 0:
+        freed = clips.prune(directory, int(config.CLIPS_MAX_GB * 1e9), keep=delivered)
+        if freed:
+            print(f"deleted {freed / 1e9:.1f} GB of least recently used clips", flush=True)
 
 
 def live_session(wise: client.Wise, args) -> int:

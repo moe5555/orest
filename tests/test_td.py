@@ -59,6 +59,23 @@ def test_delivery_frames_the_hits_with_begin_and_end_in_rank_order(tmp_path, mon
     assert len({arguments[0] for _, arguments in sent}) == 1
 
 
+def test_delivery_trims_the_clips_but_keeps_the_ones_just_sent(tmp_path, monkeypatch):
+    pruned = {}
+    monkeypatch.setattr(main.config, "clips_dir", lambda project: tmp_path)
+    monkeypatch.setattr(main.config, "CLIPS_MAX_GB", 2.0)
+    monkeypatch.setattr(main.clips, "cut_all",
+                        lambda hits, *a: ((r, h, Clip(tmp_path / f"{r}.mp4", 0.0))
+                                          for r, h in enumerate(hits, 1)))
+    monkeypatch.setattr(main.clips, "prune",
+                        lambda directory, max_bytes, keep: pruned.update(
+                            directory=directory, max_bytes=max_bytes, keep=list(keep)) or 0)
+
+    main.deliver([HIT, HIT], "p", "precise", "libx264", send_td=False)
+
+    assert pruned == {"directory": tmp_path, "max_bytes": 2_000_000_000,
+                      "keep": [tmp_path / "1.mp4", tmp_path / "2.mp4"]}
+
+
 def test_messages_arrive_over_udp_as_sent():
     received = []
     dispatcher = Dispatcher()

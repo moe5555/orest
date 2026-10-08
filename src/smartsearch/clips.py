@@ -30,6 +30,7 @@ or the recording is not on this machine.
 import os
 import sqlite3
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -39,6 +40,10 @@ from .client import Hit
 
 FAST = "fast"
 PRECISE = "precise"
+
+# A temporary clip file untouched for this long belongs to a cut that was
+# interrupted rather than one still being written, and is deleted.
+_STALE_PART_SECONDS = 3600
 MODES = (FAST, PRECISE)
 
 # H.264 encoders for precise mode. libx264 runs on the CPU and is the default:
@@ -170,7 +175,10 @@ def cut(hit: Hit, mode: str, directory: Path, encoder: str = LIBX264,
     one by a later search or by a player watching the folder.
     """
     destination = directory / clip_name(hit, mode)
-    if not destination.exists():
+    if destination.exists():
+        # Marks the clip as recently used, so the size limit deletes it last.
+        os.utime(destination)
+    else:
         directory.mkdir(parents=True, exist_ok=True)
         partial = destination.with_name(destination.name + ".part")
         command = cut_command(source(hit, recordings or {}), hit.ts, hit.seconds,
@@ -190,3 +198,43 @@ def cut_all(hits: Iterable[Hit], mode: str, directory: Path,
     """
     for rank, hit in enumerate(hits, start=1):
         yield rank, hit, cut(hit, mode, directory, encoder, recordings)
+
+
+def prune(directory: Path, max_bytes: int, keep: Iterable[Path] = ()) -> int:
+    """Delete the least recently used clips in `directory` until the rest take
+    at most `max_bytes`, and temporary files left by interrupted cuts.
+
+    Clips in `keep` are never deleted, nor any clip that cannot be: on Windows,
+    a clip a player has open. Returns the number of bytes freed.
+    """
+    now = time.time()
+    for partial in directory.glob("*.part"):
+        try:
+            if now - partial.stat().st_mtime > _STALE_PART_SECONDS:
+                partial.unlink()
+        except OSError:
+            pass
+
+    keep = {Path(path).resolve() for path in keep}
+    clips = []
+    for path in directory.glob("*.mp4"):
+        try:
+            status = path.stat()
+        except OSError:
+            continue
+        clips.append((status.st_mtime, status.st_size, path))
+
+    total = sum(size for _, size, _ in clips)
+    freed = 0
+    for _, size, path in sorted(clips):
+        if total <= max_bytes:
+            break
+        if path.resolve() in keep:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        total -= size
+        freed += size
+    return freed

@@ -1,6 +1,8 @@
 """Clip naming and the ffmpeg command lines that cut search results."""
 
+import os
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -173,6 +175,67 @@ def test_a_clip_is_cut_from_the_recording_on_disk(tmp_path, monkeypatch):
     monkeypatch.setattr(clips, "preroll", lambda path: 0.0)
     clips.cut(make_hit(), clips.FAST, tmp_path / "clips", recordings={"1": recording})
     assert inputs == [str(recording)]
+
+
+def test_a_reused_clip_is_marked_as_recently_used(tmp_path, monkeypatch):
+    hit = make_hit()
+    existing = tmp_path / clips.clip_name(hit, clips.FAST)
+    existing.write_bytes(b"clip")
+    os.utime(existing, (1000, 1000))
+    monkeypatch.setattr(clips, "preroll", lambda path: 0.0)
+    clips.cut(hit, clips.FAST, tmp_path)
+    assert existing.stat().st_mtime > 1000
+
+
+def write_clip(directory: Path, name: str, size: int, used: float) -> Path:
+    path = directory / name
+    path.write_bytes(b"x" * size)
+    os.utime(path, (used, used))
+    return path
+
+
+def test_the_least_recently_used_clips_are_deleted_down_to_the_limit(tmp_path):
+    old = write_clip(tmp_path, "old.mp4", 100, 1000)
+    middle = write_clip(tmp_path, "middle.mp4", 100, 2000)
+    new = write_clip(tmp_path, "new.mp4", 100, 3000)
+    assert clips.prune(tmp_path, 250) == 100
+    assert not old.exists() and middle.exists() and new.exists()
+
+
+def test_nothing_is_deleted_under_the_limit(tmp_path):
+    write_clip(tmp_path, "a.mp4", 100, 1000)
+    assert clips.prune(tmp_path, 100) == 0
+    assert (tmp_path / "a.mp4").exists()
+
+
+def test_the_clips_on_screen_are_kept_even_if_oldest(tmp_path):
+    shown = write_clip(tmp_path, "shown.mp4", 100, 1000)
+    other = write_clip(tmp_path, "other.mp4", 100, 2000)
+    clips.prune(tmp_path, 100, keep=[shown])
+    assert shown.exists() and not other.exists()
+
+
+def test_a_clip_that_cannot_be_deleted_is_skipped(tmp_path, monkeypatch):
+    # On Windows, a clip a player holds open.
+    locked = write_clip(tmp_path, "locked.mp4", 100, 1000)
+    other = write_clip(tmp_path, "other.mp4", 100, 2000)
+    real_unlink = Path.unlink
+
+    def unlink(path, *args, **kwargs):
+        if path.name == "locked.mp4":
+            raise PermissionError(path)
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    assert clips.prune(tmp_path, 100) == 100
+    assert locked.exists() and not other.exists()
+
+
+def test_leftovers_of_interrupted_cuts_are_deleted_once_stale(tmp_path):
+    stale = write_clip(tmp_path, "a.mp4.part", 10, time.time() - 2 * clips._STALE_PART_SECONDS)
+    writing = write_clip(tmp_path, "b.mp4.part", 10, time.time())
+    clips.prune(tmp_path, 10**9)
+    assert not stale.exists() and writing.exists()
 
 
 def test_clips_are_cut_and_yielded_in_rank_order(tmp_path, monkeypatch):
