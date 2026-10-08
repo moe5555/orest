@@ -180,6 +180,51 @@ channel):
 
 ---
 
+## 2026-10-07 — Names lost in the live SITREP: the run reads the camera at 640×480 (VSH-ARLT-5090)
+
+**Moe's observation:** during a live run, people kept losing their names
+despite being named by hand again and again.
+
+**Measured** on the running `apollon-ui` (port 9680, `OBS Virtual Camera`,
+cast `data/cast`), with the snapshot read four times a second for 90 s:
+- **Track ids:** 13 in 90 s, 6.7 new ones a minute. Ids reached 45 within
+  10 minutes with three people on stage.
+- **Names:** 31 % of body-samples carried one, all of them given by hand. No
+  face named anyone.
+- **Alex** was named by hand at 19 s, and his body was last seen at 45.6 s.
+  He returned 1.3 s later as `Körper 54` and stayed unnamed for the 15 s he
+  was in view.
+- **Short drop-outs:** bodies vanished from the snapshot for 0.2–0.5 s every
+  few seconds.
+
+**Cause.**
+- **The run receives 640×480.** OBS outputs 1920×1080 at 25 fps, but the run
+  asks for no size (`--width`/`--height` unset). DirectShow therefore opens
+  the virtual camera at its default 640×480, a 16:9 picture squeezed to 4:3.
+- **A standing person is about 140 px tall and a face about 15 px wide.**
+  That is below `presence.MIN_FACE` (30 px), so faces never name anyone.
+- **Appearance** works on small, distorted crops of people in similar
+  rehearsal clothes.
+- **Pose loses small and kneeling bodies.** Once one is gone for longer than
+  `tracking.FORGET` (1 s), the body returns under a new track id.
+- **A name given by hand belongs to the track id**
+  (`ActionRatings.assign`), so it is lost with that id. Only a face or an
+  appearance match can name the new body.
+
+**Checked:** with 1920×1080 requested, the virtual camera delivers it
+(51 frames in 2 s), and a standing person is about 420 px tall with a face of
+about 50 px. The OBS entry of 2026-10-06 ("raise OBS's output resolution") is
+therefore settled on the OBS side. Its output was already 1920×1080.
+
+**Next:**
+- Restart with `apollon-ui --width 1920 --height 1080` and measure again.
+- If hand-given names are still lost when a body returns under a new id,
+  consider carrying the name to a new body that appears in the old one's
+  place within a few seconds, as face tracks already link by place
+  (`presence.PLACE_LINK`).
+
+---
+
 ## 2026-10-06 — Live SITREP follows up to four people at once (VSH-ARLT-5090)
 
 Requested by Moe, reversing the two-person limit of 2026-09-28: more than two
