@@ -123,8 +123,39 @@ def test_a_per_file_cap_retrieves_more_candidates_to_fill_the_list(monkeypatch):
     monkeypatch.setattr(live.keypoints, "segment_embedding", lambda window: np.ones(4))
     wise = FakeWise([make_hit("1", 0, 4), make_hit("1", 10, 14), make_hit("2", 0, 4)])
     hits = live.search(wise, list(range(16)), feature_id="pose", limit=2, per_file=1)
-    assert wise.calls == [2 * live._CAP_FETCH_FACTOR]
+    assert wise.calls == [live._SPREAD_FETCH]
     assert [hit.media_id for hit in hits] == ["1", "2"]
+
+
+def test_neighbouring_moments_of_one_recording_are_kept_once():
+    hits = [make_hit("1", 100, 104, 0.9), make_hit("1", 102, 106, 0.8),
+            make_hit("2", 100, 104, 0.7), make_hit("1", 160, 164, 0.6)]
+    kept = live.spread_in_time(hits, 30)
+    assert [(hit.media_id, hit.ts) for hit in kept] == [("1", 100), ("2", 100), ("1", 160)]
+
+
+def test_the_gap_is_measured_between_ranges_not_starts():
+    # A merged span ending at 150 is 10 s from a hit at 160, though their
+    # starts are 60 s apart.
+    hits = [make_hit("1", 100, 150, 0.9), make_hit("1", 160, 164, 0.8)]
+    assert len(live.spread_in_time(hits, 30)) == 1
+    assert len(live.spread_in_time(hits, 10)) == 2
+
+
+def test_a_minimum_gap_retrieves_more_candidates_to_fill_the_list(monkeypatch):
+    monkeypatch.setattr(live.keypoints, "segment_embedding", lambda window: np.ones(4))
+    wise = FakeWise([make_hit("1", 0, 4, 0.9), make_hit("1", 2, 6, 0.8),
+                     make_hit("1", 60, 64, 0.7)])
+    hits = live.search(wise, list(range(16)), feature_id="pose", limit=2, min_gap=30,
+                       merged=False)
+    assert wise.calls == [live._SPREAD_FETCH]
+    assert [hit.ts for hit in hits] == [0, 60]
+
+
+def test_body_live_spreads_results_unless_told_otherwise():
+    from smartsearch import main
+    assert main.build_parser().parse_args(["body-live"]).min_gap is None
+    assert main.build_parser().parse_args(["body-live", "--min-gap", "0"]).min_gap == 0
 
 
 # Presses

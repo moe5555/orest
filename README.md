@@ -451,7 +451,10 @@ to `127.0.0.1:10001`:
 A capture of any length is searched in four-second windows stepped by two
 seconds, the shape of the indexed segments, and a capture shorter than four
 seconds is extended backwards from the stop press. Results from the windows are
-merged. `--per-file N` keeps at most N results from any one recording. `--file`
+merged. Results from one recording are kept at least 30 seconds apart, so
+the list doesn't fill with neighbouring moments of one passage; `--min-gap S`
+changes the distance and `--min-gap 0` turns it off. `--per-file N` keeps at
+most N results from any one recording. `--file`
 plays a recording in real time in place of the camera, for rehearsing the
 workflow on known footage. Overrides: `APOLLON_CONTROL_HOST`,
 `APOLLON_CONTROL_PORT`.

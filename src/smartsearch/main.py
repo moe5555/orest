@@ -129,6 +129,9 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument("-n", "--limit", type=int, default=10)
     live.add_argument("--per-file", type=int, metavar="N",
                       help="at most N results from any one recording")
+    live.add_argument("--min-gap", type=float, metavar="SECONDS",
+                      help="results from one recording at least this far apart "
+                           "(default: 30; 0 allows neighbouring moments)")
     _delivery(live)
 
     query = commands.add_parser("query", help="search a served project by text")
@@ -203,6 +206,8 @@ def live_session(wise: client.Wise, args) -> int:
     # pose model and camera dependencies.
     from . import live
 
+    min_gap = live.MIN_GAP_SECONDS if args.min_gap is None else args.min_gap
+
     if args.file:
         source = live.FilePlayback(Path(args.file), args.at)
         where = lambda: f" at {source.position():.1f}s of {Path(args.file).name}"
@@ -231,7 +236,7 @@ def live_session(wise: client.Wise, args) -> int:
               f"{len(windows)} query window{'s' if len(windows) != 1 else ''}", flush=True)
         hits = live.search(wise, detections, feature_id=args.feature_id,
                            limit=args.limit, per_file=args.per_file,
-                           merged=not args.segments)
+                           min_gap=min_gap, merged=not args.segments)
         if not hits:
             print("No body found in the capture.", flush=True)
             return

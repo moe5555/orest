@@ -6,6 +6,34 @@ referenced below.
 
 ---
 
+## 2026-10-08 — Body search results spread across time and rehearsals (VSH-ARLT-5090)
+
+Pointed out by Moe: the video wall filled with clips from the same few seconds
+or minutes of one rehearsal. Concerns ranking in the RENDER graph of
+`pipeline.md` (`SS → HITS`), the Apollon side of "Which moments are good
+results" in `03_render.md`.
+
+**Measured** on `hitl_database`, four query movements, 16 segment results each:
+7–10 of the top 16 came from one recording, from 2–6 recordings in all; the
+DeathScene query returned mostly neighbouring 4 s windows around 2:00.
+
+**Change.** `body-live` keeps results from one recording at least
+`--min-gap` seconds apart (default 30, `live.MIN_GAP_SECONDS`), measured
+between ranges, so a long merged span also keeps its neighbours away. Greedy in
+rank order (`live.spread_in_time`): the best of each passage stays. With any
+spreading or `--per-file`, 1000 candidates are retrieved (under 90 ms per
+query window) instead of 5× the limit.
+
+| DeathScene query, 16 results | Recordings | Most from one | Score range |
+|---|---|---|---|
+| Before | 2 | 10 | 0.916–0.845 |
+| `--min-gap 30` (default) | 6 | 8 | 0.916–0.726 |
+| `--min-gap 30 --per-file 3` | 8 | 3 | 0.916–0.650 |
+
+The price is lower similarity further down the list. 4 new tests, 626 pass.
+
+---
+
 ## 2026-10-08 — Body search video wall in TouchDesigner (VSH-ARLT-5090)
 
 Requested by Moe. A full-screen wall of 1–9 tiles looping body search results

@@ -53,10 +53,17 @@ STOP_ADDRESS = "/apollon/body/stop"
 
 START, STOP, TOGGLE = "start", "stop", "toggle"
 
-# How many moments to retrieve per wanted result when results are capped per
-# recording. One recording can hold most of the top matches, and capping it
-# would otherwise leave the list short.
-_CAP_FETCH_FACTOR = 5
+# Results from one recording closer together than this many seconds count as
+# the same moment found again, and only the best of them is kept. Without it,
+# 7 to 10 of the top 16 results on hitl_database came from one recording,
+# many of them neighbouring windows of one moment.
+MIN_GAP_SECONDS = 30.0
+
+# How many moments to retrieve when results are thinned out per recording or
+# in time, the most the client asks WISE for. On hitl_database, 16 results 30 s
+# apart and at most 3 per recording needed up to 400 candidates; 1000 cost
+# under 90 ms per query window.
+_SPREAD_FETCH = 1000
 
 # How long a trigger wait blocks before checking again. A blocking queue read
 # with no timeout does not see Ctrl+C on Windows.
@@ -141,14 +148,31 @@ def cap_per_file(hits: list[Hit], per_file: int) -> list[Hit]:
     return kept
 
 
+def spread_in_time(hits: list[Hit], min_gap: float) -> list[Hit]:
+    """Keep hits in rank order, dropping any that lies within `min_gap`
+    seconds of a better hit in the same recording."""
+    kept = []
+    for hit in hits:
+        if all(other.media_id != hit.media_id or _distance(other, hit) >= min_gap
+               for other in kept):
+            kept.append(hit)
+    return kept
+
+
+def _distance(a: Hit, b: Hit) -> float:
+    """Seconds between two ranges in one recording; 0 if they overlap."""
+    return max(0.0, max(a.ts, b.ts) - min(a.te, b.te))
+
+
 def search(wise: Wise, detections: list, *, feature_id: str, limit: int,
-           per_file: int | None = None, merged: bool = True) -> list[Hit]:
+           per_file: int | None = None, min_gap: float = 0.0,
+           merged: bool = True) -> list[Hit]:
     """Search the pose index with a captured movement.
 
     Windows in which no body was found are skipped. Returns an empty list when
     none of the capture contained a body.
     """
-    fetch = limit * _CAP_FETCH_FACTOR if per_file else limit
+    fetch = max(limit, _SPREAD_FETCH) if per_file or min_gap else limit
     hit_lists = []
     for window in query_windows(detections):
         vector = keypoints.segment_embedding(window)
@@ -157,6 +181,8 @@ def search(wise: Wise, detections: list, *, feature_id: str, limit: int,
                 vector, feature_extractor_id=feature_id, limit=fetch, merged=merged))
 
     hits = merge_hits(hit_lists) if merged else best_per_window(hit_lists)
+    if min_gap:
+        hits = spread_in_time(hits, min_gap)
     if per_file:
         hits = cap_per_file(hits, per_file)
     return hits[:limit]
