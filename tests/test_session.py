@@ -614,6 +614,31 @@ def test_a_source_that_delivers_no_sound_is_reported_silent(monkeypatch, room, r
     running.stop()
 
 
+def test_a_run_without_an_audio_device_watches_the_room_and_says_so(monkeypatch, room, readers):
+    video, _, _, _, _ = room
+    monkeypatch.setattr(session, "STUMM", 0.3)
+    running = Running(session.Session(video, devices.NoAudio("No audio input devices found.")))
+    running.live.frames.sample()
+    time.sleep(0.5)
+    assert running.live.ton()["no_device"]
+    assert not running.live.ton()["stumm"] and not running.of(session.Ton)
+    assert running.live.frames.between(datetime.min, datetime.max, 1)
+    running.stop()
+
+
+def test_a_microphone_that_cannot_be_opened_leaves_the_run_without_sound(monkeypatch, room,
+                                                                          readers):
+    video, audio, _, _, _ = room
+
+    def refuse(**kwargs):
+        raise session.sd.PortAudioError("Device unavailable")
+
+    monkeypatch.setattr(capture.sd, "InputStream", refuse)
+    running = Running(session.Session(video, audio))
+    assert wait_for(lambda: running.live.ton()["no_device"])
+    running.stop()
+
+
 # Naming by hand -------------------------------------------------------------
 
 class FakeNaming:

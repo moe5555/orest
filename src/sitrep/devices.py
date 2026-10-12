@@ -20,6 +20,7 @@ Run directly to list devices or to verify a selection:
 """
 
 import argparse
+import contextlib
 import sys
 import time
 from dataclasses import dataclass
@@ -53,6 +54,23 @@ class AudioDevice:
     hostapi_index: int
     channels: int
     samplerate: float
+
+
+@dataclass(frozen=True)
+class NoAudio:
+    """The sound source of a run with no audio device: nothing arrives.
+
+    The camera and everything reading it run as usual; without sound there
+    are no lines. `reason` says why no device was resolved.
+    """
+
+    reason: str = ""
+    name: str = "Kein Audiogerät"
+    samplerate: float = 16000.0
+
+    def receiving(self, on_audio):
+        """Delivers nothing, as capture.listen expects of a source feeding itself."""
+        return contextlib.nullcontext()
 
 
 def list_video_devices() -> list[VideoDevice]:
@@ -179,6 +197,18 @@ def resolve_audio_device(spec=None, hostapi=None) -> AudioDevice:
         )
 
     return _select(spec, candidates, "audio", format_audio_devices)
+
+
+def resolve_sound(spec=None, hostapi=None) -> AudioDevice | NoAudio:
+    """The microphone `spec` and `hostapi` name, or NoAudio where none resolves.
+
+    A run goes on without sound rather than not starting: no input device at
+    all, no default input, or a named one that is not attached.
+    """
+    try:
+        return resolve_audio_device(spec, hostapi)
+    except (ValueError, RuntimeError, sd.PortAudioError) as error:
+        return NoAudio(str(error))
 
 
 def resolve(video_spec=None, audio_spec=None, hostapi=None) -> tuple[VideoDevice, AudioDevice]:

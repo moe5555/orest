@@ -343,7 +343,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .empfehlung.alt { opacity: 0.55; }
 
 .bar .ton { font: 12px/1 var(--mono); color: var(--text-dim); white-space: nowrap; }
-.bar .ton[data-stumm="true"] { color: var(--red); }
+.bar .ton:is([data-stumm="true"], [data-no-device="true"]) { color: var(--red); }
 .panel.stumm { background: var(--red-ground); border-color: #6a2a2e; }
 .panel.stumm .error-text { margin: 0; }
 

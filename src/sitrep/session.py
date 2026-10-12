@@ -28,6 +28,7 @@ Nothing is written to disk. The real-time path retains nothing
 (changelog.md, 2026-09-10), and neither NDI nor OSC is a file.
 """
 
+import contextlib
 import pathlib
 import queue
 import sys
@@ -37,6 +38,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+import sounddevice as sd
 from face import gallery
 from pydantic import BaseModel
 
@@ -45,12 +47,20 @@ from . import (actions, annotate, capture, chronik, cli, devices, feed, lage, ll
 from . import appearance, predictability
 
 
-def resolve_sources(args) -> tuple[devices.VideoDevice, devices.AudioDevice | ndi_audio.NdiAudio]:
-    """The camera, and the microphone or NDI source to take sound from."""
+def resolve_sources(args) -> tuple[devices.VideoDevice,
+                                   devices.AudioDevice | ndi_audio.NdiAudio | devices.NoAudio]:
+    """The camera, and the microphone or NDI source to take sound from.
+
+    Where no microphone resolves, the run takes no sound (devices.NoAudio):
+    the camera and its readers need none.
+    """
     video = devices.resolve_video_device(args.video)
     if args.audio_ndi:
         return video, ndi_audio.NdiAudio(args.audio_ndi)
-    return video, devices.resolve_audio_device(args.audio, args.audio_api)
+    audio = devices.resolve_sound(args.audio, args.audio_api)
+    if isinstance(audio, devices.NoAudio):
+        print(f"no audio device, running without sound: {audio.reason}", file=sys.stderr)
+    return video, audio
 
 
 class Options(BaseModel):
@@ -260,7 +270,7 @@ class Session:
     """
 
     def __init__(self, video: devices.VideoDevice,
-                 audio: devices.AudioDevice | ndi_audio.NdiAudio,
+                 audio: devices.AudioDevice | ndi_audio.NdiAudio | devices.NoAudio,
                  options: Options | None = None, *, stream=None):
         self.options = options or Options()
         # Before the camera is opened, so that a missing model holds nothing.
@@ -356,7 +366,15 @@ class Session:
         """
         self._start_live()
         try:
-            with capture.listen(self.audio, self.utterances.feed):
+            with contextlib.ExitStack() as listening:
+                try:
+                    listening.enter_context(capture.listen(self.audio, self.utterances.feed))
+                except sd.PortAudioError as error:
+                    # A microphone listed but not opened, e.g. one another
+                    # application holds exclusively: the run goes on without sound.
+                    print(f"{self.audio.name} could not be opened, running without "
+                          f"sound: {error}", file=sys.stderr)
+                    self.audio = devices.NoAudio(f"{self.audio.name}: {error}")
                 self._listening = datetime.now()
                 while not self._stop.is_set():
                     try:
@@ -579,7 +597,14 @@ class Session:
 
     def ton(self, now: datetime | None = None) -> dict:
         """The sound as it arrives: its level over the last 2 s, and whether
-        the source has gone silent (STUMM)."""
+        the source has gone silent (STUMM).
+
+        `no_device` marks a run without an audio device (devices.NoAudio),
+        which is never reported silent: its absence is known from the start.
+        """
+        if isinstance(self.audio, devices.NoAudio):
+            return {"quelle": self.audio.name, "pegel_db": None, "stumm": False,
+                    "still_s": 0.0, "no_device": True}
         now = now or datetime.now()
         still = self.meter.still_for(now)
         if still is None:
@@ -587,7 +612,7 @@ class Session:
             still = (now - self._listening).total_seconds() if self._listening else 0.0
         return {"quelle": self.audio.name,
                 "pegel_db": self.meter.level(now - timedelta(seconds=2), now),
-                "stumm": still >= STUMM, "still_s": round(still, 1)}
+                "stumm": still >= STUMM, "still_s": round(still, 1), "no_device": False}
 
     @property
     def laeuft(self) -> dict[str, bool]:

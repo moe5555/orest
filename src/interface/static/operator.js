@@ -37,6 +37,11 @@ function notice(text, error = false) {
   $("notice").classList.toggle("error", error);
 }
 
+// A microphone that does not resolve leaves the next run without sound; the
+// run still starts.
+const noSoundNotice = (warnings) =>
+  `Kein Audiogerät ausgewählt: Die SITREP läuft ohne Ton.\n${warnings.join("\n")}`;
+
 function ndiGroup() {
   const names = ndi ?? [];
   const options = names.map((name) => option(name, ndiValue(name)));
@@ -107,7 +112,8 @@ async function choose() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail ?? `HTTP ${response.status}`);
     selection = data.selection;
-    await runNotice("Gespeichert.");
+    if (selection.warnings.length) notice(noSoundNotice(selection.warnings), true);
+    else await runNotice("Gespeichert.");
   } catch (error) {
     revert();
     notice(`Nicht übernommen: ${error.message}`, true);
@@ -143,6 +149,7 @@ async function load() {
     renderCasts();
     for (const id of ["camera", "sound", "cast"]) $(id).disabled = false;
     if (selection.errors.length) notice(selection.errors.join("\n"), true);
+    else if (selection.warnings.length) notice(noSoundNotice(selection.warnings), true);
     else await runNotice("");
   } catch (error) {
     notice(`Geräte konnten nicht gelesen werden: ${error.message}`, true);

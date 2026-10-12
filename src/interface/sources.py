@@ -97,9 +97,11 @@ def resolved(sources: Sources) -> dict:
     """The devices `sources` resolves to on this machine, by full name.
 
     The page marks these as selected. A source that does not resolve is None,
-    and the reason is listed under `errors`.
+    and the reason is listed under `errors`. A microphone that does not
+    resolve is listed under `warnings` instead: the run starts without sound
+    (session.resolve_sources).
     """
-    shown = {"camera": None, "sound": None, "cast": None, "errors": []}
+    shown = {"camera": None, "sound": None, "cast": None, "errors": [], "warnings": []}
     try:
         shown["camera"] = devices.resolve_video_device(sources.video).name
     except (ValueError, RuntimeError) as error:
@@ -108,11 +110,11 @@ def resolved(sources: Sources) -> dict:
     if sources.audio_ndi:
         shown["sound"] = {"kind": "ndi", "name": sources.audio_ndi}
     else:
-        try:
-            device = devices.resolve_audio_device(sources.audio, sources.audio_api)
+        device = devices.resolve_sound(sources.audio, sources.audio_api)
+        if isinstance(device, devices.NoAudio):
+            shown["warnings"].append(device.reason)
+        else:
             shown["sound"] = {"kind": "microphone", "name": device.name, "api": device.hostapi}
-        except (ValueError, RuntimeError) as error:
-            shown["errors"].append(str(error))
 
     if sources.cast:
         entry = cast_entry(Path(sources.cast))

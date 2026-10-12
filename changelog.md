@@ -6,6 +6,28 @@ referenced below.
 
 ---
 
+## 2026-10-12 — SITREP runs without an audio device
+
+Requested by Moe, for the live SITREP (`02_processing.md`, Realtime-SITREP
+step 2, "select video and audio source"). Before, a run with no microphone
+did not start at all. Now it starts and runs without sound. The camera, NDI
+feed, trackers, action recogniser, stills and Chronik work as usual. Only the
+spoken lines are missing.
+
+- **Fallback** (`devices.NoAudio`, `devices.resolve_sound`). Used when no
+  input device exists, there is no default input, or the named microphone is
+  not attached. It is also used when a listed microphone cannot be opened
+  (`PortAudioError` in `session.events`).
+- **Page.** The SITREP header shows "Kein Audiogerät ausgewählt" in red where
+  the sound level would be (`ton.no_device`). The large "Kein Ton" panel is
+  not shown for this case. On the operator page, a microphone that does not
+  resolve is now a warning (`selection.warnings`), not an error. Camera and
+  cast can still be saved.
+
+632 tests pass. Not yet checked live.
+
+---
+
 ## 2026-10-08 — No more guessed names: cast name or Körper (VSH-ARLT-5090)
 
 Requested by Moe, for the live SITREP (`03_render.md`, "Live SITREP"; "who is

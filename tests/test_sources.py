@@ -71,6 +71,7 @@ def test_the_page_lists_every_device_and_marks_what_a_run_would_open(client):
         "sound": {"kind": "microphone", "name": "Microsoft Sound Mapper - Input", "api": "MME"},
         "cast": None,
         "errors": [],
+        "warnings": [],
     }
 
 
@@ -112,6 +113,20 @@ def test_a_device_not_on_this_machine_is_refused_and_the_selection_stands(client
     assert response.status_code == 400
     assert "Blackmagic" in response.json()["detail"]
     assert selection.sources.video == "SandbergCapture"
+
+
+def test_without_a_microphone_the_selection_stands_and_the_run_takes_no_sound(
+        client, selection, monkeypatch):
+    monkeypatch.setattr(devices, "list_audio_devices", lambda: [])
+
+    response = client.post("/api/sources", json={"video": "SandbergCapture"})
+
+    assert response.status_code == 200
+    shown = response.json()["selection"]
+    assert shown["sound"] is None and shown["errors"] == []
+    assert shown["warnings"]
+    _, audio = session.resolve_sources(selection.sources)
+    assert isinstance(audio, devices.NoAudio)
 
 
 def test_the_saved_selection_returns_after_a_restart(tmp_path):
