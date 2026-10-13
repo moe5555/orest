@@ -10,6 +10,8 @@
                                  ?nummer=N only if it is still recommendation N
     POST /api/sitrep/assign      name a body in view as a cast member, or release
                                  it to the automatic naming (name null)
+    POST /api/sitrep/key/{key}   carry out a key of the scene in force
+    POST /api/sitrep/screen/close  close the screen a scene's key opened (X)
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
     /api/sitrep/video        the camera as an MJPEG stream; ?ratings=1 sets each
@@ -18,6 +20,8 @@
     /api/sources             the cameras and microphones on offer, and the selection
     POST /api/sources        select the camera and sound source of the next run
     /api/sources/ndi         the NDI sources on the network (takes two seconds)
+    /api/scenes              the scenes on offer, and the one in force
+    POST /api/scene          put a scene in force, in the run under way too
 
 The camera travels as MJPEG because a browser plays it in a plain <img> with
 no script or codec, and on the loopback interface its bandwidth costs
@@ -77,6 +81,12 @@ async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]],
                b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
                + jpeg + b"\r\n")
         await asyncio.sleep(1 / VIDEO_FPS)
+
+
+class SceneChoice(BaseModel):
+    """A scene, by its name in the scenes file."""
+
+    name: str
 
 
 class Assignment(BaseModel):
@@ -149,6 +159,16 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return JSONResponse({"assigned": assigned, **live.snapshot()})
 
+    @app.post("/api/sitrep/key/{key}")
+    def key(key: str):
+        handled = live.press(key)
+        return JSONResponse({"handled": handled, **live.snapshot()})
+
+    @app.post("/api/sitrep/screen/close")
+    def close_screen():
+        closed = live.close_screen()
+        return JSONResponse({"closed": closed, **live.snapshot()})
+
     @app.get("/api/sitrep/state")
     def state():
         return JSONResponse(live.snapshot())
@@ -191,5 +211,21 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
     @app.get("/api/sources/ndi")
     def ndi_sources():
         return JSONResponse({"sources": ndi_audio.sources()})
+
+    @app.get("/api/scenes")
+    def scenes():
+        return JSONResponse({
+            "scenes": [{"name": name, "warnings": scene.warnings()}
+                       for name, scene in live.available.items()],
+            "selected": live.scene.snapshot(),
+        })
+
+    # A plain function: a scene's video is opened and its sound decoded here.
+    @app.post("/api/scene")
+    def choose_scene(choice: SceneChoice):
+        try:
+            return JSONResponse({"selected": live.select(choice.name)})
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
     return app

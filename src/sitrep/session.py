@@ -44,7 +44,7 @@ from pydantic import BaseModel
 
 from . import (actions, annotate, capture, chronik, cli, devices, feed, lage, llm, loudness,
                ndi_audio, presence, report, speakers, speech, td, transcribe, utterances)
-from . import appearance, predictability
+from . import appearance, podest, predictability, recording, scenes
 
 
 def resolve_sources(args) -> tuple[devices.VideoDevice,
@@ -103,6 +103,11 @@ class Options(BaseModel):
     # alarm. Off, a recommendation is made only when the operator asks.
     auto_empfehlung: bool = True
 
+    # Top surface of the Podest in the camera image, as shares of its width
+    # and height, for the scenes with a Podest rule (podest.py, scenes.py).
+    # None turns the rule off in every scene.
+    podest: list[tuple[float, float]] | None = list(podest.POLYGON)
+
     @classmethod
     def from_args(cls, args) -> "Options":
         """Read the options a parser built by cli.py produced."""
@@ -119,6 +124,8 @@ class Options(BaseModel):
             ndi_fps=args.ndi_fps,
             send_td=args.send_td,
             auto_empfehlung=not getattr(args, "no_auto_empfehlung", False),
+            podest=(None if getattr(args, "no_podest", False)
+                    else list(getattr(args, "podest", None) or podest.POLYGON)),
         )
 
 
@@ -271,14 +278,26 @@ class Session:
 
     def __init__(self, video: devices.VideoDevice,
                  audio: devices.AudioDevice | ndi_audio.NdiAudio | devices.NoAudio,
-                 options: Options | None = None, *, stream=None):
+                 options: Options | None = None, *, stream=None,
+                 scene: scenes.Current | None = None):
         self.options = options or Options()
+        # The scene in force, shared with whoever selects scenes and presses
+        # their keys; `apply` carries out a change.
+        self.scene = scene or scenes.Current()
         # Before the camera is opened, so that a missing model holds nothing.
         llm.pruefen(self.options.model)
         self.audio = audio
+        # The rate every sound reaching the lines is delivered at: the
+        # microphone's, and a scene's video decoded to match it.
+        self._samplerate = int(audio.samplerate)
         # A stream given ready-made, e.g. a recording replayed (replay.py), is
-        # read like a camera and closed with the session.
-        self.stream = stream or capture.VideoStream(video, self.options.width, self.options.height)
+        # read like a camera and closed with the session. Readers see it
+        # through a switch, so a scene's video can take its place.
+        self.stream = recording.Switch(
+            stream or capture.VideoStream(video, self.options.width, self.options.height))
+        # Videos opened for the scenes, by path, their sound decoded once.
+        self._recordings: dict[pathlib.Path, recording.Recording] = {}
+        self._applying = threading.Lock()
         self.publisher = None
         self.tracker = None
         self.actions = None
@@ -314,6 +333,7 @@ class Session:
         # acquire it without restarting the process.
         try:
             self._start_readers()
+            self.apply()
         except BaseException:
             self.close()
             raise
@@ -349,7 +369,8 @@ class Session:
                                                  on_frame=self.speakers.observe,
                                                  on_learn=self._learn,
                                                  appearances=appearances,
-                                                 reference=self.reference).start()
+                                                 reference=self.reference,
+                                                 podest_polygon=self.options.podest).start()
 
         if self.options.send_td:
             self.sender = td.Sender()
@@ -368,7 +389,7 @@ class Session:
         try:
             with contextlib.ExitStack() as listening:
                 try:
-                    listening.enter_context(capture.listen(self.audio, self.utterances.feed))
+                    listening.enter_context(capture.listen(self.audio, self._live_sound))
                 except sd.PortAudioError as error:
                     # A microphone listed but not opened, e.g. one another
                     # application holds exclusively: the run goes on without sound.
@@ -398,9 +419,11 @@ class Session:
                                         keep=max(BILDER_KEEP, 2 * options.window),
                                         annotate=self._name_faces).start()
         self.lage = lage.Lage(self.actions.since if self.actions else None,
-                              self.chronik.zeilen_seit, self._gain)
+                              self.chronik.zeilen_seit, self._gain,
+                              podest=self.actions.podest_stance if self.actions else None,
+                              scene=self.scene)
         self.utterances = utterances.Utterances(
-            int(self.audio.samplerate), self._zeilen, language=options.language,
+            self._samplerate, self._zeilen, language=options.language,
             meter=self.meter, laut=self.laut,
             sprecher=self._sprecher if self.speakers else None,
             einschaetzen=self._einschaetzen).start()
@@ -437,7 +460,7 @@ class Session:
         # A stretch the Chronik rated past the threshold asks for a
         # recommendation as the live alarm does: the Chronik sees what the
         # fast lane cannot, such as a scene sharpening without one loud line.
-        if summary and report.ueber_schwelle(summary.szene) and self.options.auto_empfehlung:
+        if summary and report.ueber_schwelle(summary.szene) and self.auto_empfehlung:
             self._empfehlungen.request(
                 f"Abschnitt {abschnitt.beginn:%H:%M:%S}-{abschnitt.ende:%H:%M:%S}: "
                 f"Eskalation {summary.szene.eskalation}, Gefahr {summary.szene.gefahr}, "
@@ -466,11 +489,57 @@ class Session:
                 tick += 1
                 self._emit(Werte(stand))
                 self._send(td.werte_messages(stand, tick))
-            if stand.alarm.aktiv and not alarm and self.options.auto_empfehlung:
+            if stand.alarm.aktiv and not alarm and self.auto_empfehlung:
                 wer = stand.alarm.wer or report.UNKLAR
                 self._empfehlungen.request(
                     f"Alarm: {wer}, Risiko {stand.alarm.wert}. {stand.alarm.anlass}", pause=True)
             alarm = stand.alarm.aktiv
+
+    # The scene ----------------------------------------------------------------
+
+    @property
+    def auto_empfehlung(self) -> bool:
+        """Whether the alarm asks for a recommendation: when the run allows it
+        and the scene in force has Einschreiten (scenes.Scene.interference)."""
+        return self.options.auto_empfehlung and self.scene.scene.interference
+
+    def apply(self):
+        """Carry out the scene in force: the number of bodies tracked, and the
+        video shown in place of the camera, from its start when it changes.
+
+        The live values read the rest from the scene as they are worked out.
+        A video that cannot be played leaves the camera in place, and the
+        scene reports why (scenes.Current.problem).
+        """
+        with self._applying:
+            if self.actions is not None:
+                self.actions.tracked = self.scene.tracked
+            wanted = self.scene.video()
+            playing = self.stream.playing
+            if wanted is None:
+                if playing is not None:
+                    self.stream.play(None)
+                return
+            if playing is not None and playing.path == wanted:
+                return
+            try:
+                if wanted not in self._recordings:
+                    self._recordings[wanted] = recording.Recording(wanted, self._samplerate)
+                self.stream.play(self._recordings[wanted].play(self._recorded_sound))
+            except (OSError, RuntimeError) as error:
+                print(f"video not played: {error}", file=sys.stderr)
+                self.scene.problem = str(error)
+                self.stream.play(None)
+
+    def _live_sound(self, samples):
+        """The microphone's sound, taken unless a video plays in its place."""
+        if self.stream.playing is None:
+            self.utterances.feed(samples)
+
+    def _recorded_sound(self, samples):
+        """A playing video's sound, taken from the start of listening on."""
+        if self.utterances is not None and self._listening is not None:
+            self.utterances.feed(samples)
 
     # Requests ---------------------------------------------------------------
 
@@ -602,7 +671,8 @@ class Session:
         `no_device` marks a run without an audio device (devices.NoAudio),
         which is never reported silent: its absence is known from the start.
         """
-        if isinstance(self.audio, devices.NoAudio):
+        playing = self.stream.playing
+        if isinstance(self.audio, devices.NoAudio) and playing is None:
             return {"quelle": self.audio.name, "pegel_db": None, "stumm": False,
                     "still_s": 0.0, "no_device": True}
         now = now or datetime.now()
@@ -610,7 +680,7 @@ class Session:
         if still is None:
             # Nothing arrived yet; silent once the run has listened STUMM seconds.
             still = (now - self._listening).total_seconds() if self._listening else 0.0
-        return {"quelle": self.audio.name,
+        return {"quelle": playing.name if playing is not None else self.audio.name,
                 "pegel_db": self.meter.level(now - timedelta(seconds=2), now),
                 "stumm": still >= STUMM, "still_s": round(still, 1), "no_device": False}
 
@@ -651,7 +721,19 @@ class Session:
         """
         if not self.actions:
             return frame
-        return annotate.draw_names(frame, self.actions.visible(), annotate.DISPLAY)
+        return annotate.draw_names(self.outline_podest(frame), self.actions.visible(),
+                                   annotate.DISPLAY)
+
+    def outline_podest(self, frame):
+        """A copy of a frame with the Podest outlined, where the scene in
+        force has the rule.
+
+        For the operator's view only, to check the polygon against where the
+        Podest stands today.
+        """
+        if not self.actions or not self.options.podest or self.scene.scene.podest is None:
+            return frame
+        return annotate.draw_region(frame, podest.pixels(self.options.podest, frame.shape[:2]))
 
     def _name_faces(self, frame):
         """The model's copy of a frame, with the tracker's name on each face.
@@ -705,7 +787,8 @@ class Session:
                  f"speech: {self.options.language} ({transcribe.MODEL}), per utterance",
                  f"chronik: every {self.options.window:g}s, stills every "
                  f"{self.options.interval:g}s; reports when asked for"]
-        if not self.options.auto_empfehlung:
+        lines.append(f"scene:  {self.scene.scene.name}")
+        if not self.auto_empfehlung:
             lines.append("empfehlung: only when asked for")
         if self.publisher:
             lines.append(f"ndi:    {self.options.ndi} @ {self.options.ndi_fps:g} fps")
@@ -715,6 +798,10 @@ class Session:
             lines.append(f"action: NTU120 ST-GCN on {actions.model.active_provider()}")
             if self.reference is not None:
                 lines.append(f"vorhersehbarkeit: {predictability.describe(self.reference)}")
+            rule = self.scene.scene.podest
+            if self.options.podest and rule is not None:
+                lines.append(f"podest: risiko +{rule.step} off, -{rule.step} on, at least "
+                             f"{rule.floor} off {podest.format_polygon(self.options.podest)}")
         else:
             lines.append("action: off, risiko, menschlichkeit and vorhersehbarkeit "
                          "not measured")

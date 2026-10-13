@@ -290,6 +290,13 @@ def test_only_the_largest_bodies_are_classified():
     assert recognizer.groups(frames, max_people=2) == [(1,), (2,)]
 
 
+def test_bodies_preferred_are_classified_before_larger_ones():
+    """The named cast, wherever they stand, before strangers nearer the camera."""
+    near, far = figure(300, height=500.0), figure(1500, height=150.0)
+    frames = track([(near, far)] * 50)
+    assert recognizer.groups(frames, max_people=1, first={2}) == [(2,)]
+
+
 def test_four_people_are_classified_alone_and_in_their_pairs():
     """The cast on stage at once, with someone small at the back left out."""
     cast = [figure(x) for x in (200, 700, 1200, 1700)]

@@ -58,6 +58,67 @@ results reach the stage"), so Apollon's cut order is unchanged.
 
 ---
 
+## 2026-10-13 — Aggression ranges from −10 to 10 (Szene 2.3)
+
+Requested by Moe. Concerns the Manual SITREP Value of Scene 2.3 in
+`02_processing.md` (PROCESSING → AV analysis in `pipeline.md`). W and S now
+move Aggression between −10 and 10, one point per press. Every other value
+keeps its range. The ranges are in one table, `scenes.RANGES`, which
+`sitrep.js` mirrors. The Podest floor stays on Risiko's 0–5, because the count
+is added to Risiko.
+
+- **Pips:** five pips span a value's largest magnitude, rounded up so that any
+  value but 0 shows. On 0–5 and −5 to 5 that is one pip per point, as before.
+  On Aggression it is one pip per two points. A negative value fills by its
+  magnitude and is set with its sign. The overlay rows now carry their scale
+  (`(label, value, level, scale)`, `annotate._filled`).
+- **Colours:** Aggression is raised from 4 and red from 8, the same shares of
+  its range at which Risiko is raised (2) and red (4). Below 0 it stays calm.
+  It still does not raise the alarm.
+- **Room for "−10":** on the strip of Prototype 3, the number column is as wide
+  as the widest range in the scene, so only scenes showing Aggression change.
+  On the page, only cards that show Aggression widen their number column.
+- On the overview, an Aggression set below 0 counts as a finding, so the
+  person's card is shown.
+
+OSC still does not carry Aggression. 710 tests pass (5 new). The strip was
+checked as an image at −10 and 9. The page was not checked in a browser.
+
+---
+
+## 2026-10-13 — Scene screens keep every word whole
+
+Requested by Moe. Concerns Manual Interference in the scene configurations
+(`02_processing.md`, Scene 2.3, "Maximales Aggressionspotenzial erreicht.") and
+its screen in the Live SITREP of the RENDER step in `pipeline.md`
+(`03_render.md`). The screen's text was set at 6 % of the window width and
+allowed to break inside words, so "Aggressionspotenzial" ran onto two lines.
+Words are no longer broken. `fitManualScreen` in `sitrep.js` reduces the size
+from the style sheet's only as far as the longest word needs to fit across the
+screen and the lines to fit down it. It fits again when the text, the view, the
+window or the loaded typeface changes. The lines are balanced in length. At
+1920×1080 the text sets as MAXIMALES \ AGGRESSIONSPOTENZIAL \ ERREICHT. at
+85 px. Shorter texts such as "TROJA IST GEFALLEN" keep the full size. Checked in
+headless Edge through `sitrep.js` with stubbed server calls, at 1920×1080,
+1280×720, 1024×768 and 800×1000; every word was on one line. 68 interface and
+scene tests pass.
+
+---
+
+## 2026-10-13 — Scene rating beneath the picture restored (Prototypes 2 and 3)
+
+Bug fix. Concerns the Live SITREP of the RENDER step in `pipeline.md`
+(`03_render.md`, Prototypes 2 and 3). The scene configurations (entry below)
+added the scene in force to `LiveSitrep.snapshot` under the key `scene`, which
+already held the latest Relevanz, Eskalation and Gefahr (`latest_scene`). The
+second key overwrote the first, so the meters beneath the picture had no
+values. The rating is now sent as `scene_rating` (read by `prototyp2.js`, which
+Prototype 3 shares); `scene` stays the scene in force, as `sitrep.js` and
+`prototyp1.js` read it. 705 tests pass (1 new). The meters were checked in
+headless Edge against a stub run.
+
+---
+
 ## 2026-10-13 — Operator pages and live display in the Seestone CI
 
 Requested by Moe: Apollon is a product of Seestone and follows its corporate
@@ -110,6 +171,134 @@ empty cell (5 in a 3×2 grid) or black bars around 16:9 clips (2 side by side,
 parameter itself still takes any value when set by hand. `wall_keys` reloads
 from its file, so the build script doesn't need to run again. 8 new tests;
 703 pass.
+
+---
+
+## 2026-10-13 — Scene configurations for the live SITREP
+
+Implements "Scene Configurations" in `02_processing.md` (Realtime-SITREP,
+"per scene config"; PROCESSING → AV analysis in `pipeline.md`). Moe decided
+three points the spec left open. Einschreiten stays on by default. Four people
+are tracked by default. The Podest rule is a running count.
+
+- **Scenes file.** The scenes are in `src/sitrep/scenes.toml` and are read by
+  `scenes.py`. A scene lists only what differs from the defaults ("Standard").
+  Settings map one to one to the spec's list. Keys are declared in the file:
+  a screen, a tracked count, a manual value, or a video swap. R, E and X stay
+  reserved. Edit the file, then restart `apollon-ui`.
+- **Selection.** There is a "Szene" dropdown on the start page. A selection
+  takes effect at once, also in a run under way (`Session.apply`). It is kept
+  in `data/interface/scene.txt` across restarts. Both commands take
+  `--scene "Szene 1"`. Selecting a scene, even the same one again, resets what
+  the keys changed.
+- **Podest (Szene 1).** Risiko is now a running count per person
+  (`podest.Counter`): +1 on stepping off, −1 on stepping on, and at least 2
+  while off. Someone with nothing else measured reads 2 off the Podest and 1
+  after stepping back on. The count is added to the measured Risiko. It is kept
+  while the person is out of view and restarts when a scene is selected. **The
+  rule now applies only in scenes that set it**, so Standard has none.
+  `--podest` still sets the polygon, and `--no-podest` turns the rule off
+  everywhere.
+- **Tracked persons.** The number of bodies boxed, labelled, offered for naming
+  and described for appearance is set by the scene (Szene 1: 30, P switches to
+  3 and back). The pose model (RTMO) is single-stage, so its cost does not grow
+  with the number of people. Action classification stays at 4 people
+  (`recognizer.MAX_PEOPLE`) and now takes named bodies first, then the tallest.
+  Only named people are rated, so classifying anyone else is wasted.
+- **Values per person (Szene 2.3).** Alex is shown with Aggression only, Lena
+  with the defaults. Aggression is set by hand only (W +1, S −1, 0–5). It is
+  coloured like Risiko and does not raise the alarm. A Risiko the scene does
+  not show is not read by the alarm either (`lage.restricted`).
+- **Screens (T, M).** A scene key opens a full page with its text on
+  Prototypes 1–3. The same key or X closes it. It covers a report or an
+  Einschreiten.
+- **Video (Szene 1.2, Szene 3 with C).** The run reads a `recording.Switch`
+  instead of the camera. A scene video plays from its start in place of the
+  camera and is analysed like the camera picture. While it plays, its sound
+  replaces the microphone's. At the end it holds its last frame. Replay's
+  playback classes moved to `recording.py`. **Both video paths are still TBD**,
+  so these scenes run live and the page says so.
+- **Interference** off in a scene stops the alarm and the Chronik from asking
+  for a recommendation and suppresses the Einschreiten page. E still works.
+  All scenes inherit it on, since the spec sets it off for none.
+
+Open:
+- OSC does not carry Aggression. A value not shown travels as not measured.
+- Reports (R) still list every measured value per person.
+
+695 tests pass (43 new). The page and routes were checked against the real
+scenes file. A live run with the camera has not been checked yet.
+
+---
+
+## 2026-10-12 — Podest rule reversed: off the Podest raises Risiko
+
+Requested by Moe. This reverses the rule of the entry "Standing on the Podest
+raises Risiko by one" below. Now a named person in view who is not on the
+Podest has their live Risiko raised by 1, cause "nicht auf dem Podest".
+Stepping onto the Podest takes the 1 off at once, and stepping down puts it
+back.
+
+- The recogniser now reports each body in view with whether it stands on the
+  Podest (`ActionRatings.podest_stance`, replacing `on_podest`). `lage` gives
+  the +1 to the named bodies that are off it.
+- Everyone in view and off the Podest reads at least Risiko 1. A person out
+  of view is neither on nor off it and gets nothing.
+- The +1 still counts towards the alarm. Anyone at Risiko 2 off the Podest
+  now raises it, and with it an Empfehlung, where before only people on the
+  Podest did.
+
+652 tests pass. Not yet checked live.
+
+---
+
+## 2026-10-12 — Podest region moved to where the Podest stands today
+
+Pointed out by Moe on the live feed: the Podest was not tracked correctly.
+Today it is two platforms side by side, about 120 px left of its position on
+2026-10-06 and slightly turned. The region from that day (see below) covered
+only its right half and the floor beside it. `podest.POLYGON` now holds
+today's top surface, measured on the live camera: x 527 to 1050 px, front
+edge at y 702 to 720 px.
+
+The operator page had no way to set another region: `--podest` and
+`--no-podest` existed only in `apollon-sitrep`. Both flags are now shared
+(`cli.podest_region`) and taken by `apollon-ui` too. The page must be
+restarted to load the new region. Not yet checked with someone standing on
+the Podest.
+
+---
+
+## 2026-10-12 — Standing on the Podest raises Risiko by one
+
+Requested by Moe, for the live values of the SITREP (`02_processing.md`,
+"Calculating Values"; PROCESSING → AV analysis in `pipeline.md`). Whoever
+stands on the Podest in the middle of the picture has their live Risiko
+raised by 1. When they step down, it drops by 1 again at once. It is not
+evidence and does not fade like evidence (`podest.py`, `lage.stand`). It
+counts towards the alarm, so Risiko 2 on the Podest raises it. Someone with
+nothing else measured reads Risiko 1, cause "steht auf dem Podest". Only
+named people are rated, as everywhere else. Reports and the Chronik are
+unchanged. They see it only through the live values handed to the model.
+
+- **Where it is.** A polygon over the Podest's top surface, as shares of image
+  width and height (`podest.POLYGON`). It was measured on the recordings of
+  2026-10-06. The Podest moves between rehearsals: on 2026-09-30 it stood at
+  the back left. So `--podest "x,y x,y ..."` sets another polygon and
+  `--no-podest` turns the rule off (`Options.podest`). The operator's picture
+  outlines the polygon in use.
+- **Standing on it.** The point between the ankles must lie inside the
+  polygon, with hip above knee above ankle. A step up or down counts after
+  about a second: more than half the frames of the last second
+  (`ActionRatings.on_podest`, from the body tracker's frames).
+  Checked by eye on 150 frames and 36 clips of 2026-10-06. Sitting on the
+  edge, kneeling or lying on it, and standing in front of it do not count.
+- **Back edge.** From this camera, feet at the very back of the Podest and
+  feet on the floor just behind it look the same. The polygon starts at the
+  back edge, so the actors waiting behind the Podest are not counted. Someone
+  standing at its very back may be missed.
+
+651 tests pass. Not yet checked live.
 
 ---
 

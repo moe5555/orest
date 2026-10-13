@@ -76,6 +76,14 @@ def test_no_alarm_is_sent_as_zero_with_nobody_named():
     assert begin[3:6] == [0, 0, ""]
 
 
+def test_a_value_the_scene_does_not_show_is_sent_as_not_measured():
+    stand = lage.Stand(AT, {"Alex": {"aggression": lage.Wert(3, 3.0, "vom Operator gesetzt", AT)}},
+                       lage.Alarm(False))
+    person = only(sitrep_td.werte_messages(stand, 1), sitrep_td.LIVE_PERSON)[0]
+    assert person == [1, 1, "Alex", sitrep_td.NICHT_GEMESSEN, sitrep_td.NICHT_GEMESSEN, "", "",
+                      sitrep_td.NOT_MEASURED_SIGNED]
+
+
 def test_each_line_is_sent_as_transcribed_and_again_once_rated():
     lines = [report.Aeusserung(name=None, text="Raus!", beginn=AT, ende=AT, risiko=3,
                                menschlichkeit=-2, lautstaerke="geschrien"),

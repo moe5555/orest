@@ -8,12 +8,14 @@ is made only when asked for:
     r    Lagebericht
     e    Empfehlung
 
-On Windows the key alone does it; elsewhere the key and Enter. Nothing is
-retained; the camera feed itself is handled separately and is not displayed
-here.
+The keys of the scene given with --scene (scenes.toml) work as on the page;
+a screen they open has nothing to show here. On Windows the key alone does
+it; elsewhere the key and Enter. Nothing is retained; the camera feed itself
+is handled separately and is not displayed here.
 
     apollon-sitrep
     apollon-sitrep --window 30 --interval 10 --audio-api WASAPI
+    apollon-sitrep --scene "Szene 1"
     apollon-sitrep --json
 
 Equivalently, without the installed entry point:
@@ -27,7 +29,7 @@ import sys
 import textwrap
 import threading
 
-from . import chronik, cli, lage, loudness, report, session, transcribe
+from . import chronik, cli, lage, loudness, report, scenes, session, transcribe
 
 # Label column width, sized to the longest field name.
 _LABEL = 12
@@ -252,13 +254,17 @@ def format_empfehlung(empfehlung: report.Empfehlung, width=78, use_colour=True) 
 
 
 def _keys(live: session.Session):
-    """Ask for a report on r and a recommendation on e, typed in the console."""
+    """Ask for a report on r and a recommendation on e, typed in the console,
+    and carry out the scene's keys (scenes.py)."""
     def press(key: str):
         key = key.strip().lower()
         if key == "r" and not live.bericht():
             print(" Bericht läuft; ein weiterer folgt danach.", flush=True)
         elif key == "e" and not live.empfehlung():
             print(" Empfehlung läuft; eine weitere folgt danach.", flush=True)
+        elif key and key not in "re" and live.scene.press(key):
+            live.apply()
+            print(f" {live.scene.scene.keys[key].label()}", flush=True)
 
     def loop():
         try:
@@ -329,7 +335,8 @@ def format_event(event, use_colour=True, as_json=False) -> str | None:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__.splitlines()[0],
-        parents=[cli.sources(), cli.timing(), cli.resolution(), cli.touchdesigner()],
+        parents=[cli.sources(), cli.timing(), cli.resolution(), cli.touchdesigner(),
+                 cli.podest_region(), cli.scene()],
     )
     parser.add_argument("--model", default=report.MODEL)
     parser.add_argument("--cast", type=pathlib.Path,
@@ -353,8 +360,9 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        scene = scenes.Current(cli.chosen_scene(args))
         video, audio = session.resolve_sources(args)
-        live = session.Session(video, audio, session.Options.from_args(args))
+        live = session.Session(video, audio, session.Options.from_args(args), scene=scene)
     except (ValueError, RuntimeError) as error:
         print(error, file=sys.stderr)
         return 1

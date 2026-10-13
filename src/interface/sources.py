@@ -26,9 +26,27 @@ SOURCES_FILE = Path(os.environ.get("APOLLON_UI_SOURCES",
                                    REPO_ROOT / "data" / "interface" / "sources.json"))
 
 
+# Where the name of the scene last put in force is kept, so a restart of
+# apollon-ui resumes it (sitrep/scenes.py).
+SCENE_FILE = Path(os.environ.get("APOLLON_UI_SCENE",
+                                 REPO_ROOT / "data" / "interface" / "scene.txt"))
+
 # The cast folder offered on the operator page: one folder per person, each
 # holding enrolment photographs (face/gallery.py).
 CAST_DIR = REPO_ROOT / "data" / "cast"
+
+
+def saved_scene(path: Path) -> str | None:
+    """The name of the scene last put in force, or None."""
+    try:
+        return path.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def save_scene(path: Path, name: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(name, encoding="utf-8")
 
 
 class Sources(BaseModel):

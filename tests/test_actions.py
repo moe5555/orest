@@ -289,3 +289,27 @@ def test_a_face_already_carrying_the_name_is_not_learned_again():
 
 def test_faces_on_bodies_not_named_by_hand_are_not_learned():
     assert learning(["#3"] * 5, pinned=None) == []
+
+
+def test_whether_each_body_in_view_stands_on_the_podest_is_read_from_the_frames():
+    """Feet on the top surface, legs upright, on the 1920x1080 Probebühne image."""
+    upright = np.zeros((17, 2), dtype=np.float32)
+    upright[:11] = [920.0, 300.0]
+    upright[11:13], upright[13:15], upright[15:17] = [920.0, 450.0], [920.0, 550.0], [920.0, 650.0]
+    upright[:, 0] += np.tile([-10.0, 10.0], 9)[:17]
+    floor = upright + [0.0, 140.0]
+    scores = np.full((2, 17), 0.9, dtype=np.float32)
+
+    subject = actions.ActionRatings(source=None, faces=None, mapping=MAPPING,
+                                    podest_polygon=actions.podest.POLYGON)
+    assert subject.podest_stance() == {}
+    subject.recognizer.image_shape = (1080, 1920)
+    for step in range(5):
+        subject.recognizer.tracker.update(np.stack([upright, floor]), scores, step / 25)
+    on, off = (track for track in subject.recognizer.tracker.frames[-1].bodies)
+    assert subject.podest_stance() == {on: True, off: False}
+
+    without = actions.ActionRatings(source=None, faces=None, mapping=MAPPING)
+    without.recognizer.image_shape = (1080, 1920)
+    without.recognizer.tracker.update(np.stack([upright]), scores[:1], 0.0)
+    assert without.podest_stance() == {}

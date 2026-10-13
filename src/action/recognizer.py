@@ -27,7 +27,7 @@ import itertools
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 
 import cv2
@@ -43,11 +43,12 @@ STEP = 1.0
 # it, most of the sequence would be the zeros that stand for "absent".
 MIN_PRESENCE = 0.5
 
-# People classified per window, the largest bodies first: as many as the
+# People classified per window, those preferred by the caller first (the
+# named cast, sitrep/actions.py), then the largest bodies: as many as the
 # enrolled cast (data/cast), who stand nearer the camera than anyone else in
 # frame. Every person admitted also adds pairs, so four people make at most ten
 # groups; 17 people could make over 150, which the network cannot classify
-# within one STEP.
+# within one STEP. More people can be tracked than are classified.
 MAX_PEOPLE = 4
 
 # Two people form a pair when their box centres are, on average over the
@@ -83,11 +84,12 @@ def tallest(frame: tracking.Frame, count: int = MAX_PEOPLE) -> list[int]:
 
 def groups(frames: list[tracking.Frame], *, min_presence: float = MIN_PRESENCE,
            pair_distance: float = PAIR_DISTANCE,
-           max_people: int = MAX_PEOPLE) -> list[tuple[int, ...]]:
+           max_people: int = MAX_PEOPLE,
+           first: Collection[int] = ()) -> list[tuple[int, ...]]:
     """The people and the pairs of people in a window worth classifying.
 
-    At most `max_people` people are considered, those with the tallest mean
-    body over the window.
+    At most `max_people` people are considered: the tracks in `first`, then
+    those with the tallest mean body over the window.
     """
     if not frames:
         return []
@@ -103,7 +105,8 @@ def groups(frames: list[tracking.Frame], *, min_presence: float = MIN_PRESENCE,
         for track in present:
             if track in frame.bodies:
                 heights[track].append(_centre_and_height(frame.bodies[track])[1])
-    present = sorted(sorted(present, key=lambda track: -np.mean(heights[track]))[:max_people])
+    present = sorted(sorted(present, key=lambda track: (track not in first,
+                                                        -np.mean(heights[track])))[:max_people])
 
     found: list[tuple[int, ...]] = [(track,) for track in present]
     for first, second in itertools.combinations(present, 2):
@@ -146,12 +149,16 @@ class ActionRecognizer:
 
     def __init__(self, source=None, *, fps: float = FPS, window: float = WINDOW,
                  step: float = STEP, on_readings: Callable[[list[Reading]], None] | None = None,
-                 on_frame: Callable[[np.ndarray, tracking.Frame], None] | None = None):
+                 on_frame: Callable[[np.ndarray, tracking.Frame], None] | None = None,
+                 prefer: Callable[[], Collection[int]] | None = None):
         self._source = source
         self._fps = fps
         self._window = window
         self._step = step
         self._on_readings = on_readings
+        # Track ids classified before the tallest others, when more people
+        # are in view than are classified (groups).
+        self._prefer = prefer
         # Called with each camera frame and the bodies tracked in it, on this
         # thread, for measurements that need the picture as well as the pose.
         self._on_frame = on_frame
@@ -177,11 +184,20 @@ class ActionRecognizer:
         with self._lock:
             return self.tracker.update(np.asarray(keypoints), np.asarray(scores), at)
 
+    def recent(self, seconds: float) -> list[tracking.Frame]:
+        """The tracked frames of the last `seconds` up to the newest, oldest
+        first; safe to call from any thread."""
+        with self._lock:
+            if not self.tracker.frames:
+                return []
+            newest = self.tracker.frames[-1].at
+            return self.tracker.window(newest - seconds, newest)
+
     def evaluate(self, at: float) -> list[Reading]:
         """Classify every person and pair over the window ending at `at`."""
         with self._lock:
             frames = self.tracker.window(at - self._window, at)
-        found = groups(frames)
+        found = groups(frames, first=self._prefer() if self._prefer else ())
         if not found or self.image_shape is None:
             return []
 

@@ -63,6 +63,16 @@ the mean of those scores, not a peak: it describes how the person moved over
 the stretch, and a single window far from the corpus is as often a tracking
 slip as a new movement.
 
+Podest. Given the Podest's polygon, whether each body in view stands on it
+is read from the tracked frames when asked for (`podest_stance`, podest.py).
+
+Tracked and classified. `tracked` bodies, the tallest in view, are boxed,
+labelled, offered for naming by hand and described for naming by appearance;
+the scene sets how many (scenes.py, "Tracked Persons"). Faces name any body
+in view, and every body is judged on the Podest. The action recogniser
+classifies fewer (recognizer.MAX_PEOPLE), the named bodies first, since only
+named people are rated.
+
 Readings are kept for KEEP seconds and read, never consumed: the live
 values (lage.py) read the last few seconds, each stretch of the scene's
 summary (chronik.py) and a report asked for read theirs.
@@ -70,7 +80,7 @@ summary (chronik.py) and a report asked for read theirs.
 
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -78,7 +88,7 @@ import numpy as np
 
 from action import model, recognizer, sitrep_map, tracking
 
-from . import appearance, loudness, predictability, presence, report
+from . import appearance, loudness, podest, predictability, presence, report
 
 # Seconds a face box stays usable for naming a body: two passes of the
 # presence tracker, so one missed detection does not leave a body unnamed.
@@ -267,8 +277,15 @@ class ActionRatings:
                  mapping: sitrep_map.Mapping | None = None, on_frame=None,
                  on_learn: Callable[[int, str, str], None] | None = None,
                  appearances: appearance.Appearances | None = None,
-                 reference: predictability.Reference | None = None):
+                 reference: predictability.Reference | None = None,
+                 podest_polygon: Sequence[tuple[float, float]] | None = None):
         self.mapping = mapping or sitrep_map.load()
+        # The Podest's top surface in the image (podest.POLYGON); None turns
+        # the Podest rule off.
+        self.podest_polygon = podest_polygon
+        # Bodies boxed, labelled and described, the tallest in view; set by
+        # the scene in force.
+        self.tracked = recognizer.MAX_PEOPLE
         # The rehearsal corpus each person's movement is scored against.
         self.reference = reference
         self._faces = faces
@@ -309,7 +326,8 @@ class ActionRatings:
                 for observe in observers:
                     observe(image, frame)
         self.recognizer = recognizer.ActionRecognizer(source, on_readings=self._on_readings,
-                                                      on_frame=on_frame)
+                                                      on_frame=on_frame,
+                                                      prefer=lambda: set(self.names()))
 
     def start(self) -> "ActionRatings":
         # Loaded before the thread starts, so a missing model fails the run at
@@ -341,7 +359,7 @@ class ActionRatings:
             return dict(self._names)
 
     def visible(self) -> list[tuple[np.ndarray, str]]:
-        """Box and label of the tallest bodies in the latest tracked frame.
+        """Box and label of the `tracked` tallest bodies in the latest tracked frame.
 
         The people the ratings and speaker attribution are about, labelled by
         name, or "Körper <id>" while no face has named them.
@@ -361,7 +379,23 @@ class ActionRatings:
             names, pinned = dict(self._names), set(self._pinned)
         return [(track, frame.bodies[track].box, names.get(track, f"Körper {track}"),
                  track in pinned)
-                for track in recognizer.tallest(frame)]
+                for track in recognizer.tallest(frame, self.tracked)]
+
+    def podest_stance(self) -> dict[int, bool]:
+        """Each body in the newest tracked frame, by track id, and whether it
+        stands on the Podest now (podest.py).
+
+        Empty without a polygon, and once recognition has stopped, since its
+        last frames would otherwise hold whoever was in view at that moment.
+        """
+        shape = self.recognizer.image_shape
+        if self.podest_polygon is None or shape is None or self.error is not None:
+            return {}
+        frames = self.recognizer.recent(podest.FENSTER)
+        if not frames:
+            return {}
+        up = podest.oben(frames, shape, self.podest_polygon)
+        return {track: track in up for track in sorted(frames[-1].bodies)}
 
     def assign(self, track: int, name: str | None) -> str | None:
         """Name a body by hand, or release it to the automatic naming with None.
@@ -445,7 +479,8 @@ class ActionRatings:
         image, _ = taken
         try:
             return appearance.describe(
-                image, {track: frame.bodies[track] for track in recognizer.tallest(frame)})
+                image, {track: frame.bodies[track]
+                        for track in recognizer.tallest(frame, self.tracked)})
         except Exception as error:
             self.appearance_error = error
             print(f"appearance stopped: {error!r}", file=sys.stderr)

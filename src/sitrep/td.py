@@ -194,10 +194,13 @@ def werte_messages(stand, tick: int) -> list[Message]:
     built = [(LIVE_BEGIN, [tick, _clock(stand.zeit), len(stand.personen), int(alarm.aktiv),
                            alarm.wert, alarm.wer or "", alarm.anlass])]
     for zeile, (name, werte) in enumerate(stand.personen.items(), start=1):
+        # A value the scene does not show a person with travels as not measured.
         vorhersehbarkeit = werte.get(report.VORHERSEHBARKEIT)
         built.append((LIVE_PERSON, [tick, zeile, name,
-                                    *(werte[rating].wert for rating in report.GEMESSEN),
-                                    *(werte[rating].anlass for rating in report.GEMESSEN),
+                                    *(werte[rating].wert if rating in werte else NICHT_GEMESSEN
+                                      for rating in report.GEMESSEN),
+                                    *(werte[rating].anlass if rating in werte else ""
+                                      for rating in report.GEMESSEN),
                                     NOT_MEASURED_SIGNED if vorhersehbarkeit is None
                                     else vorhersehbarkeit.wert]))
     built.append((LIVE_END, [tick]))

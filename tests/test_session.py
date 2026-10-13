@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sitrep import capture, chronik, devices, presence, session
+from sitrep import capture, chronik, devices, presence, scenes, session
 
 SAMPLERATE = 16000
 
@@ -109,6 +109,10 @@ class FakeReader:
     def between(self, since, until, gain=None):
         """An action recogniser's ratings over a stretch."""
         return []
+
+    def podest_stance(self):
+        """The bodies in view, and whether an action recogniser reads them on the Podest."""
+        return {}
 
     def carried(self, since, until):
         """Cast names carried by bodies, which the roster adds."""
@@ -362,6 +366,26 @@ def test_ndi_is_off_unless_asked_for(tmp_path):
     options = session.Options.from_args(Args())
     assert options.ndi is None
     assert not options.actions
+
+
+def test_the_podest_is_measured_where_it_stood_unless_given_or_turned_off():
+    class Args:
+        interval, window = 5.0, 20.0
+        width = height = None
+        model = "some-model:tag"
+        language = "de"
+        cast = None
+        send_ndi, ndi_name, ndi_fps = False, "Apollon Test", 30.0
+        send_td = False
+        no_actions = False
+        podest = None
+        no_podest = False
+
+    assert session.Options.from_args(Args()).podest == list(session.podest.POLYGON)
+    Args.podest = ((0.1, 0.1), (0.2, 0.1), (0.2, 0.2))
+    assert session.Options.from_args(Args()).podest == [(0.1, 0.1), (0.2, 0.1), (0.2, 0.2)]
+    Args.no_podest = True
+    assert session.Options.from_args(Args()).podest is None
 
 
 def test_the_startup_lines_name_every_open_channel(room, readers, tmp_path, monkeypatch):
@@ -747,3 +771,106 @@ def test_a_face_reported_after_the_name_changed_is_not_learned():
     run.assign(20, "Alex")
     run._learn(20, "#5", "Lena")
     assert naming.taught == []
+
+
+def test_the_scene_sets_how_many_bodies_are_tracked(room, readers):
+    video, audio, _, _, _ = room
+    scene = scenes.Current(scenes.Scene(tracked=30, keys={"p": scenes.Key(tracked=3)}))
+    with session.Session(video, audio, scene=scene) as live:
+        assert readers["actions"].tracked == 30
+        scene.press("p")
+        live.apply()
+        assert readers["actions"].tracked == 3
+
+
+def test_the_alarm_asks_for_a_recommendation_only_in_scenes_with_einschreiten(room, readers):
+    video, audio, _, _, _ = room
+    scene = scenes.Current()
+    with session.Session(video, audio, scene=scene) as live:
+        assert live.auto_empfehlung
+        scene.select(scenes.Scene(interference=False))
+        assert not live.auto_empfehlung
+    with session.Session(video, audio, session.Options(auto_empfehlung=False)) as live:
+        assert not live.auto_empfehlung
+
+
+class FakePlayback:
+    def __init__(self, path, on_audio):
+        self.path, self.on_audio = path, on_audio
+        self.name = f"Aufnahme {path.name}"
+        self.device = devices.VideoDevice(-1, self.name)
+        self.closed = False
+
+    def latest(self):
+        return np.full((48, 64, 3), 7, dtype=np.uint8)
+
+    def close(self):
+        self.closed = True
+
+
+class FakeRecording:
+    made = []
+
+    def __init__(self, path, samplerate):
+        self.path, self.samplerate = path, samplerate
+        FakeRecording.made.append(self)
+
+    def play(self, on_audio):
+        self.playback = FakePlayback(self.path, on_audio)
+        return self.playback
+
+
+def test_a_scene_video_takes_the_place_of_the_camera_and_the_microphone(
+        room, readers, monkeypatch, tmp_path):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.recording, "Recording", FakeRecording)
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"")
+    scene = scenes.Current(scenes.Scene(name="Szene 3", video=clip,
+                                        keys={"c": scenes.Key(swap=True)}))
+    with session.Session(video, audio, scene=scene) as live:
+        heard = []
+        live.utterances = SimpleNamespace(feed=heard.append, close=lambda: None,
+                                          clear=lambda: None)
+        live._listening = datetime.now()
+        assert live.stream.latest()[0, 0, 0] == 0
+        scene.press("c")
+        live.apply()
+        playback = live.stream.playing
+        assert live.stream.latest()[0, 0, 0] == 7
+        assert FakeRecording.made[-1].samplerate == SAMPLERATE
+        assert live.ton()["quelle"] == "Aufnahme clip.mp4"
+        live._live_sound("microphone")
+        playback.on_audio("video")
+        assert heard == ["video"]
+        scene.press("c")
+        live.apply()
+        assert playback.closed and live.stream.playing is None
+        live._live_sound("microphone")
+        assert heard == ["video", "microphone"]
+
+
+def test_a_video_that_will_not_play_leaves_the_camera_and_says_why(
+        room, readers, monkeypatch, tmp_path):
+    video, audio, _, _, _ = room
+
+    def broken(path, samplerate):
+        raise RuntimeError(f"Video lässt sich nicht öffnen: {path}")
+
+    monkeypatch.setattr(session.recording, "Recording", broken)
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"")
+    scene = scenes.Current(scenes.Scene(name="Szene 1.2", video=clip, prerecorded=True))
+    with session.Session(video, audio, scene=scene) as live:
+        assert live.stream.playing is None
+        assert "lässt sich nicht öffnen" in scene.snapshot()["warnings"][0]
+
+
+def test_the_podest_is_outlined_only_in_scenes_with_the_rule(room, readers):
+    video, audio, _, _, _ = room
+    scene = scenes.Current()
+    frame = np.zeros((48, 64, 3), dtype=np.uint8)
+    with session.Session(video, audio, scene=scene) as live:
+        assert live.outline_podest(frame) is frame
+        scene.select(scenes.Scene(podest=scenes.PodestRule()))
+        assert live.outline_podest(frame) is not frame

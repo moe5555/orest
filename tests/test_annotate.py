@@ -60,8 +60,24 @@ def test_a_tag_near_the_right_edge_stays_inside_the_frame():
     assert changed(original, marked)[:150, :600].any()
 
 
-RATED = [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm"),
-         ("Vorhersehbarkeit", -3, "amber")]
+RATED = [("Risiko", 4, "red", 5), ("Menschlichkeit", 1, "calm", 5),
+         ("Vorhersehbarkeit", -3, "amber", 5)]
+
+
+def test_pips_fill_by_the_share_of_the_values_scale():
+    """One pip per point on a scale of 5; on Aggression's -10 to 10, one per
+    two, rounded up so that any value but 0 shows."""
+    assert [annotate._filled(value, 5) for value in (0, 1, 3, -3, 5)] == [0, 1, 3, 3, 5]
+    assert [annotate._filled(value, 10) for value in (0, 1, 2, 3, 4, -7, 10, -10)] == \
+        [0, 1, 1, 2, 2, 4, 5, 5]
+
+
+def test_a_value_of_two_digits_and_a_sign_fits_its_panel():
+    original = frame()
+    rows = [("Aggression", -10, "calm", 10)]
+    marked = annotate.draw_ratings(original, [(box(100, 150, 160, 300), "Alex", rows)])
+    assert changed(original, marked)[150:300, 165:].any()
+    assert marked.shape == original.shape
 
 
 def test_a_frame_with_nobody_to_rate_is_returned_unmarked():
@@ -160,3 +176,10 @@ def test_a_slot_is_held_for_a_person_who_left_a_moment_ago():
     assert slots.assign([("Klara", 0.1), ("Orest", 0.1)], now=2) == {"Klara": 0, "Orest": 1}
     slots.assign([], now=3)
     assert slots.assign([("Elektra", 0.1)], now=10) == {"Elektra": 0}
+
+
+def test_a_region_is_outlined_on_a_copy():
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    marked = annotate.draw_region(frame, np.array([[10, 10], [90, 10], [90, 90], [10, 90]]))
+    assert not frame.any()
+    assert marked[10, 50].any() and not marked[50, 50].any()

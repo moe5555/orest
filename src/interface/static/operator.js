@@ -1,6 +1,7 @@
 // Operator page: the camera, sound source and cast of the next live SITREP,
-// chosen from what this machine offers. The server keeps the selection, so the
-// SITREP page, opened from here or restarted there, opens whatever is selected.
+// chosen from what this machine offers, and the scene in force. The server
+// keeps the selection, so the SITREP page, opened from here or restarted
+// there, opens whatever is selected.
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -166,8 +167,68 @@ async function searchNdi() {
   renderSound();
 }
 
+// ---- Scene -----------------------------------------------------------------
+
+// The scene in force (sitrep/scenes.py). Unlike the sources, it applies to a
+// run under way at once.
+let scene = null;
+
+function sceneNotice(text, error = false) {
+  $("scene-notice").textContent = text;
+  $("scene-notice").classList.toggle("error", error);
+}
+
+// The keys the scene answers to on the SITREP page, and what keeps it from
+// running as configured.
+function describeScene(selected) {
+  const keys = Object.entries(selected.keys)
+    .map(([key, bound]) => `${key.toUpperCase()}: ${bound.label}`);
+  const parts = [
+    selected.interference ? "Einschreiten an" : "Einschreiten aus",
+    `${selected.tracked} Personen verfolgt`,
+    ...(selected.podest ? ["Podest-Regel an"] : []),
+    ...keys,
+  ];
+  sceneNotice([parts.join(" \\ "), ...selected.warnings].join("\n"), selected.warnings.length > 0);
+}
+
+async function loadScenes() {
+  try {
+    const response = await fetch("/api/scenes");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    scene = data.selected;
+    $("scene").replaceChildren(...data.scenes.map(({ name }) => option(name, name)));
+    $("scene").value = scene.name;
+    $("scene").disabled = false;
+    describeScene(scene);
+  } catch (error) {
+    sceneNotice(`Szenen konnten nicht gelesen werden: ${error.message}`, true);
+  }
+}
+
+async function chooseScene() {
+  sceneNotice("Wird übernommen …");
+  try {
+    const response = await fetch("/api/scene", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("scene").value }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail ?? `HTTP ${response.status}`);
+    scene = data.selected;
+    describeScene(scene);
+  } catch (error) {
+    $("scene").value = scene?.name ?? "";
+    sceneNotice(`Nicht übernommen: ${error.message}`, true);
+  }
+}
+
 $("camera").addEventListener("change", choose);
 $("sound").addEventListener("change", choose);
 $("cast").addEventListener("change", choose);
+$("scene").addEventListener("change", chooseScene);
 load();
+loadScenes();
 searchNdi();

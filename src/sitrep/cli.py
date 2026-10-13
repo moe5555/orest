@@ -13,7 +13,7 @@ import argparse
 
 import osc
 
-from . import feed
+from . import feed, podest, scenes
 
 # Defaults for the command line only. The library functions take window and
 # interval as required arguments, because step 6 of
@@ -50,6 +50,38 @@ def resolution() -> argparse.ArgumentParser:
     parser.add_argument("--width", type=int, help="requested capture width")
     parser.add_argument("--height", type=int, help="requested capture height")
     return parser
+
+
+def podest_region() -> argparse.ArgumentParser:
+    """Where the Podest stands in the camera image (podest.py)."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--podest", type=podest.parse_polygon, metavar="POINTS",
+                        help="the Podest's top surface in the camera image, as x,y "
+                             "points in shares of width and height, e.g. "
+                             f'"{podest.format_polygon(podest.POLYGON)}" (the default); '
+                             "used in the scenes with a Podest rule")
+    parser.add_argument("--no-podest", action="store_true",
+                        help="turn the Podest rule off in every scene")
+    return parser
+
+
+def scene() -> argparse.ArgumentParser:
+    """The scene a run starts in (scenes.py)."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--scene", metavar="NAME",
+                        help=f'a scene of {scenes.SCENES_FILE.name}, e.g. "Szene 1" '
+                             f"(default: {scenes.DEFAULT_NAME})")
+    return parser
+
+
+def chosen_scene(args) -> scenes.Scene:
+    """The scene named by --scene, or the defaults. Raises ValueError for a
+    name the scenes file does not hold."""
+    available = scenes.load()
+    name = getattr(args, "scene", None) or scenes.DEFAULT_NAME
+    if name not in available:
+        raise ValueError(f"no scene {name!r}; scenes: {', '.join(available)}")
+    return available[name]
 
 
 def touchdesigner() -> argparse.ArgumentParser:

@@ -8,9 +8,14 @@ the page.
 The page is fed from a snapshot rather than from the session directly: status,
 the live values and alarm, the latest lines, the Chronik, the latest
 recommendation and report, the action recogniser's latest readings, the names
-of the people boxed on the video, and a
+of the people boxed on the video, the scene in force, and a
 version number that rises with every change of the run's state, so a page
 polling or streaming the state knows whether anything is new.
+
+The scene in force (sitrep/scenes.py) is held here rather than by a run, so
+it is selected before a run starts and what the operator changed in it
+outlasts a restart. Every run started reads it, and a change is carried out
+in the run under way at once (session.Session.apply).
 """
 
 import threading
@@ -19,7 +24,7 @@ from collections import deque
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from sitrep import annotate, chronik, lage, report, session
+from sitrep import annotate, chronik, lage, report, scenes, session
 
 # Run states, as the page shows them.
 IDLE, STARTING, RUNNING, STOPPING, ERROR = "idle", "starting", "running", "stopping", "error"
@@ -133,18 +138,20 @@ def chronik_payload(kept: chronik.Chronik) -> dict:
 # Lines the page lists, newest last.
 ZEILEN_SHOWN = 12
 
-# The live ratings drawn beside each person on Prototype 2's picture, with the
-# names the page gives them.
-RATING_LABELS = {"risiko": "Risiko", "menschlichkeit": "Menschlichkeit",
-                 "vorhersehbarkeit": "Vorhersehbarkeit"}
+# The live ratings drawn beside each person on the picture of Prototypes 2
+# and 3, with the names the page gives them.
+RATING_LABELS = scenes.LABELS
 
 
 def rating_level(name: str, value: int) -> str:
     """A person's rating as the page colours it (sitrep.js, personLevel):
-    Risiko amber from 2 and red from 4 on its 0-5 scale, Vorhersehbarkeit
-    likewise from -2 and -4 on its -5 to +5, the rest neutral."""
+    Risiko amber from 2 and red from 4 on its 0-5 scale, Aggression at the
+    same shares of its -10 to +10, from 4 and 8, Vorhersehbarkeit from -2 and
+    -4 on its -5 to +5, the rest neutral."""
     if name == "risiko":
         return "red" if value >= 4 else "amber" if value >= 2 else "calm"
+    if name == "aggression":
+        return "red" if value >= 8 else "amber" if value >= 4 else "calm"
     if name == "vorhersehbarkeit":
         return "red" if value <= -4 else "amber" if value <= -2 else "calm"
     return "calm"
@@ -186,8 +193,16 @@ class LiveSitrep:
     start, and a missing camera shows on the page instead of in a terminal.
     """
 
-    def __init__(self, open_session: Callable[[], session.Session]):
+    def __init__(self, open_session: Callable[[], session.Session],
+                 scene: scenes.Current | None = None,
+                 available: dict[str, scenes.Scene] | None = None,
+                 on_select: Callable[[str], None] | None = None):
         self._open_session = open_session
+        # The scene in force, which `open_session` hands every run, the
+        # scenes on offer by name, and who keeps note of a selection.
+        self.scene = scene or scenes.Current()
+        self.available = available or {scenes.DEFAULT_NAME: self.scene.scene}
+        self._on_select = on_select
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
@@ -240,6 +255,8 @@ class LiveSitrep:
             self.version += 1
 
         try:
+            # A scene selected while the run was starting.
+            run.apply()
             for event in run.events():
                 if stop.is_set():
                     break
@@ -326,6 +343,39 @@ class LiveSitrep:
             self.version += 1
         return True
 
+    def select(self, name: str) -> dict:
+        """Put a scene in force, in the run under way too. Returns the scene
+        as the page shows it; a name not on offer raises ValueError."""
+        if name not in self.available:
+            raise ValueError(f"Keine Szene {name!r}.")
+        self.scene.select(self.available[name])
+        self._apply()
+        if self._on_select is not None:
+            self._on_select(name)
+        return self.scene.snapshot()
+
+    def press(self, key: str) -> bool:
+        """Carry out a key of the scene in force. False when it has none."""
+        if self.scene.press(key) is None:
+            return False
+        self._apply()
+        return True
+
+    def close_screen(self) -> bool:
+        """Close the screen a scene's key opened. False when none is open."""
+        closed = self.scene.close_screen()
+        if closed:
+            with self._lock:
+                self.version += 1
+        return closed
+
+    def _apply(self):
+        run = self.session
+        if run is not None and self.status == RUNNING:
+            run.apply()
+        with self._lock:
+            self.version += 1
+
     def uebergehen(self, nummer: int | None = None) -> bool:
         """Set the recommendation aside, so the page returns to its regular view.
 
@@ -354,7 +404,7 @@ class LiveSitrep:
                     "modell": run.options.model,
                     "fenster_s": run.options.window,
                     "aktionen": run.actions is not None,
-                    "auto_empfehlung": run.options.auto_empfehlung,
+                    "auto_empfehlung": run.auto_empfehlung,
                     "besetzung": list(run.tracker.cast.names) if run.tracker.cast else [],
                 }
             return {
@@ -373,12 +423,13 @@ class LiveSitrep:
                 "zeilen": list(self.zeilen),
                 "chronik": (chronik_payload(run.chronik)
                             if run is not None and run.chronik is not None else None),
-                "scene": latest_scene(run.chronik if run is not None else None,
-                                      self.report, self.empfehlung),
+                "scene_rating": latest_scene(run.chronik if run is not None else None,
+                                             self.report, self.empfehlung),
                 "laeuft": run.laeuft if run is not None else {},
                 "fehler": dict(self.fehler),
                 "empfehlung": self.empfehlung,
                 "report": self.report,
+                "scene": self.scene.snapshot(),
             }
 
     def latest_frame(self):
@@ -392,9 +443,10 @@ class LiveSitrep:
         """The frame with the people the run tracks boxed and named.
 
         With `ratings`, each recognised person's live values are set beside
-        their box (Prototype 2); a recognised person with no recent evidence
-        reads 0, as on Prototype 1. A body not carrying a cast name is boxed
-        and labelled "Körper <id>", without values. With
+        their box (Prototype 2), those the scene shows them with; a
+        recognised person with no recent evidence reads 0, as on Prototype 1.
+        A body not carrying a cast name is boxed and labelled "Körper <id>",
+        without values. With
         `strip` as well, the values stand in fixed slots on a strip beneath
         the picture, each tied to its box by a line (Prototype 3).
         """
@@ -403,20 +455,29 @@ class LiveSitrep:
             return frame
         if not ratings or run.actions is None:
             return run.overlay(frame)
+        frame = run.outline_podest(frame)
         with self._lock:
             live = {person["name"]: person for person in (self.werte or {}).get("personen", [])}
         cast = set(run.tracker.cast.names) if run.tracker.cast else set()
+        scene = self.scene.scene
         rated = []
         for box, name in run.actions.visible():
             values = live.get(name, {})
             rows = [(RATING_LABELS[rating], values.get(rating, 0),
-                     rating_level(rating, values.get(rating, 0)))
-                    for rating in report.BEWERTUNGEN] if name in cast else []
+                     rating_level(rating, values.get(rating, 0)), scenes.extent(rating))
+                    for rating in scene.values_of(name)] if name in cast else []
             rated.append((box, name, rows))
         if not strip:
             return annotate.draw_ratings(frame, rated)
         width = frame.shape[1]
         slots = self.slots.assign([(name, float(box[0] + box[2]) / 2 / width)
                                    for box, name, rows in rated if rows], time.monotonic())
+        # The strip is as tall as the most values anyone in the scene has, and
+        # its numbers as wide as the widest range among them, so the picture
+        # keeps its size as people come and go.
+        most = max([len(scene.values)] + [len(scene.values_of(name)) for name in cast])
         return annotate.draw_ratings_strip(frame, rated, slots,
-                                           [RATING_LABELS[rating] for rating in report.BEWERTUNGEN])
+                                           [RATING_LABELS[rating] for rating in scene.all_values()],
+                                           rows=most,
+                                           widest=max(map(scenes.extent, scene.all_values()),
+                                                      default=annotate.PIPS))

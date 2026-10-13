@@ -18,7 +18,7 @@ from interface import app as app_module
 from interface import live as live_module
 from interface.app import create_app
 from interface.live import LiveSitrep
-from sitrep import actions, chronik, devices, lage, report, session
+from sitrep import actions, chronik, devices, lage, report, scenes, session
 
 
 def wait_for(predicate, timeout=5.0):
@@ -58,6 +58,8 @@ class FakeSession:
         self.chronik = None
         self.meter = None
         self.laeuft = {"bericht": False, "empfehlung": False}
+        self.auto_empfehlung = True
+        self.applied = 0
         self.gate = threading.Semaphore(0)
         self.closed = threading.Event()
         self._documents = list(documents)
@@ -76,6 +78,10 @@ class FakeSession:
         self.asked.append("empfehlung")
         return True
 
+    def apply(self):
+        """Carry out the scene in force (session.Session.apply)."""
+        self.applied += 1
+
     def emit(self, event):
         self._pending.append(event)
         self.gate.release()
@@ -88,6 +94,9 @@ class FakeSession:
             yield self._pending.pop(0)
 
     def overlay(self, frame):
+        return frame
+
+    def outline_podest(self, frame):
         return frame
 
     def close(self):
@@ -171,6 +180,21 @@ def test_a_report_is_made_when_asked_for_and_reaches_the_snapshot(client, live, 
     client.post("/api/sitrep/bericht")
     assert wait_for(lambda: live.report["nummer"] == 2)
     assert run.asked == ["bericht", "bericht"]
+
+
+def test_the_snapshot_carries_the_scene_rating_beside_the_scene_in_force(client, live, run):
+    """Prototypes 2 and 3 show the rating beneath the picture; the page reads
+    the values, keys and screens of the scene in force from `scene`."""
+    client.post("/api/sitrep/start")
+    assert wait_for(lambda: live.status == live_module.RUNNING)
+    client.post("/api/sitrep/bericht")
+    assert wait_for(lambda: live.report is not None)
+
+    state = client.get("/api/sitrep/state").json()
+    szene = live.report["bericht"]["szene"]
+    assert state["scene_rating"]["source"] == "bericht"
+    assert state["scene_rating"]["eskalation"] == szene["eskalation"]
+    assert state["scene"]["name"] == live.scene.snapshot()["name"]
 
 
 def test_a_recommendation_is_asked_for_through_the_page(client, live, run):
@@ -371,10 +395,10 @@ def test_ratings_are_drawn_beside_the_recognised_people_in_view(monkeypatch, run
 
     (rated,) = drawn
     assert [(name, rows) for _, name, rows in rated] == [
-        ("Klara", [("Risiko", 4, "red"), ("Menschlichkeit", 1, "calm"),
-                   ("Vorhersehbarkeit", -4, "red")]),
-        ("Orest", [("Risiko", 0, "calm"), ("Menschlichkeit", 0, "calm"),
-                   ("Vorhersehbarkeit", 0, "calm")]),
+        ("Klara", [("Risiko", 4, "red", 5), ("Menschlichkeit", 1, "calm", 5),
+                   ("Vorhersehbarkeit", -4, "red", 5)]),
+        ("Orest", [("Risiko", 0, "calm", 5), ("Menschlichkeit", 0, "calm", 5),
+                   ("Vorhersehbarkeit", 0, "calm", 5)]),
         ("Körper 7", []),
         ("Körper 8", []),
     ]
@@ -386,13 +410,14 @@ def test_on_the_strip_only_recognised_people_take_a_slot(monkeypatch, run):
     run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Klara"]))
     drawn = []
     monkeypatch.setattr(live_module.annotate, "draw_ratings_strip",
-                        lambda frame, rated, slots, labels: drawn.append((slots, labels)) or frame)
+                        lambda frame, rated, slots, labels, rows=None, widest=None:
+                        drawn.append((slots, labels, rows, widest)) or frame)
     controller = LiveSitrep(lambda: run)
     controller.session = run
 
     controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
 
-    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit", "Vorhersehbarkeit"])]
+    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit", "Vorhersehbarkeit"], 3, 5)]
 
 
 def test_the_overview_feed_carries_names_only(monkeypatch, run):
@@ -557,3 +582,85 @@ def test_a_rated_line_takes_the_place_of_the_line_as_transcribed(live, run):
     assert wait_for(lambda: live.zeilen and live.zeilen[-1]["bewertet"])
     [shown] = live.snapshot()["zeilen"]
     assert (shown["risiko"], shown["bewertet"]) == (3, True)
+
+
+def scene_controller(run, selected=None):
+    available = {
+        scenes.DEFAULT_NAME: scenes.Scene(),
+        "Szene 1": scenes.Scene(name="Szene 1", tracked=30,
+                                keys={"t": scenes.Key(screen="TROJA IST GEFALLEN"),
+                                      "p": scenes.Key(tracked=3)}),
+    }
+    return LiveSitrep(lambda: run, scenes.Current(), available,
+                      on_select=(selected.append if selected is not None else None))
+
+
+def test_the_scenes_on_offer_are_listed_with_the_one_in_force(run):
+    client = TestClient(create_app(scene_controller(run)))
+    listed = client.get("/api/scenes").json()
+    assert [scene["name"] for scene in listed["scenes"]] == [scenes.DEFAULT_NAME, "Szene 1"]
+    assert listed["selected"]["name"] == scenes.DEFAULT_NAME
+
+
+def test_a_scene_selected_is_put_in_force_in_the_run_under_way(run):
+    selected = []
+    controller = scene_controller(run, selected)
+    client = TestClient(create_app(controller))
+    client.post("/api/sitrep/start")
+    assert wait_for(lambda: controller.status == live_module.RUNNING)
+    applied = run.applied
+
+    chosen = client.post("/api/scene", json={"name": "Szene 1"}).json()["selected"]
+
+    assert chosen["name"] == "Szene 1" and chosen["tracked"] == 30
+    assert run.applied == applied + 1
+    assert selected == ["Szene 1"]
+    assert client.get("/api/sitrep/state").json()["scene"]["name"] == "Szene 1"
+    assert client.post("/api/scene", json={"name": "Szene 9"}).status_code == 400
+    controller.stop()
+
+
+def test_a_scene_key_opens_its_screen_and_the_same_key_or_closing_shuts_it(run):
+    controller = scene_controller(run)
+    controller.select("Szene 1")
+    client = TestClient(create_app(controller))
+
+    opened = client.post("/api/sitrep/key/t").json()
+    assert opened["handled"] and opened["scene"]["screen"] == "TROJA IST GEFALLEN"
+    assert client.post("/api/sitrep/key/t").json()["scene"]["screen"] is None
+    client.post("/api/sitrep/key/t")
+    closed = client.post("/api/sitrep/screen/close").json()
+    assert closed["closed"] and closed["scene"]["screen"] is None
+    assert not client.post("/api/sitrep/key/q").json()["handled"]
+
+
+def test_on_the_strip_each_person_has_the_values_the_scene_shows_them_with(monkeypatch, run):
+    run.actions = SimpleNamespace(visible=lambda: [
+        (np.array([10, 10, 30, 90]), "Alex"), (np.array([60, 10, 90, 90]), "Lena")])
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
+    drawn = []
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_strip",
+                        lambda frame, rated, slots, labels, rows=None, widest=None:
+                        drawn.append((rated, labels, rows, widest)) or frame)
+    controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
+        values_per_person={"Alex": ["aggression"]})))
+    controller.session = run
+    controller.werte = {"personen": [{"name": "Alex", "aggression": -7}]}
+
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
+
+    rated, labels, rows, widest = drawn[0]
+    assert rated[0][1:] == ("Alex", [("Aggression", -7, "calm", 10)])
+    assert [(label, scale) for label, _, _, scale in rated[1][2]] == [
+        ("Risiko", 5), ("Menschlichkeit", 5), ("Vorhersehbarkeit", 5)]
+    assert labels == ["Risiko", "Menschlichkeit", "Vorhersehbarkeit", "Aggression"]
+    assert rows == 3
+    assert widest == 10
+
+
+def test_aggression_is_coloured_at_the_shares_of_its_range_where_risiko_is():
+    """Risiko is raised from 2 and red from 4 of 5; Aggression from 4 and 8 of 10."""
+    levels = [live_module.rating_level("aggression", value) for value in (-10, 3, 4, 7, 8, 10)]
+    assert levels == ["calm", "calm", "amber", "amber", "red", "red"]
+    assert [live_module.rating_level("risiko", value) for value in (1, 2, 4)] == \
+        ["calm", "amber", "red"]

@@ -6,7 +6,8 @@
 // The server draws the people's values into the picture (feed ?ratings=1),
 // where the boxes are; drawn on the page they would trail the video. The
 // scene's values are the newest of the Chronik, the Lagebericht and the
-// Empfehlung (live.latest_scene), each named with its time and source.
+// Empfehlung (snapshot.scene_rating, live.latest_scene), each named with its
+// time and source.
 //
 // Einschreiten and the report on R replace the whole page, as in Prototype 1
 // (sitrep.js, fullPage).
@@ -15,27 +16,27 @@
 (() => {
   const SOURCE_TEXT = { chronik: "Chronik", bericht: "Lagebericht", empfehlung: "Empfehlung" };
 
-  function renderScene(scene, status) {
+  function renderScene(rating, status) {
     const meters = $("p2-scene-meters");
-    if (!scene) {
+    if (!rating) {
       meters.replaceChildren();
       $("p2-scene-source").textContent = status === "running"
         ? "Noch keine Einschätzung der Szene. Die Chronik bewertet sie nach dem ersten Abschnitt."
         : "";
       return;
     }
-    const threshold = scene.threshold;
+    const threshold = rating.threshold;
     meters.replaceChildren(
-      meter("Relevanz", scene.relevanz, 10, "calm"),
-      meter("Eskalation", scene.eskalation, 10, sceneLevel(scene.eskalation, threshold), threshold),
-      meter("Gefahr", scene.gefahr, 10, sceneLevel(scene.gefahr, threshold), threshold),
+      meter("Relevanz", rating.relevanz, 10, "calm"),
+      meter("Eskalation", rating.eskalation, 10, sceneLevel(rating.eskalation, threshold), threshold),
+      meter("Gefahr", rating.gefahr, 10, sceneLevel(rating.gefahr, threshold), threshold),
     );
-    $("p2-scene-source").textContent = `Stand ${clock(scene.time)} \\ ${SOURCE_TEXT[scene.source]}`;
+    $("p2-scene-source").textContent = `Stand ${clock(rating.time)} \\ ${SOURCE_TEXT[rating.source]}`;
   }
 
   function render(snapshot) {
-    if (changed("p2-scene", [snapshot.status, snapshot.scene])) {
-      renderScene(snapshot.scene, snapshot.status);
+    if (changed("p2-scene", [snapshot.status, snapshot.scene_rating])) {
+      renderScene(snapshot.scene_rating, snapshot.status);
     }
   }
 

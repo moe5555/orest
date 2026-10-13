@@ -5,11 +5,11 @@
     apollon-ui --cast data/cast --send-td --send-ndi
     uv run apollon-ui --video "OBS Virtual Camera" --model gemma4:26b --window 15 --interval 5
 
-Takes the same camera, microphone, window and output options as apollon-sitrep;
-they apply to every live SITREP started from the page. The camera, sound
-source and cast are chosen on the operator page and remembered
-(interface/sources.py); --video, --audio, --audio-api, --audio-ndi and --cast
-preselect them. Devices are
+Takes the same camera, microphone, window, output, Podest and scene options as
+apollon-sitrep; they apply to every live SITREP started from the page. The
+camera, sound source, cast and scene are chosen on the operator page and
+remembered (interface/sources.py); --video, --audio, --audio-api, --audio-ndi,
+--cast and --scene preselect them. Devices are
 resolved when a run starts, not here, so a camera plugged in after the server
 started is found.
 
@@ -24,11 +24,11 @@ import sys
 
 import uvicorn
 
-from sitrep import cli, report, session, transcribe
+from sitrep import cli, report, scenes, session, transcribe
 
 from .app import create_app
 from .live import LiveSitrep
-from .sources import SOURCES_FILE, Selection, Sources
+from .sources import SCENE_FILE, SOURCES_FILE, Selection, Sources, save_scene, saved_scene
 
 HOST = os.environ.get("APOLLON_UI_HOST", "127.0.0.1")
 PORT = int(os.environ.get("APOLLON_UI_PORT", "9680"))
@@ -37,7 +37,8 @@ PORT = int(os.environ.get("APOLLON_UI_PORT", "9680"))
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__.splitlines()[0],
-        parents=[cli.sources(), cli.timing(), cli.resolution(), cli.touchdesigner()],
+        parents=[cli.sources(), cli.timing(), cli.resolution(), cli.touchdesigner(),
+                 cli.podest_region(), cli.scene()],
     )
     parser.add_argument("--model", default=report.MODEL)
     parser.add_argument("--cast", type=pathlib.Path,
@@ -61,18 +62,29 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     selection = Selection.load(SOURCES_FILE, Sources.from_args(args))
+    try:
+        available = scenes.load()
+        if args.scene:
+            cli.chosen_scene(args)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 1
+    # A saved scene no longer in the scenes file falls back to the defaults.
+    wanted = args.scene or saved_scene(SCENE_FILE)
+    scene = scenes.Current(available.get(wanted, available[scenes.DEFAULT_NAME]))
 
     def open_session() -> session.Session:
         chosen = selection.sources
         video, audio = session.resolve_sources(chosen)
         options = session.Options.from_args(args).model_copy(
             update={"cast": pathlib.Path(chosen.cast) if chosen.cast else None})
-        run = session.Session(video, audio, options)
+        run = session.Session(video, audio, options, scene=scene)
         for path in run.missing_enrolment:
             print(f"no face found in {path}", file=sys.stderr)
         return run
 
-    live = LiveSitrep(open_session)
+    live = LiveSitrep(open_session, scene, available,
+                      on_select=lambda name: save_scene(SCENE_FILE, name))
     print(f"Apollon operator page: http://{args.host}:{args.port}/", flush=True)
     try:
         uvicorn.run(create_app(live, selection), host=args.host, port=args.port,

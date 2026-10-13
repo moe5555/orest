@@ -3,7 +3,7 @@
 For measuring the live SITREP on the test corpus, and for trying it without a
 camera or OBS (the OBS route is in todo_with_data.md). The picture is decoded
 at its own pace and served as a camera's newest frame; the sound is fed to the
-run in real time, as a microphone delivers it. Everything else is the live
+run in real time, as a microphone delivers it (recording.py). Everything else is the live
 run itself (session.py): the same models, threads and requests.
 
     python -m sitrep.replay "../test_data_orest/Improvised Four Dogs  a Bone with Erin Darke  Alex Dickson - FULL SCENE.mp4" --language en --model gemma4:26b --window 30 --interval 5 --dauer 405 --bericht-bei 150 300 400
@@ -25,133 +25,15 @@ import threading
 import time
 from datetime import datetime
 
-import cv2
 import numpy as np
-from faster_whisper.audio import decode_audio
 
-from . import cli, devices, report, session, transcribe
+from . import cli, report, session, transcribe
 from . import main as console
-
-# Sound is fed in chunks of this many seconds, about what a sound card hands over.
-CHUNK = 0.02
+from .recording import Bild, Ton, Wiedergabe
 
 # Seconds the run goes on after the recording ends, for lines and requests
 # still under way.
 NACHLAUF = 10.0
-
-
-class Wiedergabe:
-    """The playback's clock: where in the recording the room is now.
-
-    It starts when the sound starts, so that picture and sound stay together
-    however long the models take to load; until then the picture holds its
-    first frame.
-    """
-
-    def __init__(self, start: float):
-        self.start = start
-        self._began: float | None = None
-
-    def begin(self):
-        if self._began is None:
-            self._began = time.monotonic()
-
-    @property
-    def position(self) -> float:
-        """Seconds into the recording."""
-        return self.start + (0.0 if self._began is None else time.monotonic() - self._began)
-
-    @property
-    def elapsed(self) -> float:
-        return self.position - self.start
-
-
-class Bild:
-    """The recording's picture, served as a camera's newest frame."""
-
-    def __init__(self, path: pathlib.Path, uhr: Wiedergabe):
-        self.device = devices.VideoDevice(-1, f"Aufnahme {path.name}")
-        self._capture = cv2.VideoCapture(str(path))
-        if not self._capture.isOpened():
-            raise RuntimeError(f"Could not open {path}")
-        self._capture.set(cv2.CAP_PROP_POS_MSEC, uhr.start * 1000)
-        self._uhr = uhr
-        ok, self._frame = self._capture.read()
-        if not ok:
-            raise RuntimeError(f"No picture in {path} at {uhr.start:g} s")
-        self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._play, daemon=True)
-        self._thread.start()
-
-    def _play(self):
-        while not self._stop.is_set():
-            shown = self._capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
-            if shown >= self._uhr.position:
-                self._stop.wait(0.005)
-                continue
-            ok, frame = self._capture.read()
-            if not ok:
-                return
-            with self._lock:
-                self._frame = frame
-
-    def latest(self):
-        with self._lock:
-            return self._frame.copy()
-
-    def close(self):
-        self._stop.set()
-        self._thread.join(timeout=2.0)
-        self._capture.release()
-
-
-class Ton:
-    """The recording's sound, delivered in real time like a microphone's."""
-
-    samplerate = 48000.0
-
-    def __init__(self, path: pathlib.Path, uhr: Wiedergabe, dauer: float | None):
-        self.name = f"Aufnahme {path.name}"
-        self._uhr = uhr
-        rate = int(self.samplerate)
-        samples = decode_audio(str(path), sampling_rate=rate)
-        first = int(uhr.start * rate)
-        last = len(samples) if dauer is None else first + int(dauer * rate)
-        self.samples = samples[first:last].astype(np.float32)
-        self.seconds = len(self.samples) / rate
-
-    def receiving(self, on_audio):
-        """A context manager that feeds the sound to `on_audio` while entered
-        (capture.listen)."""
-        return _Feeding(self, on_audio)
-
-
-class _Feeding:
-    def __init__(self, ton: Ton, on_audio):
-        self._ton = ton
-        self._on_audio = on_audio
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._feed, daemon=True)
-
-    def __enter__(self):
-        self._ton._uhr.begin()
-        self._thread.start()
-        return self
-
-    def _feed(self):
-        rate = int(self._ton.samplerate)
-        fed = 0
-        while not self._stop.is_set() and fed < len(self._ton.samples):
-            due = min(len(self._ton.samples), int(self._ton._uhr.elapsed * rate))
-            if due > fed:
-                self._on_audio(self._ton.samples[fed:due])
-                fed = due
-            self._stop.wait(CHUNK)
-
-    def __exit__(self, *exception):
-        self._stop.set()
-        self._thread.join(timeout=2.0)
 
 
 class Messung:

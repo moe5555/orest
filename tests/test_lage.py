@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pytest
 
-from sitrep import actions, lage, report
+from sitrep import actions, lage, report, scenes
 
 T0 = datetime(2026, 9, 29, 20, 0, 0)
 
@@ -109,3 +109,126 @@ def test_the_live_values_read_only_the_recent_past():
     lage.Lage(readings, lines).jetzt(T0)
     horizon = T0 - timedelta(seconds=lage.HORIZONT * lage.HALBWERTSZEIT)
     assert asked == {"readings": horizon, "lines": horizon}
+
+
+def podest_scene() -> scenes.Current:
+    return scenes.Current(scenes.Scene(name="Szene 1", podest=scenes.PodestRule(step=1, floor=2)))
+
+
+def test_the_podest_count_is_added_to_risiko():
+    personen, unklar = lage.measure([evidence(T0, risiko=2.0)], {1: "Klara"}, [], T0)
+    lage.with_podest(personen, {"Klara": (1, T0)})
+    stand = lage.judge(T0, personen, unklar)
+    risiko = stand.personen["Klara"]["risiko"]
+    assert risiko.wert == 3
+    assert risiko.anlass == "kicking other person 0.90 · Podest +1"
+    assert stand.alarm == lage.Alarm(True, 3, "Klara", risiko.anlass)
+
+
+def test_a_person_with_nothing_measured_is_rated_on_their_podest_count_alone():
+    personen = {}
+    lage.with_podest(personen, {"Klara": (2, T0)})
+    werte = personen["Klara"]
+    assert (werte["risiko"].wert, werte["menschlichkeit"].wert) == (2, 0)
+    assert werte["risiko"].anlass == "Podest +2"
+
+
+def test_the_podest_count_keeps_risiko_between_zero_and_five():
+    high, _ = lage.measure([evidence(T0, risiko=5.0)], {1: "Klara"}, [], T0)
+    lage.with_podest(high, {"Klara": (2, T0)})
+    assert high["Klara"]["risiko"].wert == 5
+    low, _ = lage.measure([evidence(T0, risiko=1.0)], {1: "Klara"}, [], T0)
+    lage.with_podest(low, {"Klara": (-2, T0)})
+    assert (low["Klara"]["risiko"].wert, low["Klara"]["risiko"].anlass) == (0, "")
+
+
+def risiko_of(live, name="Klara"):
+    werte = live.jetzt(T0).personen.get(name)
+    return werte["risiko"].wert if werte else None
+
+
+def test_risiko_counts_the_steps_off_and_onto_the_podest_and_stays_at_two_off_it():
+    stance = {1: True, 7: False}
+    live = lage.Lage(lambda since: ([], {1: "Klara"}), lambda since: [],
+                     podest=lambda: stance, scene=podest_scene())
+    # Körper 7 carries no name and is rated on nothing.
+    assert live.jetzt(T0).personen == {}
+    stance[1] = False
+    assert risiko_of(live) == 2
+    stance[1] = True
+    assert risiko_of(live) == 1
+    stance[1] = False
+    assert risiko_of(live) == 2
+    assert live.jetzt(T0).personen["Klara"]["risiko"].anlass == "Podest +2"
+
+
+def test_the_count_adds_to_what_is_measured():
+    stance = {1: True}
+    live = lage.Lage(lambda since: ([evidence(T0, risiko=3.0)], {1: "Klara"}), lambda since: [],
+                     podest=lambda: stance, scene=podest_scene())
+    assert risiko_of(live) == 3
+    stance[1] = False
+    assert risiko_of(live) == 4
+    stance[1] = True
+    assert risiko_of(live) == 3
+
+
+def test_a_person_out_of_view_keeps_their_count():
+    stance = {1: False}
+    live = lage.Lage(lambda since: ([], {1: "Klara"}), lambda since: [],
+                     podest=lambda: stance, scene=podest_scene())
+    assert risiko_of(live) == 2
+    stance.clear()
+    assert risiko_of(live) == 2
+
+
+def test_selecting_a_scene_starts_its_count_afresh():
+    stance = {1: True}
+    scene = podest_scene()
+    live = lage.Lage(lambda since: ([], {1: "Klara"}), lambda since: [],
+                     podest=lambda: stance, scene=scene)
+    live.jetzt(T0)
+    stance[1] = False
+    live.jetzt(T0)
+    stance[1] = True
+    assert risiko_of(live) == 1
+    scene.select(scene.scene)
+    assert risiko_of(live) is None
+
+
+def test_without_the_podest_rule_the_podest_counts_for_nothing():
+    live = lage.Lage(lambda since: ([evidence(T0, risiko=2.0)], {1: "Klara"}), lambda since: [],
+                     podest=lambda: {1: False}, scene=scenes.Current())
+    assert risiko_of(live) == 2
+
+
+def aggression_scene() -> scenes.Current:
+    up = scenes.Key(person="Alex", value="aggression", step=1)
+    down = scenes.Key(person="Alex", value="aggression", step=-1)
+    return scenes.Current(scenes.Scene(name="Szene 2.3",
+                                       values_per_person={"Alex": ["aggression"]},
+                                       keys={"w": up, "s": down}))
+
+
+def test_a_value_set_by_hand_stands_as_set():
+    scene = aggression_scene()
+    live = lage.Lage(None, lambda since: [], scene=scene)
+    scene.press("w")
+    scene.press("w")
+    aggression = live.jetzt(T0).personen["Alex"]["aggression"]
+    assert (aggression.wert, aggression.anlass) == (2, lage.MANUELL)
+    scene.press("s")
+    assert live.jetzt(T0).personen["Alex"]["aggression"].wert == 1
+
+
+def test_each_person_keeps_only_the_values_the_scene_shows_them_with():
+    scene = aggression_scene()
+    readings = [evidence(T0, risiko=4.0, members=(1,)), evidence(T0, risiko=1.0, members=(2,))]
+    live = lage.Lage(lambda since: (readings, {1: "Alex", 2: "Lena"}), lambda since: [],
+                     scene=scene)
+    stand = live.jetzt(T0)
+    assert list(stand.personen["Alex"]) == ["aggression"]
+    assert stand.personen["Alex"]["aggression"].wert == 0
+    assert list(stand.personen["Lena"]) == ["risiko", "menschlichkeit"]
+    # Alex's Risiko is not shown, and so raises no alarm.
+    assert not stand.alarm.aktiv

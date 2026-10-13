@@ -20,6 +20,16 @@ SMOOTHING seconds. It does not decay: it describes how the person is moving
 now, and a person no longer classified alone has none. It plays no part in
 the alarm.
 
+Scene. The scene in force (scenes.py) adds to what is measured and decides
+what is shown:
+- Podest, where the scene has the rule: each named person's Podest count
+  (podest.Counter) is added to their Risiko, clipped to 0-5; a person with
+  nothing measured is rated on it alone. It is a count over the scene, not
+  evidence, and does not decay. It counts towards the alarm like any Risiko.
+- Values set by hand (scenes.MANUAL) stand as set, until set again.
+- Each person keeps only the values the scene shows them with. A Risiko not
+  shown is not read by the alarm either.
+
 Alarm. The alarm is raised by rule, not by the model: when a person's live
 Risiko, or the decayed Risiko of a line whose speaker is unknown, reaches
 ALARM. The thresholds of the spike triggers in live_sitrep_latency.md (fix
@@ -30,6 +40,7 @@ Nothing is kept here: the evidence stays with the recogniser and the Chronik,
 which delete it when the run stops.
 """
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -38,7 +49,7 @@ import numpy as np
 
 from action import recognizer, sitrep_map
 
-from . import actions, loudness, report
+from . import actions, loudness, podest, report, scenes
 
 # Seconds after which evidence counts half. live_sitrep_latency.md proposes
 # 20-30 s and leaves the choice to the production ("Decay needs a
@@ -129,7 +140,21 @@ def stand(readings: list[actions.Evidence], names: dict[int, str],
           lines: list[report.Aeusserung], now: datetime,
           gain: actions.Gain | None = None,
           halbwertszeit: float = HALBWERTSZEIT) -> Stand:
-    """The live values from the recent readings and lines.
+    """The live values measured from the recent readings and lines, and the
+    alarm they raise, with no scene applied (`measure`, `judge`)."""
+    return judge(now, *measure(readings, names, lines, now, gain, halbwertszeit))
+
+
+# Per person, their live values by rating.
+Personen = dict[str, dict[str, Wert]]
+
+
+def measure(readings: list[actions.Evidence], names: dict[int, str],
+            lines: list[report.Aeusserung], now: datetime,
+            gain: actions.Gain | None = None,
+            halbwertszeit: float = HALBWERTSZEIT) -> tuple[Personen, tuple[float, str]]:
+    """Each person's values from the recent readings and lines, and the
+    strongest decayed Risiko of a line whose speaker is unknown, with its cause.
 
     `names` maps body track ids to people, as the recogniser holds them now.
     `gain` amplifies each reading's Risiko by how loud the room was over the
@@ -172,7 +197,7 @@ def stand(readings: list[actions.Evidence], names: dict[int, str],
         offer(line.name, "risiko", line.risiko_verstaerkt, cause, line.ende)
         offer(line.name, "menschlichkeit", line.menschlichkeit, cause, line.ende)
 
-    personen = {}
+    personen: Personen = {}
     for name, ratings in best.items():
         personen[name] = {}
         for rating in report.GEMESSEN:
@@ -183,9 +208,55 @@ def stand(readings: list[actions.Evidence], names: dict[int, str],
     # Every person scored has readings, and so Risiko and Menschlichkeit.
     for name, wert in predictabilities(readings, names, now).items():
         personen[name][report.VORHERSEHBARKEIT] = wert
+    return personen, unklar
 
+
+def with_podest(personen: Personen, counts: dict[str, tuple[int, datetime]]):
+    """Add each person's Podest count to their Risiko; the cause carries the
+    count, the time when it last changed."""
+    for name, (count, changed) in counts.items():
+        if not count:
+            continue
+        werte = personen.setdefault(name, {rating: Wert(0, 0.0) for rating in report.GEMESSEN})
+        risiko = werte.get("risiko", Wert(0, 0.0))
+        wert = int(np.clip(risiko.wert + count, 0, actions.RATING_MAX))
+        cause = f"{podest.ANLASS} {count:+d}"
+        if not wert:
+            werte["risiko"] = Wert(0, round(risiko.staerke + count, 2))
+            continue
+        werte["risiko"] = Wert(wert, round(risiko.staerke + count, 2),
+                               f"{risiko.anlass} · {cause}" if risiko.wert else cause,
+                               max(risiko.zeit, changed) if risiko.zeit else changed)
+
+
+# The cause shown with a value set by hand.
+MANUELL = "vom Operator gesetzt"
+
+
+def with_manual(personen: Personen, manual: dict[str, dict[str, tuple[int, datetime]]]):
+    """Set the values the operator set by hand, as set."""
+    for name, values in manual.items():
+        werte = personen.setdefault(name, {})
+        for value, (wert, at) in values.items():
+            werte[value] = Wert(wert, float(wert), MANUELL if wert else "", at if wert else None)
+
+
+def restricted(personen: Personen, values_of: Callable[[str], list[str]]) -> Personen:
+    """Each person with only the values they are shown with, in that order.
+
+    A value set by hand and not yet set reads 0; a measured value not
+    measured stays absent.
+    """
+    return {name: {value: werte.get(value, Wert(0, 0.0)) for value in values_of(name)
+                   if value in werte or value in scenes.MANUAL}
+            for name, werte in personen.items()}
+
+
+def judge(now: datetime, personen: Personen, unklar: tuple[float, str]) -> Stand:
+    """The live values with the alarm they raise: the highest Risiko of a
+    person, or of a line whose speaker is unknown."""
     kandidaten = [(werte["risiko"].wert, name, werte["risiko"].anlass)
-                  for name, werte in personen.items()]
+                  for name, werte in personen.items() if "risiko" in werte]
     kandidaten.append((_gerundet(unklar[0]), None, unklar[1]))
     wert, wer, anlass = max(kandidaten, key=lambda kandidat: kandidat[0])
     alarm = Alarm(aktiv=wert >= ALARM, wert=wert, wer=wer, anlass=anlass if wert else "")
@@ -216,18 +287,47 @@ class Lage:
     `readings` gives the action readings after a moment and the names the
     bodies carry (actions.ActionRatings.since); `lines` the rated lines ended
     after a moment (chronik.Chronik.zeilen_seit); `gain` the loudness gain
-    over a stretch of time.
+    over a stretch of time; `podest` each body in view and whether it stands
+    on the Podest now (actions.ActionRatings.podest_stance); `scene` the
+    scene in force, without which none applies.
     """
 
     def __init__(self, readings: Callable | None, lines: Callable[[datetime], list],
-                 gain: actions.Gain | None = None, halbwertszeit: float = HALBWERTSZEIT):
+                 gain: actions.Gain | None = None, halbwertszeit: float = HALBWERTSZEIT,
+                 podest: Callable[[], dict[int, bool]] | None = None,
+                 scene: scenes.Current | None = None):
         self._readings = readings
         self._lines = lines
         self._gain = gain
         self.halbwertszeit = halbwertszeit
+        self._podest = podest
+        self._scene = scene
+        # The Podest count of the scene in force, and the selection it counts
+        # for (scenes.Current.generation). The values are asked for from
+        # several threads.
+        self._counter = None
+        self._counted: int | None = None
+        self._lock = threading.Lock()
 
     def jetzt(self, now: datetime | None = None) -> Stand:
         now = now or datetime.now()
         since = now - timedelta(seconds=HORIZONT * self.halbwertszeit)
         readings, names = self._readings(since) if self._readings else ([], {})
-        return stand(readings, names, self._lines(since), now, self._gain, self.halbwertszeit)
+        personen, unklar = measure(readings, names, self._lines(since), now, self._gain,
+                                   self.halbwertszeit)
+        if self._scene is None:
+            return judge(now, personen, unklar)
+
+        scene, generation = self._scene.scene, self._scene.generation
+        if scene.podest is not None and self._podest is not None:
+            # Only named bodies are rated, on the Podest as anywhere else.
+            stance = {names[track]: up for track, up in self._podest().items() if track in names}
+            measured = {name: werte["risiko"].wert for name, werte in personen.items()}
+            with self._lock:
+                if self._counted != generation:
+                    self._counter = podest.Counter(scene.podest.step, scene.podest.floor)
+                    self._counted = generation
+                counts = self._counter.update(stance, measured, now)
+            with_podest(personen, counts)
+        with_manual(personen, self._scene.manual())
+        return judge(now, restricted(personen, scene.values_of), unklar)

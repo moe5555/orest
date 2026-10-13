@@ -24,17 +24,7 @@ Overview: components/pipeline.md
 - prioritises low latency over accuracy 
 - the system should be able to understand when it is spoken to. If the system is directly spoken to, e.g. via "System" or "Apollon", it should be able to react. 
 - hand gun detection. The system should recognize whether someone is holding a handgun. TBD how this effects the scene. 
-- per scene config. I
-
-Implementation Steps: 
-1. Install Gemma-4b and deploy via Ollama
-2. Set up capture loop - select video and audio source (for now we'll be testing with webcam + laptop mic)
-3. Capture one frame every x seconds
-4. Transcribe everything that is said, speaker diarisation eventually. 
-5. Write SITREP report JSON format.
-6. Every x seconds, prompt a SITREP report. X is dependent on latency - do a p95, p99 test and make sure that the system only processes as many seconds as it can keep up with. e.g. if it takes 40 seconds to process a range of 30 seconds, that will cause increasing delay. 
-   > Changed 29.09.26 (Moe): the report is made only when the operator presses R. Every x seconds the scene is summarised in the background instead (the Chronik), so a report covers the last minutes. Lines, live values and the alarm reach the operator within about a second, and the Empfehlung follows an alarm. See `knowledge/background/live_distillation.md`.
-7. Output: video output (for testing, eventually this will be handled perhaps via TouchDesigner) and SITREP text beneath it. 
+- per scene config. 
 
 #### Calculating Values
 How do we calculate the values the system comes up with? 
@@ -75,6 +65,41 @@ flowchart LR
   > - **False positives trigger Einschreiten.** Measure precision per activity; confirm high-stakes ones over two segments or with a loudness spike.
   > - **First experiment:** one activity, ~30 positive and ~100 neutral 4 s segments, nearest-neighbour separation.
 - *Audio*: higher loudness increases negative-coded values like gefahr etc. Implemented as a gain on Risiko evidence from pose and speech, relative to the session's normal speaking level, which each session learns from its first 30 s of speech (`src/sitrep/loudness.py`). 
+
+### Scene Configurations
+- Live SITREP will be used in multiple scenes of the play. Each scene requires different settings. 
+
+Settings: 
+- **SITREP Spatial Value Rules** If and how being on/off some area effects the SITREP values of the actors. Default: off
+- **Interference** If and what kind of Interference should be triggered programmatically (currently it is only "Einschreiten".) Default: off
+- **Manual Interference** If and what kind of interference should be triggered manually via the operator running the program during performances. Default: none
+- **Tracked Persons** How many people should be trackable at the same time. Default: 3
+- **SITREP Values** Which SITREP variables should be tracked. Default: Risiko, Menschlichkeit, Berechenbarkeit. 
+- **Pre-recorded** Load a pre-recorded video into live SITREP. Default: off.  
+- **Manual SITREP Values** Artifically raise or lower the values of a person in the scene. In this case, we are only interested in doing this for Alex and Lena. For now, this feature will only be used to increase the "Aggression" of Alex, a value that will solely be controlled manually. Default: none. 
+- **Record-Feed Transition** Button-press swaps pre-recorded video for live feed or vice-versa. Default: off. 
+
+- A dropdown menu with the following scenes on the start page of Apollon. When the user selects a scene, those configs are applied. Default values if no specific scene is selected. 
+
+Scenes: 
+- **Scene 1**: 
+  - On/Off Podest: Risiko increases by one when person leaves Podest. Risiko cannot go below 2 when person is not on Podest. Risiko drops by one if person enters podest. 
+  - Manual Interference: press "T" opens a page with the title "TROJA IST GEFALLEN" 
+  - Track up to 30 people at the same time by default. Press "P" to reduce this number to 3. 
+  - No auto Einschreiten Interference. 
+- **Scene 1.2**: 
+  - A pre-recorded video will be played within SITREP. Link TBD
+  - No auto Einschreiten Interference. 
+- **Scene 2.3**: 
+  - **SITREP Values**: We only track Aggression for Alex. Lena has the standard values. Aggression is not calculated but manually set by the operator. 
+  - **Manual SITREP Value**: Aggression. Press "W" for increase of 1 point. Press "S" for decrease of 1 point. 
+  - **Manual Interference**: Press "M" and page opens that reads "Maximales Aggressionspotenzial erreicht." 
+  - No auto Einschreiten Interference. 
+- **Scene 3**:
+  - default settings
+  - Press "C" and live-feed is swamped for a pre-recorded clip TBD.
+  - No auto Einschreiten Interference. 
+
 
 
 ### Smart Search 

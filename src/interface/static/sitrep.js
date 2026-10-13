@@ -22,8 +22,17 @@ const FEED_TEXT = {
 const PERSON_RATINGS = ["risiko", "menschlichkeit", "vorhersehbarkeit"];
 // Ratings measured as evidence from actions and lines, 0-5.
 const LIVE_RATINGS = ["risiko", "menschlichkeit"];
-// Ratings shown per person live: the evidence and Vorhersehbarkeit, -5 to +5.
+// Ratings shown per person live unless the scene says otherwise: the
+// evidence and Vorhersehbarkeit, -5 to +5.
 const LIVE_SHOWN = [...LIVE_RATINGS, "vorhersehbarkeit"];
+// Ratings that set a person apart from those without a finding: the evidence,
+// and Aggression, which the operator sets by hand (sitrep/scenes.py).
+const BEFUND_RATINGS = [...LIVE_RATINGS, "aggression"];
+// Each rating's range, lowest and highest (sitrep/scenes.py, RANGES).
+const RANGES = {
+  risiko: [0, 5], menschlichkeit: [0, 5], vorhersehbarkeit: [-5, 5], aggression: [-10, 10],
+};
+const PIPS = 5;
 
 // A recommendation older than this is shown dimmed.
 const EMPFEHLUNG_FRISCH_MS = 60000;
@@ -54,12 +63,20 @@ function sceneLevel(value, schwelle) {
   return "calm";
 }
 
-// Per-person risk on its 0-5 scale, and Vorhersehbarkeit mirrored on its
-// -5 to +5; the other ratings stay neutral.
+// Per-person risk on its 0-5 scale, Aggression at the same shares of its
+// -10 to +10, and Vorhersehbarkeit mirrored on its -5 to +5; the other
+// ratings stay neutral (live.rating_level).
 function personLevel(name, value) {
   if (name === "risiko") return value >= 4 ? "red" : value >= 2 ? "amber" : "calm";
+  if (name === "aggression") return value >= 8 ? "red" : value >= 4 ? "amber" : "calm";
   if (name === "vorhersehbarkeit") return value <= -4 ? "red" : value <= -2 ? "amber" : "calm";
   return "calm";
+}
+
+// The ratings a person is shown with live in the scene in force.
+function valuesOf(name) {
+  const scene = current?.scene;
+  return scene?.values_per_person?.[name] ?? scene?.values ?? LIVE_SHOWN;
 }
 
 // A whole rating as text, a negative one with a typographic minus.
@@ -90,8 +107,11 @@ function meter(name, value, max, levelName, tickAt) {
   return row;
 }
 
-// One rating as pips and its number; null means not measured. A negative
-// value fills as many pips as its magnitude.
+// One rating as pips and its number; null means not measured. The five pips
+// span the largest magnitude of the rating's range, rounded up so that any
+// value but 0 shows: one pip per point on 0-5 and -5 to +5, one per two on
+// Aggression's -10 to +10 (annotate._filled). A negative value fills by its
+// magnitude.
 function ratingRow(name, value) {
   const row = el("div", "rating");
   const pips = el("span", "pips");
@@ -100,9 +120,14 @@ function ratingRow(name, value) {
     pips.append(el("span", "unmeasured", "nicht gemessen"));
     pips.title = "nicht gemessen";
   } else {
+    const [low, high] = RANGES[name] ?? [0, PIPS];
+    const filled = Math.min(PIPS, Math.ceil((PIPS * Math.abs(value)) / Math.max(-low, high)));
     row.dataset.level = personLevel(name, value);
-    for (let i = 1; i <= 5; i++) pips.append(el("span", i <= Math.abs(value) ? "pip on" : "pip"));
-    pips.title = name === "vorhersehbarkeit" ? `${ratingText(value)} (−5 bis 5)` : `${value} / 5`;
+    // Two digits and a sign (−10) need a wider number column (style.css).
+    row.classList.toggle("wide", Math.max(-low, high) >= 10);
+    for (let i = 1; i <= PIPS; i++) pips.append(el("span", i <= filled ? "pip on" : "pip"));
+    pips.title = low < 0
+      ? `${ratingText(value)} (${ratingText(low)} bis ${high})` : `${value} / ${high}`;
   }
   // The number as well as the pips: a 0 shows as empty pips alone.
   row.append(el("span", null, name), pips,
@@ -172,14 +197,15 @@ function renderEmpfehlung(empfehlung, laeuft, fehler) {
 // Strongest first; people measured at 0 on everything share one line.
 function renderLivePersonen(werte) {
   const list = $("live-personen");
-  const strength = (person) => Math.max(...LIVE_RATINGS.map((name) => person[name] ?? 0));
+  // By magnitude: an Aggression set below 0 is a finding as well.
+  const strength = (person) => Math.max(...BEFUND_RATINGS.map((name) => Math.abs(person[name] ?? 0)));
   const personen = (werte?.personen ?? []).slice().sort((a, b) => strength(b) - strength(a));
   const ruhig = personen.filter((person) => strength(person) === 0);
   list.replaceChildren(...personen.filter((person) => strength(person) > 0).map((person) => {
     const card = el("div", "person");
     card.append(el("h3", null, person.name));
     const ratings = el("div", "ratings");
-    for (const name of LIVE_SHOWN) ratings.append(ratingRow(name, person[name]));
+    for (const name of valuesOf(person.name)) ratings.append(ratingRow(name, person[name]));
     card.append(ratings);
     const anlass = LIVE_RATINGS.filter((name) => person[`anlass_${name}`])
       .map((name) => `${name}: ${person[`anlass_${name}`]}`);
@@ -528,12 +554,17 @@ function render(snapshot) {
 
   $("status").dataset.status = status;
   $("status").textContent = STATUS_TEXT[status] ?? status;
+  const scene = snapshot.scene;
   $("meta").textContent = quelle
-    ? [quelle.kamera, quelle.mikrofon, quelle.modell, `Abschnitt ${quelle.fenster_s} s`,
+    ? [scene ? `Szene: ${scene.name}` : null, quelle.kamera, quelle.mikrofon, quelle.modell,
+       `Abschnitt ${quelle.fenster_s} s`,
        quelle.aktionen ? "Aktionserkennung an" : "Aktionserkennung aus",
        quelle.auto_empfehlung ? "Empfehlung bei Alarm" : "Empfehlung nur auf E",
        quelle.besetzung.length ? `Besetzung: ${quelle.besetzung.join(", ")}`
-                               : "ohne Besetzung, niemand erkannt"].join(" \\ ")
+                               : "ohne Besetzung, niemand erkannt",
+       ...Object.entries(scene?.keys ?? {})
+         .map(([key, bound]) => `${key.toUpperCase()}: ${bound.label}`),
+       ...(scene?.warnings ?? [])].filter(Boolean).join(" \\ ")
     : "";
 
   const active = running || status === "starting";
@@ -561,7 +592,10 @@ function render(snapshot) {
   if (changed("empfehlung", [snapshot.empfehlung, snapshot.laeuft?.empfehlung, snapshot.fehler?.empfehlung])) {
     renderEmpfehlung(snapshot.empfehlung, snapshot.laeuft, snapshot.fehler);
   }
-  if (changed("werte", snapshot.werte?.personen)) renderLivePersonen(snapshot.werte);
+  if (changed("werte", [snapshot.werte?.personen, snapshot.scene?.values,
+                       snapshot.scene?.values_per_person])) {
+    renderLivePersonen(snapshot.werte);
+  }
   // Not redrawn while one of its menus is in use, which would close it.
   if (!$("in-view").contains(document.activeElement)
       && changed("in-view", [snapshot.status, snapshot.in_view, snapshot.quelle?.besetzung,
@@ -580,24 +614,29 @@ function render(snapshot) {
 
   document.body.dataset.screen = fullPage.state(snapshot);
   renderIntervene(snapshot.empfehlung?.urteil);
+  renderManualScreen(snapshot.scene?.screen ?? "");
   for (const view of Object.values(ANSICHTEN)) view.render?.(snapshot);
 }
 
 // ---- Display prototypes ---------------------------------------------------
 
 // Prototypes 1 to 3 (knowledge/components/03_render.md, "Live SITREP") share
-// two states that replace the whole page, set on the body as data-screen. A
+// three states that replace the whole page, set on the body as data-screen. A
 // recommendation to intervene shows alone, with its reason and measure, until
-// the next recommendation or until the operator overrides it (X). R shows the
-// report alone, and R again returns. The report takes precedence, since it
-// was asked for.
+// the next recommendation or until the operator overrides it (X), in scenes
+// with Einschreiten. R shows the report alone, and R again returns. A scene's
+// key opens a screen of its own (Manual Interference), closed by the same key
+// or X. The screen takes precedence, then the report, since both were asked
+// for.
 const fullPage = {
   // The report is on screen, from one R to the next.
   report: false,
 
   state(snapshot) {
+    if (snapshot?.scene?.screen) return "manual";
     if (this.report) return "report";
-    const intervene = snapshot?.status === "running" && Boolean(snapshot.empfehlung?.urteil?.einschreiten);
+    const intervene = snapshot?.status === "running" && snapshot.scene?.interference !== false
+      && Boolean(snapshot.empfehlung?.urteil?.einschreiten);
     return intervene ? "intervene" : "normal";
   },
 
@@ -610,9 +649,13 @@ const fullPage = {
   },
 
   // R shows the report and asks for a new one while the run is live; with no
-  // run and no earlier report there is nothing to show. X overrides a
-  // recommendation to intervene while it is on screen.
+  // run and no earlier report there is nothing to show. X closes a scene's
+  // screen, or overrides a recommendation to intervene, while it is on screen.
   key(key) {
+    if (key === "x" && current && this.state(current) === "manual") {
+      post("/api/sitrep/screen/close");
+      return true;
+    }
     if (key === "x" && current && this.state(current) === "intervene") {
       this.override();
       return true;
@@ -644,6 +687,45 @@ function renderIntervene(urteil) {
 }
 
 $("intervene-override").addEventListener("click", () => fullPage.override());
+
+// A scene's screen (Manual Interference): its text at the size the style
+// sheet sets, reduced where the longest word would not fit across the screen
+// or the lines would not fit down it, so that no word is broken. Fitted again
+// when the text, the view or the window changes, and once the typeface has
+// loaded, since each changes the words' widths.
+function renderManualScreen(text) {
+  const shown = `${document.body.dataset.ansicht} ${document.body.dataset.screen}`;
+  if (changed("manual-screen", [text, shown])) fitManualScreen(text);
+}
+
+function fitManualScreen(text = $("manual-screen-text").textContent) {
+  const el = $("manual-screen-text");
+  el.textContent = text;
+  el.style.fontSize = "";
+  const box = el.parentElement;
+  const node = el.firstChild;
+  if (!node || !box.clientWidth) return;
+  const pad = getComputedStyle(box);
+  const width = box.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+  const height = box.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
+  let widest = 0;
+  for (const word of text.matchAll(/\S+/g)) {
+    const range = document.createRange();
+    range.setStart(node, word.index);
+    range.setEnd(node, word.index + word[0].length);
+    widest = Math.max(widest, range.getBoundingClientRect().width);
+  }
+  // A little short of the full width, so that rounding in the line breaking
+  // cannot push the longest word over.
+  let size = parseFloat(getComputedStyle(el).fontSize) * Math.min(1, 0.98 * width / widest);
+  el.style.fontSize = `${size}px`;
+  // A smaller size never needs more lines, so scaling by the overshoot fits.
+  const tall = el.getBoundingClientRect().height;
+  if (tall > height) el.style.fontSize = `${size * height / tall}px`;
+}
+
+addEventListener("resize", () => fitManualScreen());
+document.fonts.addEventListener("loadingdone", () => fitManualScreen());
 
 // ---- Views ----------------------------------------------------------------
 
@@ -722,12 +804,21 @@ $("toggle").addEventListener("click", () => {
 $("ask-bericht").addEventListener("click", askBericht);
 $("ask-empfehlung").addEventListener("click", askEmpfehlung);
 
-// R asks for a report, E for a recommendation; not while typing, and not with
-// a modifier, so the browser's own shortcuts keep working.
+// R asks for a report, E for a recommendation, and the scene in force adds
+// keys of its own (sitrep/scenes.py); not while typing, and not with a
+// modifier, so the browser's own shortcuts keep working.
 document.addEventListener("keydown", (event) => {
   if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
   const key = event.key.toLowerCase();
+  const bound = current?.scene?.keys?.[key];
+  if (bound) {
+    // A screen opened is shown in place of the report.
+    if (bound.action === "screen") fullPage.report = false;
+    post(`/api/sitrep/key/${encodeURIComponent(key)}`);
+    event.preventDefault();
+    return;
+  }
   if (ANSICHTEN[document.body.dataset.ansicht]?.taste?.(key)) {
     event.preventDefault();
     return;

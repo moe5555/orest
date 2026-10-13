@@ -26,6 +26,7 @@ Typografie", "CI \\ Raster und Regeln"), like the operator pages
 (interface/static/style.css).
 """
 
+import math
 import threading
 from dataclasses import dataclass
 from functools import lru_cache
@@ -176,6 +177,16 @@ def _name(draw: ImageDraw.ImageDraw, image: Image.Image, box, name: str,
     return x1, y1, x2, y2
 
 
+def draw_region(frame: np.ndarray, polygon: np.ndarray) -> np.ndarray:
+    """A copy of a BGR frame with a region, a polygon in pixels, outlined in
+    the accent colour, apart from the people's boxes."""
+    marked = frame.copy()
+    thickness = max(1, frame.shape[0] // 540)
+    cv2.polylines(marked, [np.round(polygon).astype(np.int32)], True, SIGNAL[::-1], thickness,
+                  cv2.LINE_AA)
+    return marked
+
+
 def draw_names(frame: np.ndarray, named: list[tuple[np.ndarray, str]],
                style: Style = MODEL) -> np.ndarray:
     """A copy of a BGR frame with each face boxed and its name set above it.
@@ -197,13 +208,14 @@ class _RatingRows:
     """Rating rows: the label, five pips and the number.
 
     Labels are set in the style's font and colour, numbers in its number font.
-    Measured on the labels given, so panels drawn with one instance line up.
-    A negative value (Vorhersehbarkeit, -5 to +5) fills as many pips as its
-    magnitude and is set with its sign.
+    Measured on the labels given and on `widest`, the largest magnitude a
+    value can take, so panels drawn with one instance line up. The pips fill
+    in proportion to the value's magnitude on its scale (_filled). A negative
+    value (Vorhersehbarkeit, Aggression) is set with its sign.
     """
 
     def __init__(self, draw: ImageDraw.ImageDraw, size: int, labels, padding: int,
-                 style: Style):
+                 style: Style, widest: int = PIPS):
         self.style, self.padding = style, padding
         self.font = _font(style.font, size)
         self.number_font = _font(style.number_font, size)
@@ -215,7 +227,7 @@ class _RatingRows:
         self.label_width = max((_length(_cased(label, style), self.font, self.tracking)
                                 for label in labels), default=0)
         self.width = int(3 * padding + self.label_width + PIPS * (self.pip + self.gap)
-                         + self.gap + draw.textlength(_number(-PIPS), font=self.number_font))
+                         + self.gap + draw.textlength(_number(-widest), font=self.number_font))
 
     def height(self, count: int) -> int:
         """Height of `count` rows, without the panel's padding."""
@@ -240,19 +252,27 @@ class _RatingRows:
         draw.text((x, y), _number(value), font=self.number_font, fill=fill)
 
     def draw(self, draw: ImageDraw.ImageDraw, x: int, top: int,
-             rows: list[tuple[str, int, str]]) -> None:
+             rows: list[tuple[str, int, str, int]]) -> None:
         """The rows of a panel whose left edge is `x`, the first row starting at `top`."""
-        for index, (label, value, level) in enumerate(rows):
+        for index, (label, value, level, scale) in enumerate(rows):
             row_top = top + index * (self.row + self.gap)
             self.text(draw, x + self.padding, row_top, label, self.style.label)
             pips_left = x + 2 * self.padding + self.label_width
             pip_top = row_top + (self.row - self.pip) // 2
+            filled = _filled(value, scale)
             for slot in range(PIPS):
                 left = int(pips_left + slot * (self.pip + self.gap))
-                colour = LEVEL.get(level, LEVEL["calm"]) if slot < abs(value) else PIP_OFF
+                colour = LEVEL.get(level, LEVEL["calm"]) if slot < filled else PIP_OFF
                 draw.rectangle((left, pip_top, left + self.pip, pip_top + self.pip), fill=colour)
             self.number(draw, int(pips_left + PIPS * (self.pip + self.gap) + self.gap), row_top,
                         value, LEVEL["red"] if level == "red" else self.style.text)
+
+
+def _filled(value: int, scale: int) -> int:
+    """Pips filled for a value whose largest magnitude is `scale`: its share of
+    the five, rounded up so that any value but 0 shows. On a scale of 5, one
+    pip per point (sitrep.js, ratingRow)."""
+    return min(PIPS, math.ceil(PIPS * abs(value) / scale))
 
 
 def _number(value: int) -> str:
@@ -261,13 +281,15 @@ def _number(value: int) -> str:
 
 
 def draw_ratings(frame: np.ndarray,
-                 rated: list[tuple[np.ndarray, str, list[tuple[str, int, str]]]]) -> np.ndarray:
+                 rated: list[tuple[np.ndarray, str, list[tuple[str, int, str, int]]]]
+                 ) -> np.ndarray:
     """A copy of a BGR frame with each person boxed and named, and their ratings beside the box.
 
-    Each person comes with rows of (label, value -5 to 5, level), the level being
-    "calm", "amber" or "red" as the page colours it. A row shows the label,
-    five pips and the number. The panel sits against the box's right edge, at
-    its top, or against its left edge where the frame ends.
+    Each person comes with rows of (label, value, level, scale), the level being
+    "calm", "amber" or "red" as the page colours it and the scale the largest
+    magnitude the value can take (scenes.extent). A row shows the label, five
+    pips and the number. The panel sits against the box's right edge, at its
+    top, or against its left edge where the frame ends.
     """
     if not rated:
         return frame
@@ -275,9 +297,10 @@ def draw_ratings(frame: np.ndarray,
     image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     draw = ImageDraw.Draw(image)
     size, _, padding, line = _layout(image, DISPLAY)
+    rows_drawn = [row for _, _, rows in rated for row in rows]
     layout = _RatingRows(draw, max(MIN_TEXT, round(size * RATING_SHARE)),
-                         [label for _, _, rows in rated for label, _, _ in rows], padding,
-                         DISPLAY)
+                         [label for label, _, _, _ in rows_drawn], padding, DISPLAY,
+                         widest=max((scale for _, _, _, scale in rows_drawn), default=PIPS))
     width = layout.width
 
     for box, name, rows in rated:
@@ -351,9 +374,10 @@ class Slots:
 
 
 def draw_ratings_strip(frame: np.ndarray,
-                       rated: list[tuple[np.ndarray, str, list[tuple[str, int, str]]]],
+                       rated: list[tuple[np.ndarray, str, list[tuple[str, int, str, int]]]],
                        slots: dict[str, int], labels: list[str],
-                       count: int = SLOTS) -> np.ndarray:
+                       count: int = SLOTS, rows: int | None = None,
+                       widest: int = PIPS) -> np.ndarray:
     """A copy of a BGR frame with a strip beneath it holding the people's ratings.
 
     In the picture each person is boxed and named. The strip is divided into
@@ -361,9 +385,11 @@ def draw_ratings_strip(frame: np.ndarray,
     with rows (as draw_ratings takes them) and a slot in `slots` has their
     name and rows set on a card in that slot, and a line in the text colour
     runs from above the name to the foot of their box.
-    The strip's height and font follow from `labels`, all the rating labels
-    there can be, so the picture keeps its size from frame to frame. The font
-    is the name's size, smaller where a slot is too narrow for it.
+    The strip's font follows from `labels`, all the rating labels there can
+    be, and `widest`, the largest magnitude any of them can take; its height
+    from `rows`, the most rows anyone can have (all the labels unless given).
+    So the picture keeps its size from frame to frame.
+    The font is the name's size, smaller where a slot is too narrow for it.
     """
     style = DISPLAY
     base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -371,12 +397,13 @@ def draw_ratings_strip(frame: np.ndarray,
     slot_width = base.width // count
     probe = ImageDraw.Draw(base)
     text = max(MIN_TEXT, round(size * RATING_SHARE))
-    layout = _RatingRows(probe, text, labels, padding, style)
+    layout = _RatingRows(probe, text, labels, padding, style, widest)
     while layout.width > slot_width - 2 * padding and text > MIN_TEXT:
         text = max(MIN_TEXT, min(text - 1, int(text * (slot_width - 2 * padding) / layout.width)))
-        layout = _RatingRows(probe, text, labels, padding, style)
+        layout = _RatingRows(probe, text, labels, padding, style, widest)
 
-    strip = 3 * padding + layout.row + layout.height(len(labels)) + padding
+    strip = (3 * padding + layout.row
+             + layout.height(len(labels) if rows is None else rows) + padding)
     image = Image.new("RGB", (base.width, base.height + strip), style.tag)
     image.paste(base, (0, 0))
     draw = ImageDraw.Draw(image)

@@ -17,7 +17,7 @@
     const card = el("article", "p1-person");
     card.append(el("h2", null, name));
     const ratings = el("div", "ratings");
-    for (const rating of LIVE_SHOWN) ratings.append(ratingRow(rating, gemessen?.[rating] ?? 0));
+    for (const rating of valuesOf(name)) ratings.append(ratingRow(rating, gemessen?.[rating] ?? 0));
     card.append(ratings);
     return card;
   }
@@ -46,7 +46,8 @@
 
   function render(snapshot) {
     renderAlarm(snapshot);
-    if (changed("p1-personen", [snapshot.status, snapshot.im_bild, snapshot.werte?.personen])) {
+    if (changed("p1-personen", [snapshot.status, snapshot.im_bild, snapshot.werte?.personen,
+                                snapshot.scene?.values, snapshot.scene?.values_per_person])) {
       renderPersonen(snapshot);
     }
   }
