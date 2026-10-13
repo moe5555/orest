@@ -59,10 +59,10 @@ def test_space_held_captures_and_released_searches(wall):
 
 def test_a_single_digit_sets_the_tile_count_on_release(wall):
     module, component, _ = wall
-    press(module, "6")
+    press(module, "9")
     assert component.par.Tiles == 4
-    release(module, "6")
-    assert component.par.Tiles == 6
+    release(module, "9")
+    assert component.par.Tiles == 9
 
 
 def test_a_digit_pressed_while_another_is_held_adds_a_digit(wall):
@@ -78,14 +78,14 @@ def test_the_digits_count_in_the_order_they_were_pressed(wall):
     module, component, _ = wall
     press(module, "6", "1")
     release(module, "1", "6")
-    assert component.par.Tiles == 61
+    assert component.par.Tiles == 49  # 61, not 16
 
 
 def test_key_repeat_of_a_held_digit_adds_nothing(wall):
     module, component, _ = wall
-    press(module, "1", "1", "1", "2")
-    release(module, "2", "1")
-    assert component.par.Tiles == 12
+    press(module, "2", "2", "2", "5")
+    release(module, "5", "2")
+    assert component.par.Tiles == 25
 
 
 def test_each_entry_starts_afresh(wall):
@@ -121,6 +121,16 @@ def test_zero_tiles_is_ignored_but_zero_works_as_a_second_digit(wall):
     press(module, "0")
     release(module, "0")
     assert component.par.Tiles == 4
-    press(module, "2", "0")
-    release(module, "2", "0")
-    assert component.par.Tiles == 20
+    press(module, "3", "0")
+    release(module, "3", "0")
+    assert component.par.Tiles == 25  # 30
+
+
+@pytest.mark.parametrize("typed, tiles", [
+    ("1", 1), ("3", 1), ("4", 4), ("5", 4), ("8", 4), ("15", 9), ("16", 16), ("98", 81),
+])
+def test_the_count_rounds_down_to_a_square_grid(wall, typed, tiles):
+    module, component, _ = wall
+    press(module, *typed)
+    release(module, *typed)
+    assert component.par.Tiles == tiles

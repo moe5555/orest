@@ -9,8 +9,12 @@ its clip until the next search replaces it.
 | Key | Effect |
 |---|---|
 | Space, held | Captures while held; releasing stops the capture and searches |
-| A digit | Number of tiles, set on release: 1 full screen, 2 side by side, 4 as 2×2, 9 as 3×3 |
+| A digit | Number of tiles, set on release: 1 full screen, 4 as 2×2, 9 as 3×3 |
 | Two digits | Hold the first, press the second, release both: hold 1, press 6 → 16 tiles (4×4) |
+
+The number is rounded down to a square grid (1, 4, 9, 16, 25, 36, 49, 64, 81):
+5 gives 4, 12 gives 9. Only a square grid's tiles have the wall's own shape,
+so every tile is filled with no empty cell and no black bars.
 | F1 | Opens the wall full screen |
 | Esc | Closes it |
 

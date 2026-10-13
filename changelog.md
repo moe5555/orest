@@ -6,6 +6,22 @@ referenced below.
 
 ---
 
+## 2026-10-13 — Video wall tile counts snap to square grids (VSH-ARLT-5090)
+
+Requested by Moe. Concerns the `CUT → STAGE` step of the RENDER graph in
+`pipeline.md`, the wall from the 2026-10-08 entry below. A tile count typed on
+the keys is rounded down to a square (1, 4, 9 … 81), so 5 gives 4 and 12
+gives 9 (`full_grid` in `TouchDesigner/code/wall_keys.py`). Square grids are
+the only ones whose tiles have the wall's 16:9 shape. Any other count leaves an
+empty cell (5 in a 3×2 grid) or black bars around 16:9 clips (2 side by side,
+6 as 3×2). Rounding down never asks for more tiles than were typed, so
+`body-live -n` sized for the typed number still covers every tile. The `Tiles`
+parameter itself still takes any value when set by hand. `wall_keys` reloads
+from its file, so the build script doesn't need to run again. 8 new tests;
+703 pass.
+
+---
+
 ## 2026-10-12 — SITREP runs without an audio device
 
 Requested by Moe, for the live SITREP (`02_processing.md`, Realtime-SITREP

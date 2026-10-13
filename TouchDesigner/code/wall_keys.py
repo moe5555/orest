@@ -6,13 +6,15 @@ Keyboard control of the body search video wall:
 	space   held: captures a movement; released: stops the capture and searches
 	0-9     number of tiles on the wall, set when the last digit key is released.
 	        Digits pressed while another is held add a digit: hold 1, press 6,
-	        release both for 16.
+	        release both for 16. The count is rounded down to a square grid
+	        (1, 4, 9, 16, ... 81), so 5 gives 4 and 12 gives 9.
 
 Space sends the same messages as button1 through oscout1, to
 `apollon-search body-live` on port 10001. Key repeat while space is held sends
 further starts, which body-live ignores during a capture.
 """
 
+import math
 import time
 
 DIGITS = '0123456789'
@@ -59,7 +61,15 @@ def _digit(key, down):
 	number = int(''.join(_typed))
 	_typed.clear()
 	if number > 0:
-		parent().par.Tiles = number
+		parent().par.Tiles = full_grid(number)
+
+
+def full_grid(number):
+	"""The largest square tile count not above `number`. A square grid's tiles
+	have the shape of the wall itself, so clips that fill the wall alone also
+	fill it as tiles, with no empty cell and no bars."""
+	side = math.isqrt(number)
+	return side * side
 
 
 def onShortcut(dat, shortcutName, time):
