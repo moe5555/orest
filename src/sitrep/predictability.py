@@ -1,4 +1,4 @@
-"""Vorhersehbarkeit: how closely a person's movement now resembles the rehearsals.
+"""Berechenbarkeit: how closely a person's movement now resembles the rehearsals.
 
 A person is predictable when the rehearsal corpus already holds a movement like the one
 they are making, and unpredictable when it holds nothing like it. The score is
@@ -36,7 +36,7 @@ Build the reference once per corpus, after WISE has extracted pose features:
 
 which exports the vectors through WISE's environment
 (src/scripts/export_pose_reference.py), calibrates them and writes REFERENCE.
-A run loads it when it exists; without it, Vorhersehbarkeit is not measured.
+A run loads it when it exists; without it, Berechenbarkeit is not measured.
 """
 
 import argparse
@@ -177,7 +177,7 @@ def window_embedding(frames: list[tracking.Frame], track: int) -> np.ndarray | N
 
 def available(path: Path = REFERENCE) -> bool:
     """Whether a reference has been built. Without it a run does not measure
-    Vorhersehbarkeit."""
+    Berechenbarkeit."""
     return path.exists()
 
 

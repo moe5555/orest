@@ -1,4 +1,4 @@
-"""Vorhersehbarkeit: live movement scored against a rehearsal corpus, on synthetic vectors."""
+"""Berechenbarkeit: live movement scored against a rehearsal corpus, on synthetic vectors."""
 
 from datetime import datetime, timedelta
 
@@ -134,12 +134,12 @@ def test_a_report_rates_a_person_on_the_mean_of_their_scores():
     records = [evidence(T0, -4.0), evidence(T0, -1.0), evidence(T0, 0.6),
                evidence(T0, None, members=(1, 2))]
     (klara,) = actions.rate(records, {1: "Klara", 2: "Orest"})[:1]
-    assert klara.vorhersehbarkeit == -1
+    assert klara.berechenbarkeit == -1
 
 
-def test_without_scores_vorhersehbarkeit_is_not_measured():
+def test_without_scores_berechenbarkeit_is_not_measured():
     rated = actions.rate([evidence(T0, None)], {1: "Klara"})
-    assert rated[0].vorhersehbarkeit is None
+    assert rated[0].berechenbarkeit is None
 
 
 def test_only_bodies_classified_alone_carry_a_score():
@@ -148,24 +148,24 @@ def test_only_bodies_classified_alone_carry_a_score():
                 recognizer.Reading(0.0, (1, 2), np.full(120, 1 / 120))]
     subject.record(readings, T0, {1: 2.5, 2: -3.0})
     records, _ = subject.since(T0 - timedelta(seconds=1))
-    assert [record.vorhersehbarkeit for record in records] == [2.5, None]
+    assert [record.berechenbarkeit for record in records] == [2.5, None]
 
 
-def test_live_vorhersehbarkeit_is_the_mean_of_the_last_seconds():
+def test_live_berechenbarkeit_is_the_mean_of_the_last_seconds():
     old = T0 - timedelta(seconds=lage.SMOOTHING + 1)
     readings = [evidence(old, -5.0), evidence(T0 - timedelta(seconds=2), 1.0),
                 evidence(T0, 2.0)]
-    wert = lage.stand(readings, {1: "Klara"}, [], T0).personen["Klara"][report.VORHERSEHBARKEIT]
+    wert = lage.stand(readings, {1: "Klara"}, [], T0).personen["Klara"][report.BERECHENBARKEIT]
     assert (wert.wert, wert.staerke, wert.zeit) == (2, 1.5, T0)
 
 
-def test_live_vorhersehbarkeit_is_absent_without_recent_scores():
+def test_live_berechenbarkeit_is_absent_without_recent_scores():
     readings = [evidence(T0 - timedelta(seconds=lage.SMOOTHING + 1), -5.0), evidence(T0, None)]
     werte = lage.stand(readings, {1: "Klara"}, [], T0).personen["Klara"]
-    assert report.VORHERSEHBARKEIT not in werte
+    assert report.BERECHENBARKEIT not in werte
     assert set(werte) == set(report.GEMESSEN)
 
 
-def test_vorhersehbarkeit_raises_no_alarm():
+def test_berechenbarkeit_raises_no_alarm():
     readings = [evidence(T0, -5.0)]
     assert not lage.stand(readings, {1: "Klara"}, [], T0).alarm.aktiv

@@ -57,12 +57,12 @@ MANUAL = ("aggression",)
 VALUES = report.BEWERTUNGEN + MANUAL
 
 LABELS = {"risiko": "Risiko", "menschlichkeit": "Menschlichkeit",
-          "vorhersehbarkeit": "Vorhersehbarkeit", "aggression": "Aggression"}
+          "berechenbarkeit": "Berechenbarkeit", "aggression": "Aggression"}
 
 # Each value's range, lowest and highest. Risiko, Menschlichkeit and
-# Vorhersehbarkeit as measured (report.py); Aggression as the operator sets it
+# Berechenbarkeit as measured (report.py); Aggression as the operator sets it
 # in Szene 2.3.
-RANGES = {"risiko": (0, 5), "menschlichkeit": (0, 5), "vorhersehbarkeit": (-5, 5),
+RANGES = {"risiko": (0, 5), "menschlichkeit": (0, 5), "berechenbarkeit": (-5, 5),
           "aggression": (-10, 10)}
 
 

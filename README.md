@@ -103,7 +103,7 @@ not retained, and no frame or audio clip is written to disk.
 Each report carries a **Verlauf** (how the scene developed, with its turning
 points), a **Beschreibung** (the situation now), the
 **Personen** in the window, each with a short description and three
-ratings (risiko and menschlichkeit 0–5, vorhersehbarkeit −5 to +5), the
+ratings (risiko and menschlichkeit 0–5, berechenbarkeit −5 to +5), the
 **Szene** rated 0–10 for relevanz, eskalation and gefahr, a **Prognose** of the
 three most likely developments with a percentage each, most likely first, and
 an **Empfehlung**. The Empfehlung is written only when the scene's eskalation
@@ -123,7 +123,7 @@ recognised actions are weighed with `src/action/sitrep_map.csv`
 (`src/sitrep/actions.py`). A person whose body the recogniser didn't read
 shows these two ratings as `–`.
 
-**vorhersehbarkeit** is measured too: how closely a person's movement over
+**berechenbarkeit** is measured too: how closely a person's movement over
 the last four seconds resembles the rehearsal corpus, from −5 (nothing like
 it rehearsed) to +5 (rehearsed often), 0 being a typical rehearsed movement
 (`src/sitrep/predictability.py`). Build the reference once the corpus's pose
@@ -131,7 +131,7 @@ features are extracted:
 
     python -m sitrep.predictability --project hitl_database
 
-Without it, vorhersehbarkeit shows as `–`. The model rates none of a person's
+Without it, berechenbarkeit shows as `–`. The model rates none of a person's
 values.
 
 **What was said** is rated per line by a second, text-only request to the same
@@ -269,7 +269,7 @@ addresses are namespaced so one DAT can route both:
     /apollon/sitrep/beschreibung  <id> <beschreibung>
     /apollon/sitrep/gesagt        <id> <gesagt>
     /apollon/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
-                                <risiko> <menschlichkeit> <vorhersehbarkeit>
+                                <risiko> <menschlichkeit> <berechenbarkeit>
     /apollon/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
     /apollon/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
     /apollon/sitrep/empfehlung    <id> <einschreiten> <massnahme>

@@ -17,7 +17,7 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     assert eins.keys["p"].tracked == 3
     zwei_drei = loaded["Szene 2.3"]
     assert zwei_drei.values_of("Alex") == ["aggression"]
-    assert zwei_drei.values_of("Lena") == ["risiko", "menschlichkeit", "vorhersehbarkeit"]
+    assert zwei_drei.values_of("Lena") == ["risiko", "menschlichkeit", "berechenbarkeit"]
     assert loaded["Szene 1.2"].prerecorded
     assert loaded["Szene 3"].keys["c"].swap
 
@@ -27,7 +27,7 @@ def test_without_a_scene_the_defaults_apply():
     assert standard.podest is None
     assert standard.interference
     assert standard.tracked == 4
-    assert standard.values == ["risiko", "menschlichkeit", "vorhersehbarkeit"]
+    assert standard.values == ["risiko", "menschlichkeit", "berechenbarkeit"]
     assert not standard.prerecorded and standard.video is None and not standard.keys
 
 
@@ -114,7 +114,7 @@ def test_aggression_set_by_hand_stays_within_minus_ten_and_ten():
 
 def test_only_aggression_has_the_wider_range():
     assert scenes.RANGES == {"risiko": (0, 5), "menschlichkeit": (0, 5),
-                             "vorhersehbarkeit": (-5, 5), "aggression": (-10, 10)}
+                             "berechenbarkeit": (-5, 5), "aggression": (-10, 10)}
     assert [scenes.extent(value) for value in scenes.VALUES] == [5, 5, 5, 10]
 
 

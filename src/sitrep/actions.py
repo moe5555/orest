@@ -1,4 +1,4 @@
-"""Risiko, Menschlichkeit and Vorhersehbarkeit per person, measured from what bodies do.
+"""Risiko, Menschlichkeit and Berechenbarkeit per person, measured from what bodies do.
 
 The Pose route under "Calculating Values" in
 knowledge/components/02_processing.md. The action recogniser (src/action) runs
@@ -56,9 +56,9 @@ Rating. Each rating is the peak evidence among the readings a person took part
 in, rounded and clipped to 0-5. The peak rather than the mean, because one
 blow makes a person dangerous however calm the rest of the window was.
 
-Vorhersehbarkeit. Given a rehearsal reference (predictability.py), each
+Berechenbarkeit. Given a rehearsal reference (predictability.py), each
 person classified alone is also encoded over the same window and scored
-against the corpus, -5 to +5. A person's Vorhersehbarkeit over a stretch is
+against the corpus, -5 to +5. A person's Berechenbarkeit over a stretch is
 the mean of those scores, not a peak: it describes how the person moved over
 the stretch, and a single window far from the corpus is as often a tracking
 slip as a new movement.
@@ -188,7 +188,7 @@ class Evidence:
     causes: tuple[str, ...]         # per rating: strongest class and its probability
     # A single person's movement scored against the rehearsals, -5 to +5;
     # None for a pair, or without a reference.
-    vorhersehbarkeit: float | None = None
+    berechenbarkeit: float | None = None
 
 
 @dataclass(frozen=True)
@@ -249,16 +249,16 @@ def rate(records: list[Evidence], names: dict[int, str],
                 if gains[id(peak)] > 1.0:
                     cause += f" · laut ×{gains[id(peak)]:.1f}"
             fields[f"anlass_{rating}"] = cause
-        fields[report.VORHERSEHBARKEIT] = mean_predictability(own)
+        fields[report.BERECHENBARKEIT] = mean_predictability(own)
         rated.append(report.Handlung(name=name, lesungen=len(own), **fields))
     return rated
 
 
 def mean_predictability(records: list[Evidence]) -> int | None:
-    """The mean Vorhersehbarkeit of the readings that carry one, rounded, or
+    """The mean Berechenbarkeit of the readings that carry one, rounded, or
     None if none does."""
-    scores = [record.vorhersehbarkeit for record in records
-              if record.vorhersehbarkeit is not None]
+    scores = [record.berechenbarkeit for record in records
+              if record.berechenbarkeit is not None]
     if not scores:
         return None
     return int(np.clip(np.floor(float(np.mean(scores)) + 0.5),
@@ -450,7 +450,7 @@ class ActionRatings:
         self.record(readings, datetime.now(), self._predictability(readings))
 
     def _predictability(self, readings: list[recognizer.Reading]) -> dict[int, float]:
-        """Vorhersehbarkeit of each body classified alone, by track id, over
+        """Berechenbarkeit of each body classified alone, by track id, over
         the window its reading covers."""
         alone = [reading.members[0] for reading in readings if len(reading.members) == 1]
         if self.reference is None or not alone:
@@ -622,7 +622,7 @@ class ActionRatings:
                scores: dict[int, float] | None = None):
         """Weigh readings and keep them under the bodies they are of.
 
-        `scores` holds the Vorhersehbarkeit of bodies classified alone, by
+        `scores` holds the Berechenbarkeit of bodies classified alone, by
         track id.
         """
         scores = scores or {}

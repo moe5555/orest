@@ -358,12 +358,12 @@ class Session:
             if appearances is None:
                 print("appearance model missing: people are named by face alone "
                       "(src/scripts/export_osnet.py)", file=sys.stderr)
-            # Vorhersehbarkeit is measured where a rehearsal reference has
+            # Berechenbarkeit is measured where a rehearsal reference has
             # been built (predictability.py), as appearance is used where its
             # model is installed.
             self.reference = predictability.load() if predictability.available() else None
             if self.reference is None:
-                print("no rehearsal reference: vorhersehbarkeit not measured "
+                print("no rehearsal reference: berechenbarkeit not measured "
                       "(python -m sitrep.predictability --project ...)", file=sys.stderr)
             self.actions = actions.ActionRatings(self.stream, self.tracker,
                                                  on_frame=self.speakers.observe,
@@ -797,13 +797,13 @@ class Session:
         if self.actions:
             lines.append(f"action: NTU120 ST-GCN on {actions.model.active_provider()}")
             if self.reference is not None:
-                lines.append(f"vorhersehbarkeit: {predictability.describe(self.reference)}")
+                lines.append(f"berechenbarkeit: {predictability.describe(self.reference)}")
             rule = self.scene.scene.podest
             if self.options.podest and rule is not None:
                 lines.append(f"podest: risiko +{rule.step} off, -{rule.step} on, at least "
                              f"{rule.floor} off {podest.format_polygon(self.options.podest)}")
         else:
-            lines.append("action: off, risiko, menschlichkeit and vorhersehbarkeit "
+            lines.append("action: off, risiko, menschlichkeit and berechenbarkeit "
                          "not measured")
         if self.tracker.cast:
             lines.append(f"cast:   {', '.join(self.tracker.cast.names)}")

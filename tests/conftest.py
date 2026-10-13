@@ -60,7 +60,7 @@ def sitrep(bericht) -> report.Sitrep:
         handlungen=[
             report.Handlung(name="Klara", risiko=0, menschlichkeit=4,
                             anlass_menschlichkeit="hugging other person 0.81", lesungen=12,
-                            vorhersehbarkeit=-2),
+                            berechenbarkeit=-2),
         ],
         latenz_s=5.8,
         bericht=bericht,

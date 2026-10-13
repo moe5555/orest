@@ -22,7 +22,7 @@ skipped:
 	presence_meta      one row: tick, time, number present
 	presence           one row per person the tracker sees
 	live_meta          one row: tick, time, people, alarm and its cause
-	live_personen      one row per person: live risiko, menschlichkeit, vorhersehbarkeit
+	live_personen      one row per person: live risiko, menschlichkeit, berechenbarkeit
 	live_zeilen        the last LIVE_ZEILEN lines said, newest last
 	live_empfehlung    one row: the latest recommendation
 	chronik            the last CHRONIK_ZEILEN summarised stretches, newest last
@@ -39,9 +39,9 @@ META_HEADER = ['id', 'nummer', 'beginn', 'ende', 'dauer_s', 'bilder', 'abschnitt
 
 # Rating columns follow report.BEWERTUNGEN in Apollon, in the same order.
 # risiko and menschlichkeit are 0-5, and -1 when nothing of the person was
-# measured. vorhersehbarkeit is -5 to 5, and empty when it was not measured.
+# measured. berechenbarkeit is -5 to 5, and empty when it was not measured.
 PERSON_HEADER = ['zeile', 'name', 'vermutet', 'beschreibung',
-				 'risiko', 'menschlichkeit', 'vorhersehbarkeit']
+				 'risiko', 'menschlichkeit', 'berechenbarkeit']
 
 PROGNOSE_HEADER = ['rang', 'wahrscheinlichkeit', 'verlauf']
 
@@ -57,7 +57,7 @@ LIVE_META_HEADER = ['tick', 'zeit', 'personen', 'alarm', 'alarm_wert', 'alarm_we
 					'alarm_anlass']
 
 LIVE_PERSON_HEADER = ['zeile', 'name', 'risiko', 'menschlichkeit', 'anlass_risiko',
-					  'anlass_menschlichkeit', 'vorhersehbarkeit']
+					  'anlass_menschlichkeit', 'berechenbarkeit']
 
 ZEILE_HEADER = ['beginn', 'ende', 'name', 'text', 'lautstaerke', 'risiko', 'menschlichkeit',
 				'bewertet']
@@ -86,7 +86,7 @@ _last_live = 0
 
 def _rating_text(column, value):
 	"""A person's rating as the text table shows it, '-' when not measured."""
-	if column == 'vorhersehbarkeit':
+	if column == 'berechenbarkeit':
 		return '-' if value == '' else str(value)
 	return '-' if int(value) < 0 else str(value)
 

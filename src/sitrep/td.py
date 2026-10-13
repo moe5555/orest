@@ -14,14 +14,14 @@ end, with one message per table row between them:
     /apollon/sitrep/beschreibung  <id> <beschreibung>
     /apollon/sitrep/gesagt        <id> <gesagt>
     /apollon/sitrep/person        <id> <zeile> <name> <vermutet> <beschreibung>
-                                <risiko> <menschlichkeit> <vorhersehbarkeit>
+                                <risiko> <menschlichkeit> <berechenbarkeit>
     /apollon/sitrep/szene         <id> <relevanz> <eskalation> <gefahr>
     /apollon/sitrep/prognose      <id> <rang> <wahrscheinlichkeit> <verlauf>
     /apollon/sitrep/empfehlung    <id> <einschreiten> <massnahme>
     /apollon/sitrep/end           <id>
 
 A person's ratings follow report.BEWERTUNGEN. `risiko` and `menschlichkeit`
-are 0-5 and -1 when nothing of the person was measured. `vorhersehbarkeit` is
+are 0-5 and -1 when nothing of the person was measured. `berechenbarkeit` is
 -5 to +5, where -1 is a value, and travels as an empty string when it was not
 measured (no reference built, or the person never classified alone).
 
@@ -56,7 +56,7 @@ or 1, `alarm_wer` empty for a line of unknown speaker:
                             <alarm_wer> <alarm_anlass>
     /apollon/live/person      <tick> <zeile> <name> <risiko> <menschlichkeit>
                             <anlass_risiko> <anlass_menschlichkeit>
-                            <vorhersehbarkeit>
+                            <berechenbarkeit>
     /apollon/live/end         <tick>
 
 Each line as soon as it is transcribed, with `bewertet` 0, and again once it
@@ -107,7 +107,7 @@ LIVE_EMPFEHLUNG = "/apollon/live/empfehlung"
 CHRONIK_ABSCHNITT = "/apollon/chronik/abschnitt"
 
 # A person's rating that was not measured: -1 on the 0-5 scales, an empty
-# string on Vorhersehbarkeit's -5 to +5.
+# string on Berechenbarkeit's -5 to +5.
 NICHT_GEMESSEN = -1
 NOT_MEASURED_SIGNED = ""
 
@@ -148,7 +148,7 @@ def messages(document: report.Sitrep, nummer: int,
         # exists -- the reason report.py derives them in the first place. OSC
         # has no null, so a rating that was not measured travels as a marker.
         ratings = [value if value is not None
-                   else NOT_MEASURED_SIGNED if rating == report.VORHERSEHBARKEIT
+                   else NOT_MEASURED_SIGNED if rating == report.BERECHENBARKEIT
                    else NICHT_GEMESSEN
                    for rating, value in document.bewertungen(person).items()]
         built.append((SITREP_PERSON, [sitrep_id, zeile, person.name,
@@ -195,14 +195,14 @@ def werte_messages(stand, tick: int) -> list[Message]:
                            alarm.wert, alarm.wer or "", alarm.anlass])]
     for zeile, (name, werte) in enumerate(stand.personen.items(), start=1):
         # A value the scene does not show a person with travels as not measured.
-        vorhersehbarkeit = werte.get(report.VORHERSEHBARKEIT)
+        berechenbarkeit = werte.get(report.BERECHENBARKEIT)
         built.append((LIVE_PERSON, [tick, zeile, name,
                                     *(werte[rating].wert if rating in werte else NICHT_GEMESSEN
                                       for rating in report.GEMESSEN),
                                     *(werte[rating].anlass if rating in werte else ""
                                       for rating in report.GEMESSEN),
-                                    NOT_MEASURED_SIGNED if vorhersehbarkeit is None
-                                    else vorhersehbarkeit.wert]))
+                                    NOT_MEASURED_SIGNED if berechenbarkeit is None
+                                    else berechenbarkeit.wert]))
     built.append((LIVE_END, [tick]))
     return built
 

@@ -61,7 +61,7 @@ def test_a_tag_near_the_right_edge_stays_inside_the_frame():
 
 
 RATED = [("Risiko", 4, "red", 5), ("Menschlichkeit", 1, "calm", 5),
-         ("Vorhersehbarkeit", -3, "amber", 5)]
+         ("Berechenbarkeit", -3, "amber", 5)]
 
 
 def test_pips_fill_by_the_share_of_the_values_scale():
@@ -109,7 +109,7 @@ def test_a_high_risiko_is_drawn_in_red():
     assert np.all(rgb == red, axis=2).any()
 
 
-LABELS = ["Risiko", "Menschlichkeit", "Vorhersehbarkeit"]
+LABELS = ["Risiko", "Menschlichkeit", "Berechenbarkeit"]
 
 
 def test_the_strip_lies_beneath_the_picture_and_keeps_its_height():

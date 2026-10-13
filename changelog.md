@@ -105,6 +105,30 @@ scene tests pass.
 
 ---
 
+## 2026-10-13 — Vorhersehbarkeit renamed to Berechenbarkeit
+
+Requested by Moe. Concerns the per-person SITREP values of PROCESSING → AV
+analysis in `pipeline.md` (`02_processing.md`, "Calculating Values"). The value
+is now called Berechenbarkeit everywhere it is named. That covers the page
+labels and the strip on Prototype 3, the JSON and OSC fields
+(`berechenbarkeit`), `report.BERECHENBARKEIT`, the dataclass fields, the
+prompts to the model (Chronik, Lagebericht), the scenes file, the
+TouchDesigner script, the README and `02_processing.md`. The English module
+and function names (`predictability.py`, `mean_predictability`) are unchanged.
+The meaning and scale (−5 to +5) are unchanged, as is the OSC wire format,
+which is positional. Entries below keep the old name.
+
+- **TouchDesigner:** paste `TouchDesigner/code/sitrep_osc.py` into the Text DAT
+  `sitrep_osc` again so that the column headers of `sitrep_personen` and
+  `live_personen` read `berechenbarkeit`. Anything in the network that reads
+  the column by its old name has to be changed by hand.
+- A scene in `scenes.toml` that lists `vorhersehbarkeit` would no longer load;
+  the file in the repository lists none.
+
+705 tests pass.
+
+---
+
 ## 2026-10-13 — Scene rating beneath the picture restored (Prototypes 2 and 3)
 
 Bug fix. Concerns the Live SITREP of the RENDER step in `pipeline.md`

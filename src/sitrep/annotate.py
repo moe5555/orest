@@ -211,7 +211,7 @@ class _RatingRows:
     Measured on the labels given and on `widest`, the largest magnitude a
     value can take, so panels drawn with one instance line up. The pips fill
     in proportion to the value's magnitude on its scale (_filled). A negative
-    value (Vorhersehbarkeit, Aggression) is set with its sign.
+    value (Berechenbarkeit, Aggression) is set with its sign.
     """
 
     def __init__(self, draw: ImageDraw.ImageDraw, size: int, labels, padding: int,

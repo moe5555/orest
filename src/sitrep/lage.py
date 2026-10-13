@@ -1,4 +1,4 @@
-"""The live values: each person's Risiko, Menschlichkeit and Vorhersehbarkeit now, and the alarm.
+"""The live values: each person's Risiko, Menschlichkeit and Berechenbarkeit now, and the alarm.
 
 Fix 2 of knowledge/background/live_sitrep_latency.md ("A live values
 stream"). The values used to change once a report was made. Here they are
@@ -14,7 +14,7 @@ the strongest decayed evidence, rounded and clipped to 0-5, as a report's
 peak is (actions.rate, report.Sitrep.bewertung). Loudness amplifies Risiko
 evidence as it does there.
 
-Vorhersehbarkeit. A person's live Vorhersehbarkeit is the mean of their
+Berechenbarkeit. A person's live Berechenbarkeit is the mean of their
 scores against the rehearsals (actions.py, predictability.py) over the last
 SMOOTHING seconds. It does not decay: it describes how the person is moving
 now, and a person no longer classified alone has none. It plays no part in
@@ -63,7 +63,7 @@ HORIZONT = 4
 # Live Risiko at which the alarm is raised.
 ALARM = 3
 
-# Seconds of scores a live Vorhersehbarkeit is the mean of. At one reading a
+# Seconds of scores a live Berechenbarkeit is the mean of. At one reading a
 # second, each over four seconds of movement, eight readings span twelve
 # seconds of it: steady enough to read, recent enough to follow a change.
 SMOOTHING = 8.0
@@ -72,7 +72,7 @@ SMOOTHING = 8.0
 @dataclass(frozen=True)
 class Wert:
     """One live rating of a person: rounded, the value behind it (decayed
-    evidence, or a mean score for Vorhersehbarkeit), what caused it and when
+    evidence, or a mean score for Berechenbarkeit), what caused it and when
     that was measured."""
 
     wert: int
@@ -207,7 +207,7 @@ def measure(readings: list[actions.Evidence], names: dict[int, str],
                                           at if wert else None)
     # Every person scored has readings, and so Risiko and Menschlichkeit.
     for name, wert in predictabilities(readings, names, now).items():
-        personen[name][report.VORHERSEHBARKEIT] = wert
+        personen[name][report.BERECHENBARKEIT] = wert
     return personen, unklar
 
 
@@ -265,18 +265,18 @@ def judge(now: datetime, personen: Personen, unklar: tuple[float, str]) -> Stand
 
 def predictabilities(readings: list[actions.Evidence], names: dict[int, str],
                      now: datetime, smoothing: float = SMOOTHING) -> dict[str, Wert]:
-    """Each named person's live Vorhersehbarkeit, from their scores in the
+    """Each named person's live Berechenbarkeit, from their scores in the
     last `smoothing` seconds; people without one are left out."""
     since = now - timedelta(seconds=smoothing)
     recent: dict[str, list[actions.Evidence]] = {}
     for record in readings:
-        if record.at < since or record.vorhersehbarkeit is None:
+        if record.at < since or record.berechenbarkeit is None:
             continue
         for name in dict.fromkeys(names[member] for member in record.members
                                   if member in names):
             recent.setdefault(name, []).append(record)
     return {name: Wert(actions.mean_predictability(own),
-                       round(float(np.mean([record.vorhersehbarkeit for record in own])), 2),
+                       round(float(np.mean([record.berechenbarkeit for record in own])), 2),
                        zeit=max(record.at for record in own))
             for name, own in recent.items()}
 

@@ -6,7 +6,7 @@
 #
 #   interference = true          Einschreiten when the alarm is raised
 #   tracked = 4                  bodies boxed, named and judged on the Podest
-#   values = ["risiko", "menschlichkeit", "vorhersehbarkeit"]
+#   values = ["risiko", "menschlichkeit", "berechenbarkeit"]
 #   values_per_person.<Name> = [...]   for whom the values differ
 #   podest = { step = 1, floor = 2 }   the Podest count; off unless given
 #   video = "data/scenes/clip.mp4"     pre-recorded video, from the repository root

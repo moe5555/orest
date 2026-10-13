@@ -146,13 +146,13 @@ RATING_LABELS = scenes.LABELS
 def rating_level(name: str, value: int) -> str:
     """A person's rating as the page colours it (sitrep.js, personLevel):
     Risiko amber from 2 and red from 4 on its 0-5 scale, Aggression at the
-    same shares of its -10 to +10, from 4 and 8, Vorhersehbarkeit from -2 and
+    same shares of its -10 to +10, from 4 and 8, Berechenbarkeit from -2 and
     -4 on its -5 to +5, the rest neutral."""
     if name == "risiko":
         return "red" if value >= 4 else "amber" if value >= 2 else "calm"
     if name == "aggression":
         return "red" if value >= 8 else "amber" if value >= 4 else "calm"
-    if name == "vorhersehbarkeit":
+    if name == "berechenbarkeit":
         return "red" if value <= -4 else "amber" if value <= -2 else "calm"
     return "calm"
 

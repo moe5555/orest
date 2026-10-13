@@ -175,7 +175,7 @@ def test_a_person_row_carries_the_ratings_in_the_order_bewertungen_names(sitrep)
 
 
 def test_a_rating_that_was_not_measured_is_sent_as_a_marker_off_its_scale(sitrep):
-    """-1 is off the 0-5 scales but a value of Vorhersehbarkeit's -5 to +5."""
+    """-1 is off the 0-5 scales but a value of Berechenbarkeit's -5 to +5."""
     jakob = only(sitrep_td.messages(sitrep, 1), sitrep_td.SITREP_PERSON)[1]
     assert jakob[-len(report.BEWERTUNGEN):] == [
         sitrep_td.NICHT_GEMESSEN, sitrep_td.NICHT_GEMESSEN, sitrep_td.NOT_MEASURED_SIGNED]

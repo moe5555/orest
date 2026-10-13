@@ -1,6 +1,6 @@
 """Write a WISE project's pose vectors to a numpy file Apollon can read.
 
-The reference corpus of Vorhersehbarkeit (src/sitrep/predictability.py) is the
+The reference corpus of Berechenbarkeit (src/sitrep/predictability.py) is the
 pose index WISE builds over the rehearsals. WISE keeps it as Faiss shards, and
 Apollon's environment carries no Faiss, so this script reads the shards inside
 WISE's conda environment and writes plain arrays. Apollon calibrates them.

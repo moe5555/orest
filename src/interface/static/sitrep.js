@@ -19,18 +19,18 @@ const FEED_TEXT = {
   error: "Kein Bild.",
 };
 
-const PERSON_RATINGS = ["risiko", "menschlichkeit", "vorhersehbarkeit"];
+const PERSON_RATINGS = ["risiko", "menschlichkeit", "berechenbarkeit"];
 // Ratings measured as evidence from actions and lines, 0-5.
 const LIVE_RATINGS = ["risiko", "menschlichkeit"];
 // Ratings shown per person live unless the scene says otherwise: the
-// evidence and Vorhersehbarkeit, -5 to +5.
-const LIVE_SHOWN = [...LIVE_RATINGS, "vorhersehbarkeit"];
+// evidence and Berechenbarkeit, -5 to +5.
+const LIVE_SHOWN = [...LIVE_RATINGS, "berechenbarkeit"];
 // Ratings that set a person apart from those without a finding: the evidence,
 // and Aggression, which the operator sets by hand (sitrep/scenes.py).
 const BEFUND_RATINGS = [...LIVE_RATINGS, "aggression"];
 // Each rating's range, lowest and highest (sitrep/scenes.py, RANGES).
 const RANGES = {
-  risiko: [0, 5], menschlichkeit: [0, 5], vorhersehbarkeit: [-5, 5], aggression: [-10, 10],
+  risiko: [0, 5], menschlichkeit: [0, 5], berechenbarkeit: [-5, 5], aggression: [-10, 10],
 };
 const PIPS = 5;
 
@@ -64,12 +64,12 @@ function sceneLevel(value, schwelle) {
 }
 
 // Per-person risk on its 0-5 scale, Aggression at the same shares of its
-// -10 to +10, and Vorhersehbarkeit mirrored on its -5 to +5; the other
+// -10 to +10, and Berechenbarkeit mirrored on its -5 to +5; the other
 // ratings stay neutral (live.rating_level).
 function personLevel(name, value) {
   if (name === "risiko") return value >= 4 ? "red" : value >= 2 ? "amber" : "calm";
   if (name === "aggression") return value >= 8 ? "red" : value >= 4 ? "amber" : "calm";
-  if (name === "vorhersehbarkeit") return value <= -4 ? "red" : value <= -2 ? "amber" : "calm";
+  if (name === "berechenbarkeit") return value <= -4 ? "red" : value <= -2 ? "amber" : "calm";
   return "calm";
 }
 
@@ -337,8 +337,8 @@ function gemessenCard(handlung) {
   card.append(title,
     meter("risiko", handlung.risiko, 5, personLevel("risiko", handlung.risiko)),
     meter("menschlichkeit", handlung.menschlichkeit, 5, "calm"));
-  if (handlung.vorhersehbarkeit !== null) {
-    card.append(ratingRow("vorhersehbarkeit", handlung.vorhersehbarkeit));
+  if (handlung.berechenbarkeit !== null) {
+    card.append(ratingRow("berechenbarkeit", handlung.berechenbarkeit));
   }
   const anlass = LIVE_RATINGS
     .filter((name) => handlung[`anlass_${name}`])

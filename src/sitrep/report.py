@@ -35,7 +35,7 @@ named person from what their body does (actions.py), a separate text-only
 request rates what each line says (speech.py), and a person's rating is the
 higher of the two. Where the room was louder than the session's normal
 speech, Risiko evidence from both is amplified (loudness.py).
-Vorhersehbarkeit is measured from the same bodies, against the rehearsal
+Berechenbarkeit is measured from the same bodies, against the rehearsal
 corpus (predictability.py). The model rates none of a person's values.
 
 Whether to intervene is decided here, not by the model: a scene rated above
@@ -99,7 +99,7 @@ Quellen:
 - Rueckblick und Abschnitte: das laufende Protokoll der Szene, aelteste
   zuerst, mit Eskalation und Gefahr (0-10) und Tendenz je Abschnitt.
 - Gemessen jetzt: Risiko und Menschlichkeit (0-5) je Person aus
-  Aktionserkennung und Sprache, mit Anlass und Alter; Vorhersehbarkeit
+  Aktionserkennung und Sprache, mit Anlass und Alter; Berechenbarkeit
   (-5 bis 5) je Person: wie sehr ihre Bewegung den Proben gleicht, -5 nie
   so geprobt, 5 oft geprobt.
 - Transkript: das Woertliche der letzten Abschnitte. Vor jeder Aeusserung
@@ -154,7 +154,7 @@ class Handlung(BaseModel):
 
     Risiko and Menschlichkeit are 0-5. Each `anlass_` field names the class
     that contributed most to that rating, with its probability; it is empty
-    when the rating is 0. Vorhersehbarkeit is the mean of the person's scores
+    when the rating is 0. Berechenbarkeit is the mean of the person's scores
     against the rehearsals, -5 to +5, and None without a reference.
     """
 
@@ -167,7 +167,7 @@ class Handlung(BaseModel):
     lesungen: int
     # The loudness gain on the reading that set Risiko (loudness.py).
     verstaerkung: float = 1.0
-    vorhersehbarkeit: int | None = Field(default=None, ge=-5, le=5)
+    berechenbarkeit: int | None = Field(default=None, ge=-5, le=5)
 
 
 # Ratings measured as evidence, 0-5, from the action recogniser (actions.py)
@@ -177,10 +177,10 @@ GEMESSEN = tuple(name for name, field in Handlung.model_fields.items()
                  if field.annotation is int and name not in ("lesungen",))
 
 # The rating measured against the rehearsal corpus, -5 to +5 (predictability.py).
-VORHERSEHBARKEIT = "vorhersehbarkeit"
+BERECHENBARKEIT = "berechenbarkeit"
 
 # Every rating per person, in the order renderers show them.
-BEWERTUNGEN = GEMESSEN + (VORHERSEHBARKEIT,)
+BEWERTUNGEN = GEMESSEN + (BERECHENBARKEIT,)
 
 
 class Verlauf(BaseModel):
@@ -387,12 +387,12 @@ class Sitrep(BaseModel):
         A rating is None when it was not measured: Risiko and Menschlichkeit
         when neither the recogniser nor speech attribution caught anything of
         the person, e.g. a face seen without its body and saying nothing, which
-        is not the same as a reading of 0; Vorhersehbarkeit when the person
+        is not the same as a reading of 0; Berechenbarkeit when the person
         was never classified alone against a reference.
         """
         handlung = self.handlung(person.name)
         return {**{name: self.bewertung(person.name, name)[0] for name in GEMESSEN},
-                VORHERSEHBARKEIT: handlung.vorhersehbarkeit if handlung else None}
+                BERECHENBARKEIT: handlung.berechenbarkeit if handlung else None}
 
 
 def _prompt(anweisung: str, transcript: str, anwesend: list[Anwesend] = (),

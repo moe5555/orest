@@ -12,12 +12,12 @@ from sitrep import loudness, report
 
 
 def test_bewertungen_are_the_rating_fields_of_person_in_order():
-    assert report.BEWERTUNGEN == ("risiko", "menschlichkeit", "vorhersehbarkeit")
+    assert report.BEWERTUNGEN == ("risiko", "menschlichkeit", "berechenbarkeit")
 
 
-def test_bewertungen_are_the_evidence_ratings_then_vorhersehbarkeit():
+def test_bewertungen_are_the_evidence_ratings_then_berechenbarkeit():
     assert report.GEMESSEN == ("risiko", "menschlichkeit")
-    assert report.BEWERTUNGEN == report.GEMESSEN + (report.VORHERSEHBARKEIT,)
+    assert report.BEWERTUNGEN == report.GEMESSEN + (report.BERECHENBARKEIT,)
 
 
 def test_the_action_table_carries_exactly_the_measured_ratings():
@@ -33,7 +33,7 @@ def test_every_rating_is_bounded_to_its_scale():
     for value in (-6, 6):
         with pytest.raises(ValidationError):
             report.Handlung(name="Klara", lesungen=1, risiko=0, menschlichkeit=0,
-                            vorhersehbarkeit=value)
+                            berechenbarkeit=value)
     for name in report.GEMESSEN:
         with pytest.raises(ValidationError):
             report.Handlung(name="Klara", lesungen=1,
@@ -42,10 +42,10 @@ def test_every_rating_is_bounded_to_its_scale():
 
 def test_a_persons_ratings_are_what_was_measured_of_them(sitrep):
     klara, jakob = sitrep.bericht.personen
-    assert sitrep.bewertungen(klara) == {"risiko": 0, "menschlichkeit": 4, "vorhersehbarkeit": -2}
+    assert sitrep.bewertungen(klara) == {"risiko": 0, "menschlichkeit": 4, "berechenbarkeit": -2}
     # Nothing measured is not a measurement of 0.
     assert sitrep.bewertungen(jakob) == {"risiko": None, "menschlichkeit": None,
-                                         "vorhersehbarkeit": None}
+                                         "berechenbarkeit": None}
 
 
 def test_an_unknown_person_is_never_given_someone_elses_measurement(sitrep):

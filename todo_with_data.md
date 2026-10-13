@@ -100,7 +100,7 @@ are not calibrated yet.
   ("touch other person's pocket" during conversation).
 - **Should ratings carry over between reports?** Each report is rated
   independently for now, so a blow counts only in the report it falls in.
-- **Is Vorhersehbarkeit calibrated well on the real corpus?** It replaced
+- **Is Berechenbarkeit calibrated well on the real corpus?** It replaced
   Auffälligkeit on 2026-10-07 and is measured against the whole rehearsal
   corpus, not each person's own history. Check on footage that rehearsed
   movement sits near 0 and that the Probebühne camera's angle does not push

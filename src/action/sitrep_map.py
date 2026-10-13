@@ -17,7 +17,7 @@ A pair class has no direction: NTU does not record which of the two people
 acts, so "punching/slapping other person" describes the one who hits and the
 one who is hit alike.
 
-`vorhersehbarkeit` has no column. It measures how closely a movement
+`berechenbarkeit` has no column. It measures how closely a movement
 resembles the rehearsals (sitrep/predictability.py), not a property of any
 one activity.
 

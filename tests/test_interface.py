@@ -389,16 +389,16 @@ def test_ratings_are_drawn_beside_the_recognised_people_in_view(monkeypatch, run
     controller = LiveSitrep(lambda: run)
     controller.session = run
     controller.werte = {"personen": [{"name": "Klara", "risiko": 4, "menschlichkeit": 1,
-                                      "vorhersehbarkeit": -4}]}
+                                      "berechenbarkeit": -4}]}
 
     controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
 
     (rated,) = drawn
     assert [(name, rows) for _, name, rows in rated] == [
         ("Klara", [("Risiko", 4, "red", 5), ("Menschlichkeit", 1, "calm", 5),
-                   ("Vorhersehbarkeit", -4, "red", 5)]),
+                   ("Berechenbarkeit", -4, "red", 5)]),
         ("Orest", [("Risiko", 0, "calm", 5), ("Menschlichkeit", 0, "calm", 5),
-                   ("Vorhersehbarkeit", 0, "calm", 5)]),
+                   ("Berechenbarkeit", 0, "calm", 5)]),
         ("Körper 7", []),
         ("Körper 8", []),
     ]
@@ -417,7 +417,7 @@ def test_on_the_strip_only_recognised_people_take_a_slot(monkeypatch, run):
 
     controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
 
-    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit", "Vorhersehbarkeit"], 3, 5)]
+    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit", "Berechenbarkeit"], 3, 5)]
 
 
 def test_the_overview_feed_carries_names_only(monkeypatch, run):
@@ -525,10 +525,10 @@ def test_the_page_payload_carries_the_number_and_threshold(sitrep):
 
 def test_the_page_payload_joins_each_persons_measured_ratings(sitrep):
     klara, jakob = live_module.payload(sitrep, 1)["bericht"]["personen"]
-    assert (klara["risiko"], klara["menschlichkeit"], klara["vorhersehbarkeit"]) == (0, 4, -2)
+    assert (klara["risiko"], klara["menschlichkeit"], klara["berechenbarkeit"]) == (0, 4, -2)
     assert klara["anlass"] == ["menschlichkeit: hugging other person 0.81"]
     assert (jakob["risiko"], jakob["menschlichkeit"],
-            jakob["vorhersehbarkeit"]) == (None, None, None)
+            jakob["berechenbarkeit"]) == (None, None, None)
     assert jakob["anlass"] == []
 
 
@@ -652,8 +652,8 @@ def test_on_the_strip_each_person_has_the_values_the_scene_shows_them_with(monke
     rated, labels, rows, widest = drawn[0]
     assert rated[0][1:] == ("Alex", [("Aggression", -7, "calm", 10)])
     assert [(label, scale) for label, _, _, scale in rated[1][2]] == [
-        ("Risiko", 5), ("Menschlichkeit", 5), ("Vorhersehbarkeit", 5)]
-    assert labels == ["Risiko", "Menschlichkeit", "Vorhersehbarkeit", "Aggression"]
+        ("Risiko", 5), ("Menschlichkeit", 5), ("Berechenbarkeit", 5)]
+    assert labels == ["Risiko", "Menschlichkeit", "Berechenbarkeit", "Aggression"]
     assert rows == 3
     assert widest == 10
 
