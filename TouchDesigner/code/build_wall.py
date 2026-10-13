@@ -13,8 +13,9 @@ Creates, or updates if they exist:
 	keys         Keyboard In DAT: space captures, digits set the tile count
 	wall_keys    its callbacks, synced from code/wall_keys.py
 
-A tile plays the result whose rank is its position among the tiles, read from
-the `results` table that bodysearch_osc fills. Safe to run again.
+A tile plays the row of the `results` table at its position among the tiles.
+bodysearch_osc fills the table and writes the ranks on screen to those rows in
+shuffled order. Safe to run again.
 """
 
 BODYSEARCH = '/project1/bodysearch'
@@ -74,8 +75,9 @@ tiles_par.min, tiles_par.max = 1, MAX_TILES
 tiles_par.normMin, tiles_par.normMax = 1, MAX_TILES
 tiles_par.clampMin = tiles_par.clampMax = True
 
-# Master player. Its copies sit inside `tiles` and take their rank from their
-# order there, which holds whether the replicator numbers them from 0 or 1.
+# Master player. Its copies sit inside `tiles` and take their row of `results`
+# (`Rank`) from their order there, which holds whether the replicator numbers
+# them from 0 or 1.
 # The master itself has no number and plays nothing.
 tile = _child(bodysearch, baseCOMP, 'tile', x, 0)
 if not hasattr(tile.par, 'Rank'):

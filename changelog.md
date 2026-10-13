@@ -6,6 +6,30 @@ referenced below.
 
 ---
 
+## 2026-10-13 — Video wall tiles change in random order (VSH-ARLT-5090)
+
+Requested by Moe. Concerns the `CUT → STAGE` step of the RENDER graph in
+`pipeline.md`, the wall from the 2026-10-08 entry below. Clips are cut and
+announced best first, about 0.6 s apart, and tile n played rank n. A new
+search therefore swept across the wall left to right, top to bottom, which
+read as loading. `bodysearch_osc` now writes the ranks on screen to the first
+`Tiles` rows of `results` in an order shuffled for each search. The tiles
+change in random order, and the best result is still cut first. In
+`03_render.md`, order and timing are decided in TouchDesigner ("How many
+results reach the stage"), so Apollon's cut order is unchanged.
+
+- The best result no longer sits in the top-left tile. The `rank` column of
+  `results` keeps each row's rank.
+- Ranks beyond the tile count keep row n for rank n, so the wall still shows
+  the best `Tiles` results. Without the wall's `Tiles` parameter, nothing is
+  shuffled.
+- `bodysearch_osc` syncs from its file (step 1a of
+  `2026-10-08_body_search_setup.md`), so the wall doesn't need rebuilding.
+
+715 tests pass (5 new). Not yet checked in TouchDesigner.
+
+---
+
 ## 2026-10-13 — Video wall tile counts snap to square grids (VSH-ARLT-5090)
 
 Requested by Moe. Concerns the `CUT → STAGE` step of the RENDER graph in

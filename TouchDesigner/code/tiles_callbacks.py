@@ -3,7 +3,7 @@ Replicator COMP callbacks: tiles_callbacks
 
 Keeps the `wall` Layout TOP listing every tile, in the order of their numbers,
 whenever the replicator adds or removes tiles. Listing by number keeps tile10
-after tile9, so results stay in rank order across the grid.
+after tile9, so the grid shows the rows of `results` in reading order.
 """
 
 

@@ -8,6 +8,7 @@ own builders. Needs no TouchDesigner.
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -65,12 +66,30 @@ def table():
 
 
 @pytest.fixture
-def module(table):
+def component():
+    """The body search component, without the wall's `Tiles` parameter."""
+    return SimpleNamespace(par=SimpleNamespace())
+
+
+@pytest.fixture
+def module(table, component):
     spec = importlib.util.spec_from_file_location("bodysearch_osc", MODULE)
     loaded = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(loaded)
     loaded.op = lambda name: table
+    loaded.parent = lambda: component
     return loaded
+
+
+def build_wall(component, tiles):
+    component.par.Tiles = SimpleNamespace(eval=lambda: tiles)
+
+
+@pytest.fixture
+def reversing(module, monkeypatch):
+    """Shuffles by reversing, so the order rows are written in is known."""
+    monkeypatch.setattr(module.random, "shuffle", lambda rows: rows.reverse())
+    return module
 
 
 def search(module, query_id, clips, end=True):
@@ -134,3 +153,43 @@ def test_a_table_with_another_header_is_reset(module, table):
 def test_other_addresses_are_left_to_other_modules(module, table):
     assert module.handle("/apollon/sitrep/begin", ["t1"]) is False
     assert table.rows == []
+
+
+def ranks(table):
+    return [row[0] for row in table.rows[1:]]
+
+
+def test_on_a_wall_the_tiles_receive_their_hits_in_shuffled_order(reversing, table, component):
+    build_wall(component, 4)
+    search(reversing, "q1", ["a.mp4", "b.mp4", "c.mp4", "d.mp4"], end=False)
+    assert names(table) == ["d.mp4", "c.mp4", "b.mp4", "a.mp4"]
+    assert ranks(table) == ["4", "3", "2", "1"]
+
+
+def test_the_previous_clips_on_a_wall_stay_until_each_is_replaced(reversing, table, component):
+    build_wall(component, 3)
+    search(reversing, "q1", ["a.mp4", "b.mp4", "c.mp4"])
+    reversing.handle(*td.begin_message("q2", 3))
+    reversing.handle(*td.hit_message("q2", 1, Clip(Path("x.mp4"), 0.0), HIT))
+    assert names(table) == ["c.mp4", "b.mp4", "x.mp4"]
+
+
+def test_ranks_beyond_the_tiles_keep_their_own_rows(reversing, table, component):
+    build_wall(component, 2)
+    search(reversing, "q1", ["a.mp4", "b.mp4", "c.mp4", "d.mp4"])
+    assert names(table) == ["b.mp4", "a.mp4", "c.mp4", "d.mp4"]
+
+
+def test_a_search_smaller_than_the_wall_shuffles_only_its_own_rows(reversing, table, component):
+    build_wall(component, 9)
+    search(reversing, "q1", ["a.mp4", "b.mp4"])
+    assert names(table) == ["b.mp4", "a.mp4"]
+
+
+def test_every_search_on_a_wall_fills_each_row_once(module, table, component):
+    build_wall(component, 9)
+    for query in range(20):
+        clips = [f"{query}_{rank}.mp4" for rank in range(1, 10)]
+        search(module, f"q{query}", clips)
+        assert sorted(ranks(table), key=int) == [str(rank) for rank in range(1, 10)]
+        assert sorted(names(table)) == sorted(clips)

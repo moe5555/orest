@@ -41,16 +41,21 @@ It ends with `build_wall: 4 tiles, F1 opens the wall, Esc closes it`. In
 | `Tiles` | New parameter on `bodysearch` (page *Wall*): how many tiles, 1–99 |
 | `tile` | The master player. Edit this one; every tile is a copy |
 | `tiles` | Replicator COMP, makes one copy of `tile` per tile, inside itself |
-| `tiles_callbacks` | Its callbacks (from `code/tiles_callbacks.py`): write the tiles into `wall` in rank order whenever tiles are added or removed |
+| `tiles_callbacks` | Its callbacks (from `code/tiles_callbacks.py`): write the tiles into `wall` in order of their numbers whenever tiles are added or removed |
 | `wall` | Layout TOP, arranges the copies in a grid at 1920×1080 |
 | `wall_window` | Window COMP showing `wall`, set as the Perform Window |
 | `keys`, `wall_keys` | Keyboard In DAT and its callbacks (from `code/wall_keys.py`) |
 
-Tile n plays row n of `results`, which is the search result of rank n. Changing
-`Tiles` adds or removes copies.
+Tile n plays row n of `results`. Changing `Tiles` adds or removes copies. For
+each search, `bodysearch_osc` writes the results on screen (the best `Tiles`)
+to those rows in shuffled order, so the tiles change in random order rather
+than left to right, top to bottom. The `rank` column of `results` tells which
+result a row holds.
 
 `moviefilein1`–`3` and `out1`–`3` from before are no longer needed. Delete them,
-since each one decodes a clip whether it's shown or not.
+since each one decodes a clip whether it's shown or not. With the wall built,
+the `rank` CHOP no longer picks a result by its rank, because the rows on screen
+are shuffled.
 
 Save the project (Ctrl+S). Running the script again is safe; it updates what
 exists.
@@ -94,7 +99,7 @@ To rehearse without a camera, replace `--video …` with
 1. Press F1. The wall opens full screen.
 2. Hold space while the movement is performed. Terminal 2 prints `capturing …`.
 3. Release. Terminal 2 prints the results, and the tiles switch to the new clips
-   one by one, about a second apart, best result in the top-left tile.
+   one by one, about a second apart, in random order.
 4. The clips loop until the next capture. Until its new clip is ready, each
    tile keeps looping its old one, so there are no black gaps.
 
@@ -106,8 +111,9 @@ tiles.
 
 Two details of TouchDesigner's behaviour could not be checked outside it:
 
-- **Order:** the top-left tile should show result 1 (compare with the first line
-  terminal 2 prints).
+- **Order:** the tiles should switch in a different random order each search,
+  and each tile should show the result its row's `rank` names (compare with
+  the lines terminal 2 prints).
 - **Restart:** a tile that gets a new clip should start it from the beginning.
 
 If either is off, note what you see and send it to Claude.
