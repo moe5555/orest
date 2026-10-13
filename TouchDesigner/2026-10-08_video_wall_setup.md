@@ -88,7 +88,10 @@ spreads them further in time; `--min-gap 0` turns the spacing off.
 **Results per search:** `body-live` sends 10 by default. For more tiles, add
 `-n` with the largest tile count you'll use, e.g. `-n 16`; tiles beyond the
 number of results stay black. Each clip takes about 0.6 s to cut, so 16 tiles
-take about 10 s to fill, best result first. Every tile decodes a full 1080p
+take about 10 s to fill. Holding space again starts a new capture at once and
+stops the cutting of the previous search. Its rows beyond the clips cut by then
+are removed, so tiles added later stay black until the next search. Every tile
+decodes a full 1080p
 clip, so very large walls are limited by decoding in TouchDesigner.
 
 To rehearse without a camera, replace `--video …` with

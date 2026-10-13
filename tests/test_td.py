@@ -76,6 +76,65 @@ def test_delivery_trims_the_clips_but_keeps_the_ones_just_sent(tmp_path, monkeyp
                       "keep": [tmp_path / "1.mp4", tmp_path / "2.mp4"]}
 
 
+def test_a_cancelled_delivery_stops_after_the_clip_in_progress_and_still_ends(tmp_path, monkeypatch):
+    sent = []
+    cut = []
+    cancel = threading.Event()
+
+    class FakeSender:
+        def send(self, message):
+            sent.append(message)
+
+    def cut_all(hits, *a):
+        for rank, hit in enumerate(hits, 1):
+            cut.append(rank)
+            if rank == 2:
+                cancel.set()
+            yield rank, hit, Clip(tmp_path / f"{rank}.mp4", 0.0)
+
+    monkeypatch.setattr(main.td, "Sender", FakeSender)
+    monkeypatch.setattr(main.config, "clips_dir", lambda project: tmp_path)
+    monkeypatch.setattr(main.clips, "cut_all", cut_all)
+
+    main.deliver([HIT] * 5, "p", "precise", "libx264", send_td=True, cancel=cancel)
+
+    assert cut == [1, 2]
+    assert [address for address, _ in sent] == [td.BEGIN, td.HIT, td.HIT, td.END]
+
+
+def test_a_new_background_delivery_ends_the_previous_one_before_it_begins(monkeypatch):
+    events = []
+
+    def deliver(hits, project, mode, encoder, send_td, cancel):
+        events.append(("begin", hits[0]))
+        cancel.wait(timeout=5)
+        events.append(("end", hits[0]))
+
+    monkeypatch.setattr(main, "deliver", deliver)
+    background = main.BackgroundDelivery()
+    background.start(["first"], "p", "precise", "libx264", True)
+    while not events:
+        threading.Event().wait(0.01)
+    background.start(["second"], "p", "precise", "libx264", True)
+    background.cancel()
+    background.join(timeout=5)
+
+    assert events == [("begin", "first"), ("end", "first"),
+                      ("begin", "second"), ("end", "second")]
+
+
+def test_a_failed_cut_in_the_background_is_reported_and_does_not_stop_the_session(monkeypatch, capsys):
+    def deliver(*args):
+        raise main.subprocess.CalledProcessError(1, "ffmpeg")
+
+    monkeypatch.setattr(main, "deliver", deliver)
+    background = main.BackgroundDelivery()
+    background.start([HIT], "p", "precise", "libx264", True)
+    background.join(timeout=5)
+
+    assert "ffmpeg exited with 1" in capsys.readouterr().err
+
+
 def test_messages_arrive_over_udp_as_sent():
     received = []
     dispatcher = Dispatcher()

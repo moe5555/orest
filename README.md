@@ -459,6 +459,10 @@ plays a recording in real time in place of the camera, for rehearsing the
 workflow on known footage. Overrides: `APOLLON_CONTROL_HOST`,
 `APOLLON_CONTROL_PORT`.
 
+Clips are cut in the background, so a start press always begins a capture at
+once. If the previous search is still being cut, the cutting stops after the
+clip in progress, and that search ends with the clips cut so far.
+
 ### Sending results to TouchDesigner
 
 `query`, `body` and `body-live` cut each result into a clip and can announce it

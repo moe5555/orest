@@ -6,6 +6,34 @@ referenced below.
 
 ---
 
+## 2026-10-13 — A new body capture no longer waits for the previous search's clips (VSH-ARLT-5090)
+
+Pointed out by Moe, after the shuffled tiles (entry below): with `-n 50`, the
+wall reacted much later to a capture, and with `-n 4` it was fast again.
+Concerns the `HITS → CUT` step of the RENDER graph in `pipeline.md`
+(`03_render.md`, "Pixels: cut clips on disk"). The shuffle was not the cause.
+`body-live` cut all of a search's clips before it read the next press, about
+0.55 s per clip, so with `-n 50` a capture began up to ~30 s after space was
+held. Its start and stop presses were then read one straight after the other.
+The capture was therefore about 0 s long and was extended back four seconds
+from that late stop, so it searched a moment well after the movement. File
+times in `data/clips/hitl_database` showed searches running back to back from
+16:44, with no change in cutting speed.
+
+- Clips are cut on a worker thread (`BackgroundDelivery` in
+  `src/smartsearch/main.py`). A start press stops the cutting after the clip in
+  progress, and that search still sends its end message. A new delivery waits
+  for that clip, so two searches never cut at once and their messages don't
+  interleave.
+- A failed ffmpeg cut during `body-live` is reported but no longer ends the
+  session. `query` and `body` still cut in the foreground, as before.
+- On the wall, rows of a stopped search beyond its last cut clip are removed at
+  its end. Tiles added afterwards stay black until the next search.
+
+718 tests pass (3 new). Not yet checked with the camera and TouchDesigner.
+
+---
+
 ## 2026-10-13 — Video wall tiles change in random order (VSH-ARLT-5090)
 
 Requested by Moe. Concerns the `CUT → STAGE` step of the RENDER graph in

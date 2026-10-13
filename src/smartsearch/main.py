@@ -20,6 +20,7 @@ Equivalently, without the installed entry point:
 import argparse
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -184,8 +185,11 @@ def format_hits(hits: list[client.Hit]) -> str:
 
 
 def deliver(hits: list[client.Hit], project: str, mode: str, encoder: str,
-            send_td: bool):
+            send_td: bool, cancel: threading.Event | None = None):
     """Cut hits into clips in rank order, announcing each one as it is written.
+
+    Setting `cancel` stops the cutting once the clip in progress is written.
+    The search is still closed with its end message.
 
     Afterwards the project's clips are trimmed to the size limit, sparing the
     clips of this search, which are the ones on screen.
@@ -202,12 +206,59 @@ def deliver(hits: list[client.Hit], project: str, mode: str, encoder: str,
         delivered.append(clip.path)
         if sender:
             sender.send(td.hit_message(query_id, rank, clip, hit))
+        if cancel is not None and cancel.is_set():
+            if len(delivered) < len(hits):
+                print(f"cutting stopped after {len(delivered)} of {len(hits)} clips", flush=True)
+            break
     if sender:
         sender.send(td.end_message(query_id))
     if config.CLIPS_MAX_GB > 0:
         freed = clips.prune(directory, int(config.CLIPS_MAX_GB * 1e9), keep=delivered)
         if freed:
             print(f"deleted {freed / 1e9:.1f} GB of least recently used clips", flush=True)
+
+
+class BackgroundDelivery:
+    """Delivers one search at a time on a worker thread, so start and stop
+    presses are read while its clips are cut.
+
+    A new delivery stops the one in progress and waits for its current clip
+    before it begins. Two searches therefore never cut at once, which could
+    write the same clip file twice, and the end message of one search reaches
+    TouchDesigner before the begin message of the next.
+    """
+
+    def __init__(self):
+        self._thread = None
+        self._cancel = threading.Event()
+
+    def start(self, hits: list[client.Hit], project: str, mode: str, encoder: str,
+              send_td: bool):
+        self.cancel()
+        self.join()
+        self._cancel = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, args=(hits, project, mode, encoder, send_td, self._cancel),
+            daemon=True)
+        self._thread.start()
+
+    def cancel(self):
+        """Stop the delivery in progress once its current clip is written."""
+        self._cancel.set()
+
+    def join(self, timeout: float | None = None):
+        if self._thread is not None:
+            self._thread.join(timeout)
+
+    @staticmethod
+    def _run(hits, project, mode, encoder, send_td, cancel):
+        try:
+            deliver(hits, project, mode, encoder, send_td, cancel)
+        except subprocess.CalledProcessError as error:
+            # ffmpeg has already printed its own error above. The session
+            # keeps running, so the next capture is searched as usual.
+            print(f"ffmpeg exited with {error.returncode} while cutting a clip.",
+                  file=sys.stderr, flush=True)
 
 
 def live_session(wise: client.Wise, args) -> int:
@@ -231,9 +282,13 @@ def live_session(wise: client.Wise, args) -> int:
 
     recorder = live.PoseRecorder(source.latest)
     triggers = live.Triggers()
+    deliveries = BackgroundDelivery()
     began = {}
 
     def on_start(event):
+        # The clips the previous search has left to cut belong to results
+        # this capture replaces.
+        deliveries.cancel()
         began["at"] = time.monotonic()
         print(f"capturing{where()} [start from {live.source(event)}] - Enter or "
               f"{live.STOP_ADDRESS} to stop", flush=True)
@@ -252,7 +307,8 @@ def live_session(wise: client.Wise, args) -> int:
             return
         print(format_hits(hits), flush=True)
         if args.cut or args.send_td:
-            deliver(hits, args.project, args.cut or TD_CUT, args.encoder, args.send_td)
+            deliveries.start(hits, args.project, args.cut or TD_CUT, args.encoder,
+                             args.send_td)
 
     try:
         while not recorder.ready:
@@ -264,6 +320,7 @@ def live_session(wise: client.Wise, args) -> int:
         print()
         return 0
     finally:
+        deliveries.cancel()
         triggers.close()
         recorder.close()
         source.close()
