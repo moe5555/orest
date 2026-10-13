@@ -651,7 +651,7 @@ class Session:
         """
         if not self.actions:
             return frame
-        return annotate.draw_names(frame, self.actions.visible())
+        return annotate.draw_names(frame, self.actions.visible(), annotate.DISPLAY)
 
     def _name_faces(self, frame):
         """The model's copy of a frame, with the tracker's name on each face.

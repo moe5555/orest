@@ -30,7 +30,7 @@
       meter("Eskalation", scene.eskalation, 10, sceneLevel(scene.eskalation, threshold), threshold),
       meter("Gefahr", scene.gefahr, 10, sceneLevel(scene.gefahr, threshold), threshold),
     );
-    $("p2-scene-source").textContent = `Stand ${clock(scene.time)} · ${SOURCE_TEXT[scene.source]}`;
+    $("p2-scene-source").textContent = `Stand ${clock(scene.time)} \\ ${SOURCE_TEXT[scene.source]}`;
   }
 
   function render(snapshot) {

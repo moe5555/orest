@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Live SITREP · Apollon</title>
+  <title>Live SITREP \ Apollon</title>
+  <link rel="icon" href="/static/seestone.png">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body data-ansicht="uebersicht" data-screen="normal">
@@ -17,7 +18,7 @@
   </nav>
 
   <header class="bar">
-    <div class="brand">APOLLON <span>/</span> LIVE SITREP</div>
+    <div class="brand">APOLLON<span>\ LIVE SITREP</span></div>
     <div class="status" id="status" data-status="idle">Bereit</div>
     <div class="ton num" id="ton" hidden></div>
     <div class="meta" id="meta"></div>
@@ -66,13 +67,13 @@
         <!-- The people in view, left to right, named by hand where the
              automatic naming is unsure or wrong. -->
         <article class="panel">
-          <span class="label">Im Bild · links nach rechts</span>
+          <span class="label">Im Bild \ links nach rechts</span>
           <div class="in-view" id="in-view"></div>
           <p class="hinweis" id="in-view-error" data-level="red" hidden></p>
         </article>
 
         <article class="panel">
-          <span class="label">Personen · live · 0–5</span>
+          <span class="label">Personen \ live \ 0–5</span>
           <div class="people compact" id="live-personen"></div>
         </article>
       </aside>
@@ -132,7 +133,7 @@
         </article>
 
         <article class="panel">
-          <span class="label">Gemessen · seit dem letzten Abschnitt · 0–5</span>
+          <span class="label">Gemessen \ seit dem letzten Abschnitt \ 0–5</span>
           <div class="people" id="gemessen"></div>
         </article>
 
@@ -143,7 +144,7 @@
             <blockquote class="gesagt" id="gesagt"></blockquote>
           </article>
           <article class="panel">
-            <span class="label">Szene · 0–10</span>
+            <span class="label">Szene \ 0–10</span>
             <div id="szene"></div>
           </article>
         </div>
@@ -157,7 +158,7 @@
 
     <div class="grid">
       <section class="panel">
-        <span class="label">Gesagt · live</span>
+        <span class="label">Gesagt \ live</span>
         <div class="gesagt live-zeilen" id="zeilen"></div>
       </section>
 
@@ -170,10 +171,16 @@
     </div>
 
     <section class="panel" id="aktionen" hidden>
-      <span class="label">Aktionserkennung · live</span>
+      <span class="label">Aktionserkennung \ live</span>
       <p class="hinweis" id="aktionen-hinweis"></p>
       <div class="aktionen" id="aktionen-liste"></div>
     </section>
+
+    <!-- The overview only: the display views hide every other child of .wrap. -->
+    <footer class="footer">
+      <img src="/static/seestone.png" alt="">
+      <span>Seestone</span>
+    </footer>
   </main>
 
   <script src="/static/sitrep.js"></script>

@@ -136,11 +136,11 @@ function renderAlarm(werte, laeuft) {
   const aktiv = Boolean(alarm?.aktiv);
   panel.dataset.aktiv = String(aktiv);
   $("alarm-verdict").textContent = aktiv
-    ? `Alarm · ${alarm.wer ?? "Sprecher unklar"} · Risiko ${alarm.wert}`
+    ? `Alarm \\ ${alarm.wer ?? "Sprecher unklar"} \\ Risiko ${alarm.wert}`
     : "Ruhig";
   $("alarm-grund").textContent = aktiv
-    ? alarm.anlass + (laeuft?.empfehlung ? " · Empfehlung wird erstellt …" : "")
-    : (werte ? `Kein Messwert über Risiko 2 · Stand ${clock(werte.zeit)}` : "Noch keine Messwerte.");
+    ? alarm.anlass + (laeuft?.empfehlung ? " \\ Empfehlung wird erstellt …" : "")
+    : (werte ? `Kein Messwert über Risiko 2 \\ Stand ${clock(werte.zeit)}` : "Noch keine Messwerte.");
 }
 
 function renderEmpfehlung(empfehlung, laeuft, fehler) {
@@ -159,10 +159,10 @@ function renderEmpfehlung(empfehlung, laeuft, fehler) {
     return;
   }
   $("verdict").textContent = (urteil.einschreiten ? "Einschreiten" : "Kein Einschreiten") +
-    (laeuft?.empfehlung ? " · neue wird erstellt …" : "");
+    (laeuft?.empfehlung ? " \\ neue wird erstellt …" : "");
   $("empfehlung-zeit").dataset.zeit = empfehlung.zeit;
   $("empfehlung-zeit").textContent =
-    `${clock(empfehlung.zeit)} · ${ago(empfehlung.zeit)} · Eskalation ${urteil.szene.eskalation} · ` +
+    `${clock(empfehlung.zeit)} \\ ${ago(empfehlung.zeit)} \\ Eskalation ${urteil.szene.eskalation} \\ ` +
     `Gefahr ${urteil.szene.gefahr}`;
   $("massnahme").textContent = urteil.empfehlung;
   $("lage-satz").textContent = urteil.lage;
@@ -184,7 +184,7 @@ function renderLivePersonen(werte) {
     const anlass = LIVE_RATINGS.filter((name) => person[`anlass_${name}`])
       .map((name) => `${name}: ${person[`anlass_${name}`]}`);
     if (anlass.length) {
-      const text = el("p", "anlass", anlass.join(" · "));
+      const text = el("p", "anlass", anlass.join(" \\ "));
       text.title = text.textContent;
       card.append(text);
     }
@@ -208,7 +208,7 @@ function zeileRow(line) {
     .map((name) => `${name} ${signed(line[name])}` +
          (name === "risiko" && line.verstaerkung > 1 ? ` ×${line.verstaerkung.toFixed(1)}` : ""));
   if (evidence.length) {
-    const tag = el("span", "gewertet", evidence.join(" · "));
+    const tag = el("span", "gewertet", evidence.join(" \\ "));
     tag.dataset.level = line.risiko >= 3 ? "red" : line.risiko >= 1 ? "amber" : "calm";
     text.append(" ", tag);
   } else if (line.bewertet === false) {
@@ -259,9 +259,9 @@ function renderKurve(kurve, schwelle) {
     }));
   }
   const legend = el("div", "kurve-legende num",
-    `${clock(kurve[0].ende)} – ${clock(kurve[kurve.length - 1].ende)} · `);
-  legend.append(el("span", "eskalation", "Eskalation"), " · ", el("span", "gefahr", "Gefahr"),
-                ` · Schwelle ${schwelle}`);
+    `${clock(kurve[0].ende)} – ${clock(kurve[kurve.length - 1].ende)} \\ `);
+  legend.append(el("span", "eskalation", "Eskalation"), " \\ ", el("span", "gefahr", "Gefahr"),
+                ` \\ Schwelle ${schwelle}`);
   box.replaceChildren(chart, legend);
 }
 
@@ -286,7 +286,7 @@ function renderChronik(chronik, schwelle) {
     const szene = summary.szene;
     const level = sceneLevel(Math.max(szene.eskalation, szene.gefahr), schwelle);
     const werte = el("span", "werte num",
-      `E ${szene.eskalation} · G ${szene.gefahr} ${TENDENZ[summary.tendenz] ?? ""}`);
+      `E ${szene.eskalation} \\ G ${szene.gefahr} ${TENDENZ[summary.tendenz] ?? ""}`);
     werte.dataset.level = level;
     werte.title = summary.tendenz;
     row.append(head, werte, el("span", "text", summary.zusammenfassung));
@@ -317,7 +317,7 @@ function gemessenCard(handlung) {
   const anlass = LIVE_RATINGS
     .filter((name) => handlung[`anlass_${name}`])
     .map((name) => `${name}: ${handlung[`anlass_${name}`]}`);
-  if (anlass.length) card.append(el("p", "anlass", anlass.join(" · ")));
+  if (anlass.length) card.append(el("p", "anlass", anlass.join(" \\ ")));
   return card;
 }
 
@@ -329,7 +329,7 @@ function personCard(person) {
   const ratings = el("div", "ratings");
   for (const name of PERSON_RATINGS) ratings.append(ratingRow(name, person[name]));
   card.append(ratings);
-  if (person.anlass.length) card.append(el("p", "anlass", person.anlass.join(" · ")));
+  if (person.anlass.length) card.append(el("p", "anlass", person.anlass.join(" \\ ")));
   return card;
 }
 
@@ -354,7 +354,7 @@ function renderReport(report) {
   head.replaceChildren(
     el("strong", null, `LAGEBERICHT ${report.nummer}`),
     el("span", "num", `${clock(zeit.beginn)} – ${clock(zeit.ende)}`),
-    el("span", "num", `${report.quelle.abschnitte} Abschnitte · ${report.quelle.woertlich_s} s wörtlich · ` +
+    el("span", "num", `${report.quelle.abschnitte} Abschnitte \\ ${report.quelle.woertlich_s} s wörtlich \\ ` +
                       `${report.quelle.bilder} Bilder`),
     el("span", "num", `Latenz ${report.latenz_s} s`),
   );
@@ -363,7 +363,7 @@ function renderReport(report) {
   if (pegel) {
     head.append(el("span", "num", pegel.kalibriert
       ? `Pegel normal ${Math.round(pegel.normal_db)} dBFS ±${Math.round(pegel.streuung_db)}` +
-        (pegel.endgueltig ? "" : ` · lernt ${Math.round(pegel.gehoert_s)}/120 s`)
+        (pegel.endgueltig ? "" : ` \\ lernt ${Math.round(pegel.gehoert_s)}/120 s`)
       : `Pegel kalibriert ${Math.round(pegel.gehoert_s)}/30 s`));
   }
   const age = el("span", "num");
@@ -379,7 +379,7 @@ function renderReport(report) {
   $("report-massnahme").textContent = bericht.einschreiten
     ? (bericht.empfehlung || "Keine Maßnahme angegeben.")
     : "";
-  $("report-grund").textContent = `Eskalation ${szene.eskalation} · Gefahr ${szene.gefahr} · Schwelle ${schwelle}`;
+  $("report-grund").textContent = `Eskalation ${szene.eskalation} \\ Gefahr ${szene.gefahr} \\ Schwelle ${schwelle}`;
 
   $("beschreibung").textContent = bericht.beschreibung || "—";
   const gesagt = $("gesagt");
@@ -441,7 +441,7 @@ function renderAktionen(aktionen, status) {
     return;
   }
   hinweis.textContent = aktionen.stand
-    ? `Klassifikation ${aktionen.stand} · jede Sekunde, über die letzten 4 s · ` +
+    ? `Klassifikation ${aktionen.stand} \\ jede Sekunde, über die letzten 4 s \\ ` +
       "Körper ohne Namen gehen nicht in die Werte ein."
     : "Erste Klassifikation nach 4 s …";
 
@@ -533,7 +533,7 @@ function render(snapshot) {
        quelle.aktionen ? "Aktionserkennung an" : "Aktionserkennung aus",
        quelle.auto_empfehlung ? "Empfehlung bei Alarm" : "Empfehlung nur auf E",
        quelle.besetzung.length ? `Besetzung: ${quelle.besetzung.join(", ")}`
-                               : "ohne Besetzung, niemand erkannt"].join(" · ")
+                               : "ohne Besetzung, niemand erkannt"].join(" \\ ")
     : "";
 
   const active = running || status === "starting";
@@ -688,7 +688,7 @@ function updateAge() {
     $("empfehlung").classList.toggle("alt", alt);
     $("empfehlung").classList.toggle("alarm", Boolean(urteil.einschreiten) && !alt);
     $("empfehlung-zeit").textContent =
-      `${clock(empfehlung.zeit)} · ${ago(empfehlung.zeit)} · Eskalation ${urteil.szene.eskalation} · ` +
+      `${clock(empfehlung.zeit)} \\ ${ago(empfehlung.zeit)} \\ Eskalation ${urteil.szene.eskalation} \\ ` +
       `Gefahr ${urteil.szene.gefahr}`;
   }
 }

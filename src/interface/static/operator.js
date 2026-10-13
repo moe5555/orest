@@ -85,7 +85,7 @@ function renderCasts() {
   if (selected && !listed.some((cast) => cast.path === selected.path)) listed.push(selected);
   select.replaceChildren(
     option("Ohne Besetzung: niemand wird erkannt", ""),
-    ...listed.map((cast) => option(`${cast.label} · ${cast.names.join(", ")}`, cast.path)),
+    ...listed.map((cast) => option(`${cast.label} \\ ${cast.names.join(", ")}`, cast.path)),
   );
   select.value = selected?.path ?? "";
 }
@@ -126,7 +126,7 @@ async function runNotice(otherwise) {
   try {
     const state = await (await fetch("/api/sitrep/state")).json();
     if (state.quelle && (state.status === "running" || state.status === "starting")) {
-      notice(`Läuft mit ${state.quelle.kamera} · ${state.quelle.mikrofon}. `
+      notice(`Läuft mit ${state.quelle.kamera} \\ ${state.quelle.mikrofon}. `
              + "Die Auswahl gilt ab dem nächsten Start.");
       return;
     }

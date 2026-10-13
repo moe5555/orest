@@ -58,6 +58,45 @@ results reach the stage"), so Apollon's cut order is unchanged.
 
 ---
 
+## 2026-10-13 — Operator pages and live display in the Seestone CI
+
+Requested by Moe: Apollon is a product of Seestone and follows its corporate
+identity, `knowledge/background/261009_Keynote_HITL.pdf` (slides "CI \
+Farben", "CI \ Typografie", "CI \ Raster und Regeln"). Concerns the Live
+SITREP of the RENDER step in `pipeline.md` (`03_render.md`, all three
+prototypes) and the operator start page.
+
+- **Colours.** Only the CI's five: Void ground, Bone text, Steel secondary
+  text, Signal accent, Alarm warning. Cards take the deck's fill and rule.
+  The CI has no amber or green, so the rating levels are now **Steel when
+  calm, Signal when raised, Alarm when red**, on the page and in the
+  server-drawn overlay alike (`annotate.LEVEL`). The run's "Live" status and
+  people to be named are in Signal.
+- **Type.** Michroma for headings and numbers, IBM Plex Mono for text and
+  labels. Labels are capitals with open tracking. Both fonts are in
+  `src/sitrep/fonts` (OFL) and are served at `/fonts`, because the theatre
+  machine may be offline.
+- **Motif.** Corner brackets (HUD) frame the picture, the cards and the people
+  in the picture. Nothing has rounded corners, shadows or glows. The backslash
+  separates terms in place of "·" and "/". Labels the pipeline sends (e.g. a
+  cause's "· laut ×1.4") are unchanged.
+- **Operator page.** Laid out like a slide: the starfield, APOLLON top left,
+  the sources as a numbered list (01 \ KAMERA …), and the Seestone mark and
+  name bottom left. The overview carries the same footer. The display views
+  do not.
+- **Overlay (Prototype 3 first).** Boxes are drawn as Bone corner brackets.
+  Names are in Plex Mono capitals. Each occupied slot on the strip is a card,
+  with the values in Michroma. The line to the box is Bone. **The model's
+  frames are unchanged** (yellow box, Arial, `annotate.MODEL`), so naming by
+  the model is not affected. The strip's height is unchanged: about a seventh
+  of the picture.
+
+704 tests pass (1 new). Checked in headless Edge against a stub run
+(overview, Prototypes 1 and 3, Einschreiten, operator page). Not yet checked
+on the projector.
+
+---
+
 ## 2026-10-13 — Video wall tile counts snap to square grids (VSH-ARLT-5090)
 
 Requested by Moe. Concerns the `CUT → STAGE` step of the RENDER graph in

@@ -40,7 +40,7 @@
     const aktiv = snapshot.status === "running" && Boolean(alarm?.aktiv);
     $("p1-alarm").hidden = !aktiv;
     $("p1-alarm-kopf").textContent = aktiv
-      ? `Alarm · ${alarm.wer ?? "Sprecher unklar"} · Risiko ${alarm.wert}` : "";
+      ? `Alarm \\ ${alarm.wer ?? "Sprecher unklar"} \\ Risiko ${alarm.wert}` : "";
     $("p1-alarm-anlass").textContent = aktiv ? alarm.anlass : "";
   }
 

@@ -114,18 +114,32 @@ def test_ratings_in_the_strip_stand_in_their_slot_tied_to_the_box_by_a_white_lin
     marked = annotate.draw_ratings_strip(original, [(box(800, 300, 920, 600), "Klara", RATED)],
                                          {"Klara": 3}, LABELS)
     strip = marked[720:]
-    assert np.any(strip[:, 960:] != 0)                       # slot 3 of 4
-    assert not np.any(strip[:, :960] != 0)                   # the others stay empty
-    white = np.all(marked[601:720] == 255, axis=2)           # between box foot and strip
-    assert white.any()
+    ground = np.array(annotate.DISPLAY.tag[::-1])
+    assert np.any(strip[:, 960:] != ground)                  # slot 3 of 4
+    assert np.all(strip[:, :960] == ground)                  # the others stay empty
+    line = np.all(marked[601:720] == annotate.LINK[::-1], axis=2)  # between box foot and strip
+    assert line.any()
 
 
 def test_a_person_without_ratings_gets_no_slot_panel():
     original = frame()
     marked = annotate.draw_ratings_strip(original, [(box(100, 150, 160, 300), "Körper 7", [])],
                                          {}, LABELS)
-    assert not np.any(marked[360:] != 0)
+    assert np.all(marked[360:] == np.array(annotate.DISPLAY.tag[::-1]))
     assert changed(original, marked[:360]).any()             # boxed and named in the picture
+
+
+def test_the_models_frames_keep_the_yellow_box_and_the_operators_follow_the_ci():
+    """The model reads names off the plain tag; the CI applies to the operator's picture only."""
+    original = frame()
+    named = [(box(200, 150, 260, 220), "Klara")]
+    model = annotate.draw_names(original, named)[..., ::-1]
+    display = annotate.draw_names(original, named, annotate.DISPLAY)[..., ::-1]
+    assert np.all(model == annotate.MODEL.box, axis=2).any()
+    assert not np.all(display == annotate.MODEL.box, axis=2).any()
+    assert np.all(display == annotate.DISPLAY.box, axis=2).any()
+    assert changed(original, model[..., ::-1])[220, 218:242].any()        # a closed box
+    assert not changed(original, display[..., ::-1])[220, 218:242].any()  # its corners only
 
 
 def test_a_person_keeps_their_slot_while_in_view():

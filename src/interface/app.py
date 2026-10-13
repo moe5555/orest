@@ -36,7 +36,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from sitrep import ndi_audio
+from sitrep import annotate, ndi_audio
 
 from .live import LiveSitrep
 from .sources import Selection, Sources, available, resolved
@@ -95,6 +95,8 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
     selection = selection or Selection()
     app = FastAPI(title="Apollon", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    # The CI's typefaces, from the folder the server-drawn overlays use too.
+    app.mount("/fonts", StaticFiles(directory=annotate.FONTS), name="fonts")
 
     @app.middleware("http")
     async def revalidate(request: Request, call_next):
