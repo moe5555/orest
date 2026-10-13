@@ -476,6 +476,16 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .wrap > .footer { padding: 24px 0 0; }
 
+/* The Seestone mark, top centre, at the size of the footer's and level with
+   the tabs. Placed outside the flow, so no view gives up room for it, and
+   above the screens that fill the window (Einschreiten, a scene's screen). */
+.mark {
+  position: absolute; top: 6px; left: 50%; z-index: 5;
+  width: 20px; height: 20px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
 /* ---- Views: tabs over the same run ------------------------------------ */
 
 /* Kept faint: the tabs are for switching during testing, not for the display. */
@@ -652,10 +662,11 @@ body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-scre
 body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="manual"] .wrap > :not(.manual-screen) { display: none; }
 body:not([data-screen="manual"]) .manual-screen { display: none; }
 
-/* The report on R: alone, in the middle of the page. */
+/* The report on R: alone, in the middle of the page, and clear of the mark
+   when it is taller than the window. */
 body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="report"] .ansichten,
 body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="report"] .wrap > :not(#report-bereich) { display: none; }
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="report"] .wrap { max-width: 960px; min-height: 100vh; align-content: center; }
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"])[data-screen="report"] .wrap { max-width: 960px; min-height: 100vh; align-content: center; padding-top: 40px; }
 
 .waiting { color: var(--text-faint); font: 13px/1.5 var(--mono); padding: 28px 4px; text-align: center; }
 .error-text { color: var(--red); font: 13px/1.5 var(--mono); white-space: pre-wrap; margin: 0 0 14px; }

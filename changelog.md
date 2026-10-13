@@ -105,6 +105,21 @@ scene tests pass.
 
 ---
 
+## 2026-10-13 — Seestone mark at the top of the Live SITREP
+
+Requested by Moe. Concerns the Live SITREP of the RENDER step in `pipeline.md`
+(`03_render.md`, the overview and all three prototypes). The Seestone mark now
+sits at the top centre of every view: the overview, Prototypes 1–3, and the
+Einschreiten, scene and report screens. Until now the display views had no
+mark (CI entry below). It is 20 px, as in the footer, and
+level with the tabs. It is placed outside the page flow, so the picture, the
+strip and the panels keep their sizes and positions. In headless Edge at
+1920×1080, every element's box was the same with and without the mark. The
+one exception is a report taller than the window, which now starts 20 px
+lower so it stays clear of the mark. 45 interface tests pass.
+
+---
+
 ## 2026-10-13 — Vorhersehbarkeit renamed to Berechenbarkeit
 
 Requested by Moe. Concerns the per-person SITREP values of PROCESSING → AV
