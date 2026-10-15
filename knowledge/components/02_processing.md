@@ -25,6 +25,7 @@ Overview: components/pipeline.md
 - the system should be able to understand when it is spoken to. If the system is directly spoken to, e.g. via "System" or "Apollon", it should be able to react. 
 - hand gun detection. The system should recognize whether someone is holding a handgun. TBD how this effects the scene. 
 - per scene config. 
+- cast vs character names. Alex plays Orest, Lena plays Elektra and Clytamnestra. Default recognition should be Alex and Lena, but when I select 
 
 #### Calculating Values
 How do we calculate the values the system comes up with? 
@@ -84,7 +85,6 @@ Settings:
 Scenes: 
 - **Scene 1**: 
   - On/Off Podest: Risiko increases by one when person leaves Podest. Risiko cannot go below 2 when person is not on Podest. Risiko drops by one if person enters podest. 
-  - The line around the Podest on the picture is shown when the scene is selected. Press "L" to hide it, and again to show it. The Podest rule keeps counting either way. 
   - The line around the Podest on the picture is shown when the scene is selected. Press "L" to hide it, and again to show it. The Podest rule keeps counting either way. 
   - Manual Interference: press "T" opens a stroboscope page: the screen flashes in fire colours (a glow from the bottom, yellow through orange to deep red) twice in quick succession, stays black for 3 seconds, and repeats until closed with "T" or "X". The second flash is the same fire dying down, moved a little to one side, so it flickers; every cycle is a slightly different fire, and the flash lengths vary a little. 
   - Track up to 30 people at the same time by default. Press "P" to reduce this number to 3. 
