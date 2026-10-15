@@ -105,14 +105,17 @@ HOLD = 5.0
 LINK = BONE
 
 # Prototype 4: a slot in a band to each side of the picture, each band
-# SIDE_BAND_SHARE of the picture's width. The page shows the picture at
-# Prototype 3's size (style.css), which on a 16:9 projection leaves this much
-# room either side. The name, the pips and the numbers are set as large as the
-# band allows, up to SIDE_SCALE times Prototype 3's values; the labels as
-# large as the longest fits, up to the same.
+# SIDE_BAND_SHARE of the picture's width, of which SIDE_GAP_SHARE stays clear
+# between the card and the picture. The picture carries a frame of its own
+# (_picture_frame), so the cards stand outside it. On a 1920x1080 projection
+# the page shows the picture about 1280 px wide (style.css), and the bands
+# fill the room either side. The name, the pips and the numbers are set as
+# large as the band allows, up to SIDE_SCALE times Prototype 3's values; the
+# labels as large as the longest fits, up to the same.
 SIDES = 2
-SIDE_BAND_SHARE = 0.155
-SIDE_SCALE = 2
+SIDE_BAND_SHARE = 0.23
+SIDE_GAP_SHARE = 0.016
+SIDE_SCALE = 3
 
 
 @lru_cache(maxsize=32)
@@ -151,10 +154,12 @@ def _set(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str,
 
 
 def _corners(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], colour,
-             width: int) -> None:
-    """The four corners of a box, each a bracket a quarter of its shorter side long."""
+             width: int, arm: int | None = None) -> None:
+    """The four corners of a box, each a bracket `arm` long, or a quarter of
+    its shorter side unless given."""
     x1, y1, x2, y2 = box
-    arm = max(3 * width, min(x2 - x1, y2 - y1) // 4)
+    if arm is None:
+        arm = max(3 * width, min(x2 - x1, y2 - y1) // 4)
     for x, y, dx, dy in ((x1, y1, 1, 1), (x2, y1, -1, 1), (x1, y2, 1, -1), (x2, y2, -1, -1)):
         inner_x, inner_y = x + dx * (width - 1), y + dy * (width - 1)
         draw.rectangle((min(x, x + dx * arm), min(y, inner_y), max(x, x + dx * arm),
@@ -355,6 +360,20 @@ def _card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
                  max(1, inset // 3))
 
 
+def _picture_frame(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
+    """A frame on the edge of a picture, as the page draws one round the feed
+    (style.css, .feed): a thin outline in the rule's colour, and Steel corner
+    brackets just inside it. Sized for a picture shown about two thirds as
+    wide as it is, so that the lines stay a pixel or two on screen."""
+    x1, y1, x2, y2 = box
+    width = x2 - x1 + 1
+    line = max(1, width // 960)
+    draw.rectangle(box, outline=RULE, width=line)
+    inset = width // 160
+    _corners(draw, (x1 + inset, y1 + inset, x2 - inset, y2 - inset), STEEL, line,
+             arm=width // 64)
+
+
 def _card_inset(width: int, height: int) -> int:
     """How far inside a card of this size its corner brackets stand."""
     return max(3, min(width, height) // 24)
@@ -466,10 +485,12 @@ def draw_ratings_sides(frame: np.ndarray,
 
     The picture keeps its size, between a band on the left, slot 0 of
     `slots`, and one on the right, slot 1, each SIDE_BAND_SHARE of its width.
-    In the picture each person is boxed and named. A person with rows (as
-    draw_ratings takes them) and a slot has their name and rows set on a card
-    in that band, each label above its pips and number, and a line in the
-    text colour runs from beside the name to the near side of their box.
+    The picture is framed (_picture_frame), and in it each person is boxed
+    and named. A person with rows (as draw_ratings takes them) and a slot has
+    their name and rows set on a card in that band, SIDE_GAP_SHARE of the
+    picture's width clear of the frame, each label above its pips and number,
+    and a line in the text colour runs from beside the name to the near side
+    of their box.
     The text's sizes follow from the band's width, from `labels`, all the
     rating labels there can be, and from `widest`, the largest magnitude any
     of them can take; the cards' height from `rows`, the most rows anyone can
@@ -490,12 +511,13 @@ def draw_ratings_sides(frame: np.ndarray,
         return _card_inset(card_width, card_width) * 4 // 3 + padding
 
     smallest = _RatingRows(probe, MIN_TEXT, labels, padding, style, widest)
+    gap = round(base.width * SIDE_GAP_SHARE)
     band = round(base.width * SIDE_BAND_SHARE)
-    card_width = band - 2 * margin
+    card_width = band - gap - margin
     while (card_width - 2 * card_inset(card_width)
            < max(smallest.label_width, smallest.meter_width)):
         card_width += 1
-    band = card_width + 2 * margin
+    band = card_width + gap + margin
     inset = card_inset(card_width)
     room = card_width - 2 * inset
 
@@ -523,12 +545,13 @@ def draw_ratings_sides(frame: np.ndarray,
     image = Image.new("RGB", (base.width + 2 * band, total), style.tag)
     image.paste(base, (band, top))
     draw = ImageDraw.Draw(image)
+    _picture_frame(draw, (band, top, band + base.width - 1, top + base.height - 1))
 
     for (x1, y1, x2, y2), (_, name, rows) in zip(boxes, rated):
         slot = slots.get(name)
         if not rows or slot not in (0, 1):
             continue
-        x = margin if slot == 0 else band + base.width + margin
+        x = margin if slot == 0 else band + base.width + gap
         _card(draw, (x, card_top, x + card_width - 1, card_top + card_height(len(rows)) - 1))
         name_top = card_top + inset
         beside_name = (x + card_width - 1 if slot == 0 else x), name_top + meters.row // 2

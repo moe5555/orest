@@ -598,16 +598,21 @@ body[data-ansicht="p3"][data-screen="normal"] .wrap { --p2-width: min(100%, calc
 body:is([data-ansicht="p3"], [data-ansicht="p4"]) .top .feed { height: auto; }
 body:is([data-ansicht="p3"], [data-ansicht="p4"]) .top .feed img { height: auto; max-height: calc(100vh - 150px); }
 
-/* Prototype 4: the picture at Prototype 3's size, with a band of values
-   annotate.SIDE_BAND_SHARE of its width to either side, so the feed is 1.31
-   times as wide as Prototype 3's picture. On a 16:9 window the bands fill the
-   room beside it; a narrower window shrinks the three together. The scene
-   beneath keeps the picture's width. */
+/* Prototype 4: the picture with a band of values annotate.SIDE_BAND_SHARE
+   (0.23) of its width to either side, so the feed is 1.46 times as wide as
+   the picture, and 2.6 times as wide as tall on a 16:9 camera. It fills the
+   window's width, which on 1920x1080 puts the picture at about 1280 px. The
+   server frames the picture itself, so the feed has no frame of its own and
+   the cards in the bands stand outside the picture's. The scene beneath and
+   the clock keep to the picture, whose left edge is 15.75 % into the feed. */
 body[data-ansicht="p4"][data-screen="normal"] .wrap {
-  --p3-width: min(100%, calc((100vh - 150px) * 1.55));
-  --p2-width: min(100%, calc((var(--p3-width) - 2px) * 1.31 + 2px));
+  --p2-width: min(100%, calc((100vh - 150px) * 2.6));
+  --p4-picture: calc(var(--p2-width) / 1.46);
 }
-body[data-ansicht="p4"] .p2-scene { width: var(--p3-width); }
+body[data-ansicht="p4"] .top .feed { border: 0; background: none; }
+body[data-ansicht="p4"] .top .feed::after { content: none; }
+body[data-ansicht="p4"] .feed-tag { left: calc(15.75% + 18px); }
+body[data-ansicht="p4"] .p2-scene { width: var(--p4-picture); }
 
 .p2-scene { width: var(--p2-width); display: grid; gap: 10px; }
 .p2-scene-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }

@@ -6,6 +6,39 @@ referenced below.
 
 ---
 
+## 2026-10-15 — Prototype 4: larger values, outside the picture's frame
+
+Requested by Moe. Concerns Prototype 4 of the Live SITREP (`03_render.md`,
+note of 15.10.26 added there; RENDER step of `pipeline.md`). Alex's and
+Lena's values are larger, the picture a little smaller, and the cards stand
+outside the picture's frame instead of inside the frame round the whole feed.
+
+- **Wider bands, smaller picture.** Each band is 0.23 of the picture's width
+  (`annotate.SIDE_BAND_SHARE`, was 0.155). On a 1920×1080 window the picture
+  is about 1280 px wide (was about 1430), and the bands take the rest. The
+  cap on the values' size is three times Prototype 3's (`SIDE_SCALE`, was
+  two); the band's width is what limits them. On screen the values grow from
+  37 to 48 px and the labels from 16 to 21 px (Szene 2.3, with Aggression's
+  "−10": 31 to 40 px).
+- **The picture has its own frame.** The server draws an outline and Steel
+  corner brackets on the picture's edge (`annotate._picture_frame`), as the
+  page frames every other feed (`style.css`, `.feed`). On Prototype 4 the
+  page drops its own frame round the feed. A gap of `SIDE_GAP_SHARE` (0.016
+  of the picture's width) separates each card from the frame.
+- **Still one image.** The cards and lines stay in the server's frame, so the
+  lines keep following the boxes without lag (entries of 2026-10-06 and
+  2026-10-07). Cards set by the page would sit outside the image, but their
+  lines would trail the video.
+- The scene's values beneath and the clock keep to the picture (`style.css`,
+  `--p4-picture`).
+
+733 tests pass (1 new). Checked in headless Edge at 1920×1080 against a stub
+run, with a frame drawn from the 2026-10-14 rehearsal recording: the picture
+measures about 1290 px with its frame, the cards stand outside it, and the
+scene row lines up with it. Not yet checked on the projector.
+
+---
+
 ## 2026-10-15 — Einschreiten off in every scene but "Standard"
 
 Requested by Moe. `02_processing.md` gives every scene "No auto Einschreiten

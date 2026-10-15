@@ -39,6 +39,9 @@ Same as #2, but the SITREP values are not moving next to the bounding boxes, but
 ### Prototype 4
 
 Same as #3, but the SITREP values are not displayed below the video, but larger to the left and to the right of the video. Make them about twice as big as #3. Only display Alex and Lena's values in this display. 
+
+> Changed 15.10.26 (Moe): Alex's and Lena's values larger still; the video may be slightly smaller for it. The values stand outside the video's frame rather than within it.
+
 ---
 
 > **⚠ Written by Claude — draft, not yet reviewed by Moe (2026-09-12).**
