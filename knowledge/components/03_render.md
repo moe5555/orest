@@ -36,6 +36,9 @@ Press "R" once and the Reportbericht is displayed center of the page, no other e
 
 Same as #2, but the SITREP values are not moving next to the bounding boxes, but appear statically at the edges of the video, attached to the name of the person via a white line attached to the bounding box. This is meant to prevent the overlays occluding the scene and moving around hectically that makes it hard to read. 
 
+### Prototype 4
+
+Same as #3, but the SITREP values are not displayed below the video, but larger to the left and to the right of the video. Make them about twice as big as #3. Only display Alex and Lena's values in this display. 
 ---
 
 > **⚠ Written by Claude — draft, not yet reviewed by Moe (2026-09-12).**

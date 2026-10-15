@@ -145,6 +145,45 @@ def test_a_person_without_ratings_gets_no_slot_panel():
     assert changed(original, marked[:360]).any()             # boxed and named in the picture
 
 
+def picture_columns(marked) -> np.ndarray:
+    """Columns of a frame from draw_ratings_sides that hold the picture (grey 60)."""
+    return np.flatnonzero(np.all(marked == 60, axis=2).any(axis=0))
+
+
+def test_the_picture_keeps_its_size_between_the_bands():
+    """The frame is the picture widened by a band to each side, whether or not anyone is rated."""
+    original = frame(720, 1280)
+    empty = annotate.draw_ratings_sides(original, [], {}, LABELS)
+    rated = annotate.draw_ratings_sides(original, [(box(800, 300, 920, 600), "Klara", RATED)],
+                                        {"Klara": 1}, LABELS)
+    band = round(1280 * annotate.SIDE_BAND_SHARE)
+    assert empty.shape == rated.shape == (720, 1280 + 2 * band, 3)
+    assert np.array_equal(empty[:, band:band + 1280], original)
+
+
+def test_ratings_on_the_sides_stand_in_their_band_tied_to_the_box_by_a_white_line():
+    original = frame(720, 1280)
+    marked = annotate.draw_ratings_sides(original, [(box(800, 300, 920, 600), "Klara", RATED)],
+                                         {"Klara": 0}, LABELS)
+    columns = picture_columns(marked)
+    ground = np.array(annotate.DISPLAY.tag[::-1])
+    assert np.any(marked[:, :columns[0]] != ground)                 # the left band's card
+    assert np.all(marked[:, columns[-1] + 1:] == ground)            # the right band stays empty
+    left_of_box = marked[:, columns[0]:columns[0] + 800 - 2]
+    assert np.all(left_of_box == annotate.LINK[::-1], axis=2).any()
+
+
+def test_a_person_without_ratings_or_a_side_gets_no_card():
+    original = frame(720, 1280)
+    marked = annotate.draw_ratings_sides(
+        original, [(box(100, 150, 160, 300), "Körper 7", []),
+                   (box(800, 300, 920, 600), "Klara", RATED)], {"Klara": 2}, LABELS)
+    columns = picture_columns(marked)
+    ground = np.array(annotate.DISPLAY.tag[::-1])
+    assert np.all(marked[:, :columns[0]] == ground)
+    assert np.all(marked[:, columns[-1] + 1:] == ground)
+
+
 def test_the_models_frames_keep_the_yellow_box_and_the_operators_follow_the_ci():
     """The model reads names off the plain tag; the CI applies to the operator's picture only."""
     original = frame()

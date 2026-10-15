@@ -139,8 +139,12 @@ def chronik_payload(kept: chronik.Chronik) -> dict:
 ZEILEN_SHOWN = 12
 
 # The live ratings drawn beside each person on the picture of Prototypes 2
-# and 3, with the names the page gives them.
+# to 4, with the names the page gives them.
 RATING_LABELS = scenes.LABELS
+
+# The people whose values Prototype 4 shows, one to each side of the picture
+# (knowledge/components/03_render.md, "Prototype 4").
+SIDE_PEOPLE = ("Alex", "Lena")
 
 
 def rating_level(name: str, value: int) -> str:
@@ -217,8 +221,10 @@ class LiveSitrep:
         self.fehler: dict[str, str] = {}
         self.started: datetime | None = None
         self.version = 0
-        # Prototype 3's slots on the strip beneath the picture, by person.
+        # Prototype 3's slots on the strip beneath the picture, and Prototype
+        # 4's bands beside it, by person.
         self.slots = annotate.Slots()
+        self.sides = annotate.Slots(annotate.SIDES)
 
     def start(self) -> bool:
         """Begin a run. Returns False if one is already under way."""
@@ -232,6 +238,7 @@ class LiveSitrep:
             self.fehler = {}
             self.started = datetime.now()
             self.slots = annotate.Slots()
+            self.sides = annotate.Slots(annotate.SIDES)
             self.version += 1
             self._thread = threading.Thread(target=self._run, args=(self._stop,),
                                             daemon=True)
@@ -439,7 +446,8 @@ class LiveSitrep:
             return None
         return run.stream.latest()
 
-    def overlay(self, frame, ratings: bool = False, strip: bool = False):
+    def overlay(self, frame, ratings: bool = False, strip: bool = False,
+                sides: bool = False):
         """The frame with the people the run tracks boxed and named.
 
         With `ratings`, each recognised person's live values are set beside
@@ -448,7 +456,10 @@ class LiveSitrep:
         A body not carrying a cast name is boxed and labelled "Körper <id>",
         without values. With
         `strip` as well, the values stand in fixed slots on a strip beneath
-        the picture, each tied to its box by a line (Prototype 3).
+        the picture, each tied to its box by a line (Prototype 3). With
+        `sides` instead, only SIDE_PEOPLE's values are shown, in a band to
+        each side of the picture, tied to their boxes in the same way
+        (Prototype 4).
         """
         run = self.session
         if run is None:
@@ -459,19 +470,31 @@ class LiveSitrep:
         with self._lock:
             live = {person["name"]: person for person in (self.werte or {}).get("personen", [])}
         cast = set(run.tracker.cast.names) if run.tracker.cast else set()
+        shown = cast & set(SIDE_PEOPLE) if sides else cast
         scene = self.scene.scene
         rated = []
         for box, name in run.actions.visible():
             values = live.get(name, {})
             rows = [(RATING_LABELS[rating], values.get(rating, 0),
                      rating_level(rating, values.get(rating, 0)), scenes.extent(rating))
-                    for rating in scene.values_of(name)] if name in cast else []
+                    for rating in scene.values_of(name)] if name in shown else []
             rated.append((box, name, rows))
-        if not strip:
+        if not strip and not sides:
             return annotate.draw_ratings(frame, rated)
         width = frame.shape[1]
-        slots = self.slots.assign([(name, float(box[0] + box[2]) / 2 / width)
-                                   for box, name, rows in rated if rows], time.monotonic())
+        placed = [(name, float(box[0] + box[2]) / 2 / width) for box, name, rows in rated if rows]
+        if sides:
+            # The bands are as wide as the longest label and the widest range
+            # among the values SIDE_PEOPLE can have, and the cards as tall as
+            # the most values either has, so the picture keeps its size as
+            # people come and go.
+            values = {value for name in SIDE_PEOPLE for value in scene.values_of(name)}
+            return annotate.draw_ratings_sides(
+                frame, rated, self.sides.assign(placed, time.monotonic()),
+                [RATING_LABELS[value] for value in scenes.VALUES if value in values],
+                rows=max(len(scene.values_of(name)) for name in SIDE_PEOPLE),
+                widest=max(map(scenes.extent, values), default=annotate.PIPS))
+        slots = self.slots.assign(placed, time.monotonic())
         # The strip is as tall as the most values anyone in the scene has, and
         # its numbers as wide as the widest range among them, so the picture
         # keeps its size as people come and go.

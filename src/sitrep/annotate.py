@@ -12,7 +12,8 @@ The operator's picture is marked the same way. Prototype 2 of the live
 display (knowledge/components/03_render.md) also sets each person's live
 ratings beside their box (draw_ratings); Prototype 3 sets them in fixed slots
 on a strip beneath the picture, each tied to its box by a line
-(draw_ratings_strip).
+(draw_ratings_strip); Prototype 4 sets two people's, larger, in a band to each
+side of the picture, tied to their boxes in the same way (draw_ratings_sides).
 
 Text is set with Pillow rather than OpenCV, whose built-in fonts cover ASCII
 only: a cast name with an umlaut has to appear on the frame exactly as it
@@ -102,6 +103,16 @@ LEVEL = {"calm": STEEL, "amber": SIGNAL, "red": ALARM}
 SLOTS = 4
 HOLD = 5.0
 LINK = BONE
+
+# Prototype 4: a slot in a band to each side of the picture, each band
+# SIDE_BAND_SHARE of the picture's width. The page shows the picture at
+# Prototype 3's size (style.css), which on a 16:9 projection leaves this much
+# room either side. The name, the pips and the numbers are set as large as the
+# band allows, up to SIDE_SCALE times Prototype 3's values; the labels as
+# large as the longest fits, up to the same.
+SIDES = 2
+SIDE_BAND_SHARE = 0.155
+SIDE_SCALE = 2
 
 
 @lru_cache(maxsize=32)
@@ -216,7 +227,7 @@ class _RatingRows:
 
     def __init__(self, draw: ImageDraw.ImageDraw, size: int, labels, padding: int,
                  style: Style, widest: int = PIPS):
-        self.style, self.padding = style, padding
+        self.style, self.padding, self.size = style, padding, size
         self.font = _font(style.font, size)
         self.number_font = _font(style.number_font, size)
         self.tracking = style.tracking * size
@@ -226,8 +237,9 @@ class _RatingRows:
         self.gap = max(2, self.pip // 3)
         self.label_width = max((_length(_cased(label, style), self.font, self.tracking)
                                 for label in labels), default=0)
-        self.width = int(3 * padding + self.label_width + PIPS * (self.pip + self.gap)
-                         + self.gap + draw.textlength(_number(-widest), font=self.number_font))
+        self.meter_width = (PIPS * (self.pip + self.gap) + self.gap
+                            + draw.textlength(_number(-widest), font=self.number_font))
+        self.width = int(3 * padding + self.label_width + self.meter_width)
 
     def height(self, count: int) -> int:
         """Height of `count` rows, without the panel's padding."""
@@ -257,15 +269,30 @@ class _RatingRows:
         for index, (label, value, level, scale) in enumerate(rows):
             row_top = top + index * (self.row + self.gap)
             self.text(draw, x + self.padding, row_top, label, self.style.label)
-            pips_left = x + 2 * self.padding + self.label_width
-            pip_top = row_top + (self.row - self.pip) // 2
-            filled = _filled(value, scale)
-            for slot in range(PIPS):
-                left = int(pips_left + slot * (self.pip + self.gap))
-                colour = LEVEL.get(level, LEVEL["calm"]) if slot < filled else PIP_OFF
-                draw.rectangle((left, pip_top, left + self.pip, pip_top + self.pip), fill=colour)
-            self.number(draw, int(pips_left + PIPS * (self.pip + self.gap) + self.gap), row_top,
-                        value, LEVEL["red"] if level == "red" else self.style.text)
+            self.meter(draw, x + 2 * self.padding + self.label_width, row_top, value, level, scale)
+
+    def meter(self, draw: ImageDraw.ImageDraw, x: float, top: int, value: int, level: str,
+              scale: int) -> None:
+        """Five pips from `x` and the number after them, on the row that starts at `top`."""
+        pip_top = top + (self.row - self.pip) // 2
+        filled = _filled(value, scale)
+        for slot in range(PIPS):
+            left = int(x + slot * (self.pip + self.gap))
+            colour = LEVEL.get(level, LEVEL["calm"]) if slot < filled else PIP_OFF
+            draw.rectangle((left, pip_top, left + self.pip, pip_top + self.pip), fill=colour)
+        self.number(draw, int(x + PIPS * (self.pip + self.gap) + self.gap), top,
+                    value, LEVEL["red"] if level == "red" else self.style.text)
+
+
+def _fitted(probe: ImageDraw.ImageDraw, size: int, labels, padding: int, style: Style,
+            widest: int, room: float, measure) -> _RatingRows:
+    """Rating rows at `size`, or smaller where `measure` of them exceeds
+    `room`, though not below MIN_TEXT."""
+    layout = _RatingRows(probe, size, labels, padding, style, widest)
+    while measure(layout) > room and size > MIN_TEXT:
+        size = max(MIN_TEXT, min(size - 1, int(size * room / measure(layout))))
+        layout = _RatingRows(probe, size, labels, padding, style, widest)
+    return layout
 
 
 def _filled(value: int, scale: int) -> int:
@@ -322,14 +349,20 @@ def _card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
     brackets in the outline's colour just inside it."""
     x1, y1, x2, y2 = box
     draw.rectangle(box, fill=PANEL, outline=RULE, width=1)
-    inset = max(3, min(x2 - x1, y2 - y1) // 24)
+    inset = _card_inset(x2 - x1, y2 - y1)
     if x2 - x1 > 4 * inset and y2 - y1 > 4 * inset:
         _corners(draw, (x1 + inset, y1 + inset, x2 - inset, y2 - inset), RULE,
                  max(1, inset // 3))
 
 
+def _card_inset(width: int, height: int) -> int:
+    """How far inside a card of this size its corner brackets stand."""
+    return max(3, min(width, height) // 24)
+
+
 class Slots:
-    """Which person's ratings stand in which slot of the strip (draw_ratings_strip).
+    """Which person's ratings stand in which slot of the strip
+    (draw_ratings_strip) or of the bands beside the picture (draw_ratings_sides).
 
     A person keeps their slot while in view and for `hold` seconds after. A
     person new to the view takes the free slot nearest their place in the
@@ -395,12 +428,8 @@ def draw_ratings_strip(frame: np.ndarray,
     base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     size, _, padding, line = _layout(base, style)
     slot_width = base.width // count
-    probe = ImageDraw.Draw(base)
-    text = max(MIN_TEXT, round(size * RATING_SHARE))
-    layout = _RatingRows(probe, text, labels, padding, style, widest)
-    while layout.width > slot_width - 2 * padding and text > MIN_TEXT:
-        text = max(MIN_TEXT, min(text - 1, int(text * (slot_width - 2 * padding) / layout.width)))
-        layout = _RatingRows(probe, text, labels, padding, style, widest)
+    layout = _fitted(ImageDraw.Draw(base), max(MIN_TEXT, round(size * RATING_SHARE)), labels,
+                     padding, style, widest, slot_width - 2 * padding, lambda rows: rows.width)
 
     strip = (3 * padding + layout.row
              + layout.height(len(labels) if rows is None else rows) + padding)
@@ -425,5 +454,96 @@ def draw_ratings_strip(frame: np.ndarray,
         draw.line(((above_name, card_top), foot), fill=LINK, width=line)
         layout.text(draw, x + padding, y, name, style.text)
         layout.draw(draw, x, y + layout.row + 2 * padding, rows)
+
+    return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
+
+
+def draw_ratings_sides(frame: np.ndarray,
+                       rated: list[tuple[np.ndarray, str, list[tuple[str, int, str, int]]]],
+                       slots: dict[str, int], labels: list[str],
+                       rows: int | None = None, widest: int = PIPS) -> np.ndarray:
+    """A copy of a BGR frame widened by a band to each side holding people's ratings.
+
+    The picture keeps its size, between a band on the left, slot 0 of
+    `slots`, and one on the right, slot 1, each SIDE_BAND_SHARE of its width.
+    In the picture each person is boxed and named. A person with rows (as
+    draw_ratings takes them) and a slot has their name and rows set on a card
+    in that band, each label above its pips and number, and a line in the
+    text colour runs from beside the name to the near side of their box.
+    The text's sizes follow from the band's width, from `labels`, all the
+    rating labels there can be, and from `widest`, the largest magnitude any
+    of them can take; the cards' height from `rows`, the most rows anyone can
+    have (all the labels unless given). So the frame keeps its size from frame
+    to frame. A band is widened where the labels would not fit it at the
+    smallest legible size. Both cards start at the same height, centred for
+    the tallest card there can be.
+    """
+    style = DISPLAY
+    base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    size, _, padding, line = _layout(base, style)
+    probe = ImageDraw.Draw(base)
+    margin = max(1, padding // 2)
+
+    def card_inset(card_width: int) -> int:
+        # Clear of the card's brackets, which are at most a third as wide as
+        # they stand inside it (_corners).
+        return _card_inset(card_width, card_width) * 4 // 3 + padding
+
+    smallest = _RatingRows(probe, MIN_TEXT, labels, padding, style, widest)
+    band = round(base.width * SIDE_BAND_SHARE)
+    card_width = band - 2 * margin
+    while (card_width - 2 * card_inset(card_width)
+           < max(smallest.label_width, smallest.meter_width)):
+        card_width += 1
+    band = card_width + 2 * margin
+    inset = card_inset(card_width)
+    room = card_width - 2 * inset
+
+    # Prototype 3's size for these values (draw_ratings_strip).
+    strip = _fitted(probe, max(MIN_TEXT, round(size * RATING_SHARE)), labels, padding, style,
+                    widest, base.width // SLOTS - 2 * padding, lambda layout: layout.width)
+    largest = SIDE_SCALE * strip.size
+    meters = _fitted(probe, largest, labels, padding, style, widest, room,
+                     lambda layout: layout.meter_width)
+    captions = _fitted(probe, largest, labels, padding, style, widest, room,
+                       lambda layout: layout.label_width)
+    value_height = captions.row + captions.gap + meters.row
+
+    def card_height(count: int) -> int:
+        return (2 * inset + meters.row + 2 * padding
+                + count * value_height + max(0, count - 1) * padding)
+
+    tallest = card_height(len(labels) if rows is None else rows)
+    total = max(base.height, tallest + 2 * margin)
+    top = (total - base.height) // 2
+    card_top = (total - tallest) // 2
+
+    marked = ImageDraw.Draw(base)
+    boxes = [_name(marked, base, box, name, style) for box, name, _ in rated]
+    image = Image.new("RGB", (base.width + 2 * band, total), style.tag)
+    image.paste(base, (band, top))
+    draw = ImageDraw.Draw(image)
+
+    for (x1, y1, x2, y2), (_, name, rows) in zip(boxes, rated):
+        slot = slots.get(name)
+        if not rows or slot not in (0, 1):
+            continue
+        x = margin if slot == 0 else band + base.width + margin
+        _card(draw, (x, card_top, x + card_width - 1, card_top + card_height(len(rows)) - 1))
+        name_top = card_top + inset
+        beside_name = (x + card_width - 1 if slot == 0 else x), name_top + meters.row // 2
+        near_side = (band + (x1 if slot == 0 else x2),
+                     top + min(max(0, (y1 + y2) // 2), base.height - 1))
+        draw.line((beside_name, near_side), fill=LINK, width=line)
+        # The name at the values' size, or at the labels' where it is too long for that.
+        title = meters if _length(_cased(name, style), meters.font,
+                                  meters.tracking) <= room else captions
+        title.text(draw, x + inset, name_top + (meters.row - title.row) // 2, name, style.text)
+        value_top = name_top + meters.row + 2 * padding
+        for label, value, level, scale in rows:
+            captions.text(draw, x + inset, value_top, label, style.label)
+            meters.meter(draw, x + inset, value_top + captions.row + captions.gap, value, level,
+                         scale)
+            value_top += value_height + padding
 
     return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)

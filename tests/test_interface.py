@@ -137,9 +137,10 @@ def test_the_sitrep_page_is_served_with_its_script(client):
 def test_the_sitrep_page_offers_the_prototypes_as_tabs(client):
     page = client.get("/sitrep").text
     assert 'data-ansicht="uebersicht"' in page
-    for prototype in ("p1", "p2", "p3"):
+    for prototype in ("p1", "p2", "p3", "p4"):
         assert f'data-ansicht="{prototype}"' in page
-    for script in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js"):
+    for script in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js",
+                   "/static/prototyp4.js"):
         assert script in page
         assert client.get(script).status_code == 200
 
@@ -152,6 +153,10 @@ def test_prototype_2_asks_for_a_feed_with_the_ratings_drawn_in(client):
 
 def test_prototype_3_asks_for_a_feed_with_the_ratings_on_a_strip(client):
     assert 'feed: "&ratings=1&strip=1"' in client.get("/static/prototyp3.js").text
+
+
+def test_prototype_4_asks_for_a_feed_with_the_ratings_beside_the_picture(client):
+    assert 'feed: "&ratings=1&sides=1"' in client.get("/static/prototyp4.js").text
 
 
 def test_the_people_in_view_are_named_left_to_right():
@@ -275,7 +280,8 @@ def test_all_prototypes_offer_the_override_on_x(client):
     assert 'id="intervene-override"' in page and "<kbd>X</kbd> Override" in page
     script = client.get("/static/sitrep.js").text
     assert "/api/sitrep/override?nummer=" in script and 'key === "x"' in script
-    for prototype in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js"):
+    for prototype in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js",
+                      "/static/prototyp4.js"):
         assert "fullPage.key(key)" in client.get(prototype).text
 
 
@@ -418,6 +424,29 @@ def test_on_the_strip_only_recognised_people_take_a_slot(monkeypatch, run):
     controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
 
     assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit", "Berechenbarkeit"], 3, 5)]
+
+
+def test_beside_the_picture_only_alex_and_lena_have_values(monkeypatch, run):
+    run.actions = SimpleNamespace(visible=lambda: [
+        (np.array([10, 10, 30, 90]), "Alex"), (np.array([40, 10, 60, 90]), "Nils"),
+        (np.array([70, 10, 90, 90]), "Lena")])
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena", "Nils"]))
+    drawn = []
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
+                        lambda frame, rated, slots, labels, rows=None, widest=None:
+                        drawn.append((rated, slots, labels, rows, widest)) or frame)
+    controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
+        values_per_person={"Alex": ["aggression"]})))
+    controller.session = run
+
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, sides=True)
+
+    ((rated, slots, labels, rows, widest),) = drawn
+    assert [(name, len(values)) for _, name, values in rated] == [
+        ("Alex", 1), ("Nils", 0), ("Lena", 3)]
+    assert slots == {"Alex": 0, "Lena": 1}
+    assert labels == ["Risiko", "Menschlichkeit", "Berechenbarkeit", "Aggression"]
+    assert (rows, widest) == (3, 10)
 
 
 def test_the_overview_feed_carries_names_only(monkeypatch, run):

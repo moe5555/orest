@@ -6,6 +6,49 @@ referenced below.
 
 ---
 
+## 2026-10-14 — Prototype 4 of the Live SITREP display
+
+Completes Prototype 4 in `03_render.md` ("Live SITREP"; RENDER step of
+`pipeline.md`): Prototype 3, but the people's values stand to the left and
+right of the picture, larger, and only Alex's and Lena's are shown. New tab
+"Prototyp 4" (`prototyp4.js`), feed `/api/sitrep/video?ratings=1&sides=1`.
+
+- **Picture at Prototype 3's size** (requested by Moe after a first version
+  shrank it to about 880×495 px to fit values twice as large). On a 1920×1080
+  projection both pictures measure 1440×810 px in headless Edge. The values
+  take the room the window leaves either side, about 224 px on screen.
+- **Drawn by the server, like Prototype 3's strip** (entry of 2026-10-07), so
+  the lines follow the boxes without lag (`annotate.draw_ratings_sides`). The
+  frame is the camera picture, unscaled, with a band to either side
+  `annotate.SIDE_BAND_SHARE` (0.155) of its width. The page shows the frame
+  1.31 times as wide as Prototype 3's picture (`style.css`), which puts the
+  picture at Prototype 3's size. A window narrower than 16:9 shrinks the three
+  together.
+- **Cards.** Each band holds one card: the name, then each value as its label
+  above its pips and number. The name, pips and numbers are as large as the
+  band allows, up to twice Prototype 3's (`annotate.SIDE_SCALE`). At 1080p
+  that is 50 px against Prototype 3's 27 px, or 42 px in Szene 2.3, whose
+  "−10" is wider. The labels are as large as BERECHENBARKEIT fits: 22 px, a
+  little smaller than Prototype 3's. Labels set smaller than the values follow
+  Prototype 1's person cards (`style.css`, `.p1-person`).
+- **Sides.** Two slots, left and right, assigned like Prototype 3's slots
+  (`annotate.Slots`): a person takes the side nearest where they stand and
+  keeps it while in view and for 5 s after. The line runs from beside the name
+  to the near side of the box. Others in view (Nils, Alessa, unnamed bodies)
+  are boxed and named without values (`live.SIDE_PEOPLE`).
+- **Stable size.** The bands and cards are sized for every value Alex and Lena
+  can have in the scene, so nothing moves as people come and go. On a small
+  camera frame (640 px wide) the bands widen so the labels still fit.
+- Unchanged from Prototype 3: the scene's Relevanz, Eskalation and Gefahr
+  beneath the picture, at the picture's width, Einschreiten, the scene's
+  screens and the report on R.
+
+723 tests pass (5 new). Checked in headless Edge at 1920×1080 against a stub
+run with Alex, Lena and Nils in view. Not yet checked on the projector or with
+the camera.
+
+---
+
 ## 2026-10-13 — A new body capture no longer waits for the previous search's clips (VSH-ARLT-5090)
 
 Pointed out by Moe, after the shuffled tiles (entry below): with `-n 50`, the
