@@ -35,6 +35,9 @@ apollon-search = "smartsearch.main:main"
 apollon-ui = "interface.main:main"
 
 [dependency-groups]
+athene = [
+    "playwright>=1.64.0",
+]
 dev = [
     "pytest>=8.4.2",
 ]

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Athene</title>
+  <link rel="icon" href="/seestone.png">
+  <style>
+    @font-face {
+      font-family: "IBM Plex Mono";
+      src: url("/fonts/IBMPlexMono-Medium.ttf") format("truetype");
+      font-weight: 500;
+    }
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    /* The 3840 × 2160 frame, scaled to fit the window. */
+    canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; cursor: pointer; }
+    .hint {
+      position: fixed; left: 20px; bottom: 16px;
+      font: 500 11px/1 "IBM Plex Mono", monospace;
+      letter-spacing: 0.14em; color: #8c909c;
+    }
+    body[data-mode="render"] .hint { display: none; }
+  </style>
+</head>
+<body>
+  <canvas id="frame" width="3840" height="2160"></canvas>
+  <div class="hint"><span id="clock">0.00 s</span> \ LEERTASTE: ABSPIELEN \ ← →: 2 s</div>
+  <script src="/athene.js"></script>
+</body>
+</html>

@@ -6,6 +6,155 @@ referenced below.
 
 ---
 
+## 2026-10-15 — Athene: planetary design, a planet read by planetary computation
+
+Moe asked for a different style: a planet-like sphere in shades of blue,
+enclosed by lines reminiscent of computer-vision object detection, the
+points and lines moving around and across it standing for the planetary
+computation that analyses everything going on, fitting Athene as goddess of
+war and strategy. Moodboard in `athene/moodboard_planetary/` (Northern Circle
+star maps, Aït-Touati's circular Terra Forma maps, the Phoenix lander's polar
+mosaic, a radial network graph, a meshed orb, a radar interface). New design
+`athene/page/designs/planetary.js`, now the default:
+- **Planet:** drawn per pixel by a WebGL2 shader: procedural continents with
+  contour lines and a lit coast, clouds, a 15° graticule, day and night, a
+  Signal atmosphere; one turn in 90 s. The smoothed level brightens contour
+  lines and graticule.
+- **Tracks:** 14 clusters of points on the surface, linked to their three
+  nearest neighbours by great-circle arcs.
+- **Boxes:** detections in the style of `annotate.DISPLAY` (corner brackets
+  in Bone, class in IBM Plex Mono capitals, confidence in Michroma, German
+  classes such as SCHIFF, KONVOI, GEBÄUDE). A box opens as the smoothed level
+  (0.3 s both ways) passes its track's threshold (0.35–1.2) and closes in on
+  the track. Labels that would overlap one already set are left out, locks
+  first.
+- **Locks:** each onset locks a track on the visible face in Signal (rise
+  0.25 s, hold 0.6 s, fall 1 s), beams it from the nearest satellite and
+  sends packets along its links.
+- **Instruments:** a degree ring with ticks and a crosshair, a dotted circle,
+  six satellites on orbits (behind the planet dashed), a radar sweep that
+  speeds up with the voice and makes passed tracks flash.
+
+`smoothBoth` and `ease` moved into the shared page; the painterly design
+renders pixel-identical. On 56–66 s the largest change between two frames is
+1.9 times the typical one; the render runs at 7.5 fps (about 12 min for
+Lena's clip).
+
+---
+
+## 2026-10-15 — Athene painterly: smoother motion, rust and peach, no seams
+
+Moe found the painterly design's motion jagged while Lena speaks, wanted
+the thin black horizontal lines gone, and asked for the rust and peach of
+the moodboard's Denny paintings (`athene/page/designs/painterly.js`):
+- **Smoother:** the planes glide 0.12 rad per syllable over 0.45 s, easing
+  in and out and starting 0.15 s before it, in place of a 120 ms jolt. The
+  ground, the planes' reach and the strokes' circling follow the level
+  smoothed both ways (0.12 s and 0.35 s). Fresh strokes fade in over 0.3 s
+  and dry over 2 s. A stroke's direction between rest and vortex is blended
+  as an axis (doubled angles), which removed the flips of strokes crossing
+  the vortex at right angles. On 56–66 s of Lena's clip the largest change
+  between two frames is 1.4 times the typical one.
+- **No seams:** the printer passes (seams and the syllables' shear) are
+  removed; the gaps inside strokes are fainter.
+- **Rust and peach:** the ground runs navy, deep rust, rust, peach, cream
+  from the rim to the eye; 18 % of the strokes are laid in blue against it,
+  and fresh strokes are cream or Signal. These colours lie outside the CI,
+  which keeps the name, the mark and the lens.
+
+---
+
+## 2026-10-15 — Athene: painterly design, after Simon Denny's plotted paintings
+
+Moe asked for a more painterly, fine-art version, pointing to Simon Denny's
+essay on defense tech's Futurist idiom (Palantir, Anduril's Aeropittura
+imagery). The two `Denny-Defense` paintings in the moodboard are Denny's own:
+AI-composed Futurist images painted by plotters and UV printers over an
+inkjet ground. New design `athene/page/designs/painterly.js`, now the
+default:
+- **Ground:** the halo in Signal tints to Bone, painted at 1/8 size and
+  blurred into a luminous underpainting that widens with the level.
+- **Strokes:** 1500 brush stamps (bristles, dry gaps, paint thinning to the
+  end) in the colours of the ground beneath. At rest near horizontal, as a
+  plotter lays them; with the level (smoothed both ways, 0.35 s) they turn
+  into a vortex around the eye and circle it, inner ones faster, after the
+  spiral cockpit views of Crali's Aeropittura.
+- **Planes:** translucent wedges, alternately light and dark, jolted by each
+  onset with fading echoes.
+- **Fresh strokes:** each onset lays 4–14 strokes along the planes, Bone for
+  bright tone and Signal for dark, which dry away over 1.4 s.
+- **Printer passes:** each onset shears the painting along 135 px bands that
+  settle within 0.25 s, with seams and a woven grain multiplied over it.
+
+The page is split into a shared core (`athene/page/athene.js`: layout, clip,
+modes) and designs chosen with `--design`; the flat eye below is
+`--design futurist` and renders pixel-identical. Painterly renders at 3.3 fps
+(about 27 min for Lena's clip): the time goes into encoding the grainy frame
+as PNG, not into drawing it, so the preview stays fluid.
+
+---
+
+## 2026-10-15 — Athene: a Futurist eye replaces the line globe
+
+Moe found the line globe too close to familiar moving-line visuals (Joy
+Division) and asked for Italian Futurism, with a moodboard in
+`athene/moodboard/`: a tower in a halo of flat concentric bands cut by
+transparent planes, Depero's *New York* (1930) on black, and two of Simon
+Denny's plotted paintings with motion broken into rectangular dabs. The
+pipeline is unchanged; the orb in `athene/page/athene.js` is new:
+- **Halo:** five flat bands in Steel tints stepping to Bone, around the
+  Seestone lens (black pupil, Bone dot). The level widens them from the
+  inside out, each band 40 ms after the one within.
+- **Lines of force:** seven wedges from the eye. Through them the halo shows
+  in Signal tints; beyond it they flare as rays with the level. Each onset
+  turns them by a jolt (0.16 rad in 120 ms), and their positions of the last
+  150 ms stay behind as stepped echoes. Tone narrows them from planes (dark
+  voice) to lines (sibilants). Signal, the CI's accent, now marks the voice.
+- **Dabs:** 240 horizontal fragments torn from the orb as the level passes
+  their thresholds and thrown further by syllables, each in the colour of
+  the place it came from.
+
+Drawn directly through a clip, the layers beneath leaked at the wedges'
+anti-aliased edges as hairlines; each layer is now drawn whole offscreen and
+laid on in one step. Render speed 15 fps. The globe's page and stills are
+kept locally in `athene/out/Human_Lena_Voice/v1_globe/`.
+
+---
+
+## 2026-10-15 — Athene: line-drawn sphere, rendered offline at 4K 50 fps
+
+Requested by Moe (`athene/description.md`): Athene, a second Seestone
+program beside Apollon and outside `pipeline.md`, a sphere that answers a
+recorded speech clip, projected on an LED wall. Clips are rendered, not run
+live; TouchDesigner's non-commercial licence stops at 1280 × 1280.
+
+**Pipeline.** `python -m athene.render CLIP [--preview | --still S … | --span A B]`.
+- `athene/analyse.py` measures the clip once per video frame: `level`
+  (40 dB scale below the clip's loud passages, 80 ms lead and 200 ms
+  release, possible because the whole clip is known), `tone` (spectral
+  centroid, 500 Hz–5 kHz) and syllable `onsets` (spectral flux). A
+  power-weighted centroid was tried first; it put most of Lena's voiced
+  frames at the bottom of the scale.
+- `athene/page/` draws a frame from its time and that analysis alone, so the
+  preview with sound and the render are identical. Headless Edge (Playwright,
+  new dependency group `athene`) draws each 3840 × 2160 frame, ffmpeg joins
+  them with the sound: H.264 4:2:0, BT.709, limited range, AAC. 13 fps on
+  this machine, about 7 min for Lena's 108 s. Not screen-captured: the frame
+  is 4K on any monitor and no frame drops.
+
+**Picture.** Seestone mark at the top, ATHENE in Michroma above, a Steel
+glass circle holding a globe of 26 latitude rings in Bone, far side in Line
+Strong: the circle-in-circle of the Seestone mark, in the CI's colours and
+without gradients (`261009_Keynote_HITL.pdf` slides 17–20, tokens in
+`src/interface/static/style.css`). Ground pure black rather than Void, as any
+lit value shows the LED wall. The level bends and swells the rings, the tone
+fines their bends, each syllable sends a wave from the equator to the poles
+with its leading rings in Signal.
+
+**Not yet.** A full render of Lena's clip; line widths checked on the wall.
+
+---
+
 ## 2026-10-15 — Speaker diarisation by voice, harvested from the rehearsals (VSH-ARLT-5090)
 
 Requested by Moe, with a voice clip of Lena (`data/cast/Lena/Human_Lena_Voice.mp3`,
