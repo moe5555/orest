@@ -44,7 +44,7 @@ from pydantic import BaseModel
 
 from . import (actions, annotate, capture, chronik, cli, devices, feed, lage, llm, loudness,
                ndi_audio, presence, report, speakers, speech, td, transcribe, utterances)
-from . import appearance, podest, predictability, recording, scenes
+from . import appearance, podest, predictability, recording, scenes, voices
 
 
 def resolve_sources(args) -> tuple[devices.VideoDevice,
@@ -302,6 +302,7 @@ class Session:
         self.tracker = None
         self.actions = None
         self.speakers = None
+        self.voices = None
         self.reference = None
         self.frames = None
         self.utterances = None
@@ -347,6 +348,15 @@ class Session:
         if self.options.cast:
             cast, self.missing_enrolment = gallery.enrol(self.options.cast)
         self.tracker = presence.PresenceTracker(self.stream, cast).start()
+
+        # Lines are named by voice where the cast folder holds voice clips and
+        # the model is installed (voices.py); by lips alone otherwise.
+        if self.options.cast and voices.available():
+            enrolled = voices.Voices.enrol(self.options.cast)
+            self.voices = enrolled if enrolled.names else None
+        elif self.options.cast:
+            print("voice model missing: lines are attributed by lips alone "
+                  "(src/scripts/export_voice.py)", file=sys.stderr)
 
         if self.options.actions:
             # Speakers are told apart by the lips of the people the action
@@ -425,7 +435,7 @@ class Session:
         self.utterances = utterances.Utterances(
             self._samplerate, self._zeilen, language=options.language,
             meter=self.meter, laut=self.laut,
-            sprecher=self._sprecher if self.speakers else None,
+            sprecher=self._sprecher if self.speakers or self.voices else None,
             einschaetzen=self._einschaetzen).start()
         self.chronik.start()
         self._berichte = Anfragen(self._bericht)
@@ -709,9 +719,22 @@ class Session:
         """The lines rated by the run's model."""
         return speech.rate(aeusserungen, model=self.options.model, vorher=vorher)
 
-    def _sprecher(self, segmente, audio_start):
-        """Who said each segment, with the names the bodies carry now."""
-        return self.speakers.attribute(segmente, audio_start, self.actions.names())
+    def _sprecher(self, segmente, audio_start, sound):
+        """Who said each segment: the voice it matches, or where no voice is
+        clearly closest, the person whose lips moved, by the names the bodies
+        carry now."""
+        if self.speakers:
+            lines = self.speakers.attribute(segmente, audio_start, self.actions.names())
+        else:
+            lines = [report.Aeusserung(text=segment.text,
+                                       beginn=audio_start + timedelta(seconds=segment.start),
+                                       ende=audio_start + timedelta(seconds=segment.end))
+                     for segment in segmente]
+        if self.voices:
+            verdicts = self.voices.attribute(segmente, sound, self._samplerate)
+            lines = [line.model_copy(update={"name": verdict.name}) if verdict.name else line
+                     for line, verdict in zip(lines, verdicts)]
+        return lines
 
     def overlay(self, frame):
         """A copy of a frame with the tracked people boxed and named.
@@ -772,7 +795,7 @@ class Session:
             if reader:
                 reader.close()
         for holder in (self.utterances, self.chronik, self.frames, self.actions,
-                       self.speakers, self.tracker, self.meter):
+                       self.speakers, self.voices, self.tracker, self.meter):
             if holder:
                 holder.clear()
         while True:
@@ -811,6 +834,8 @@ class Session:
             lines.append(f"cast:   {', '.join(self.tracker.cast.names)}")
         else:
             lines.append("cast:   none, nobody is recognised")
+        if self.voices:
+            lines.append(f"voices: {', '.join(self.voices.names)}; others by lips")
         return "\n".join(lines)
 
     def __enter__(self) -> "Session":

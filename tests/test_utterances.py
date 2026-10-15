@@ -241,15 +241,16 @@ def test_a_line_is_attributed_from_the_start_of_its_own_utterance(monkeypatch):
                         lambda wav, language: [transcribe.Segment(0.5, 1.5, "Halt.")])
     asked = []
 
-    def sprecher(segmente, begins):
-        asked.append(begins)
+    def sprecher(segmente, begins, sound):
+        asked.append((begins, len(sound)))
         return [report.Aeusserung(name="Klara", text=segment.text, beginn=begins, ende=begins)
                 for segment in segmente]
 
     handed = Handed()
     subject = utterances.Utterances(16000, handed, sprecher=sprecher)
     subject.transcribe(np.zeros(16000, dtype=np.float32), T0, T0 + timedelta(seconds=1))
-    assert asked == [T0]
+    # The speaker is asked with the utterance's own sound, for its voice.
+    assert asked == [(T0, 16000)]
     assert handed[0][0][0].name == "Klara"
 
 

@@ -886,3 +886,32 @@ def test_the_podest_outline_is_left_off_while_the_operator_hides_it(room, reader
         assert live.outline_podest(frame) is frame
         scene.press("l")
         assert live.outline_podest(frame) is not frame
+
+
+def test_a_line_is_named_by_its_voice_first_and_by_the_lips_otherwise():
+    """Voice wins where it is sure; where it is not, the lips' name stands."""
+    begins = datetime(2026, 10, 15, 12, 0, 0)
+    segmente = [session.transcribe.Segment(0.0, 1.0, "Halt."),
+                session.transcribe.Segment(1.0, 2.0, "Nein."),
+                session.transcribe.Segment(2.0, 3.0, "Ja.")]
+    lips = SimpleNamespace(attribute=lambda segments, start, names: [
+        session.report.Aeusserung(name=name, text=segment.text, beginn=start, ende=start)
+        for segment, name in zip(segments, ["Klara", "Klara", None])])
+    heard = SimpleNamespace(attribute=lambda segments, sound, rate: [
+        session.voices.Verdict(name, 0.0, 0.0) for name in ("Lena", None, None)])
+    run = SimpleNamespace(speakers=lips, voices=heard, _samplerate=48000,
+                          actions=SimpleNamespace(names=lambda: {}))
+
+    lines = session.Session._sprecher(run, segmente, begins, np.zeros(3 * 48000, np.float32))
+    assert [line.name for line in lines] == ["Lena", "Klara", None]
+
+
+def test_without_lips_a_line_is_named_by_its_voice_alone():
+    begins = datetime(2026, 10, 15, 12, 0, 0)
+    segmente = [session.transcribe.Segment(0.5, 1.5, "Vater.")]
+    heard = SimpleNamespace(attribute=lambda segments, sound, rate: [
+        session.voices.Verdict("Alex", 0.0, 0.0)])
+    run = SimpleNamespace(speakers=None, voices=heard, _samplerate=16000)
+
+    [line] = session.Session._sprecher(run, segmente, begins, np.zeros(32000, np.float32))
+    assert (line.name, line.text, line.beginn) == ("Alex", "Vater.", begins + timedelta(seconds=0.5))

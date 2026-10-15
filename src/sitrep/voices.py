@@ -7,15 +7,27 @@ turned away has none. Their voice reaches the microphone from any side.
 WeSpeaker's ResNet34-LM, a speaker-verification network trained on VoxCeleb2
 (data/models/voice/SOURCE.md), turns a stretch of speech into a 256-value voice
 vector in which two stretches of the same voice lie close together. Each cast
-member's voice is enrolled from clips in data/cast/<Name>/voice/: the clips are
-cut into windows of speech the length of a spoken line, and the person's voice
-is the mean of the windows' vectors. A line is matched against every enrolled
-voice and named when one is clearly closest (`Voices.identify`); overlapping
-speech and voices not enrolled match no one.
+member's voice is enrolled from audio clips in data/cast/<Name>/, beside the
+photos, and in its voice/ folder: the clips are cut into windows of speech the
+length of a spoken line, and the person's voice is the mean of the windows'
+vectors. A line is matched against every enrolled voice and named when one is
+clearly closest (`Voices.identify`, per Whisper segment `Voices.attribute`);
+overlapping speech and voices not enrolled match no one.
+
+Voices are harvested from the rehearsal recordings, which carry the room and
+the microphone a run hears (`harvest`). Each recording is cut into lines, and
+a person's voice grows from an anchor, their own clip or one line they are
+known to speak (--seed), over the lines close to it. The lines kept are
+written as voice/rehearsals.wav, with voice/rehearsals.csv listing where each
+came from and what was said, to be listened to and checked.
+
+    python -m sitrep.voices data/cast --harvest REC1.mp4 REC2.mp4 ...
+    python -m sitrep.voices data/cast --harvest REC1.mp4 ... --seed Alex REC1.mp4 418
 
 The network's input, Kaldi filterbanks, is computed here in numpy as torchaudio
 computes it for WeSpeaker; src/scripts/export_voice.py writes the reference it
-is tested against. Nothing is written to disk.
+is tested against. A run writes nothing to disk; only a harvest writes, into
+the cast folder.
 
 Measure how well the cast's voices are told apart, on clips held out from the
 enrolment and on a dialogue labelled by hand:
@@ -68,8 +80,7 @@ PREEMPHASIS = 0.97
 EPSILON = float(np.finfo(np.float32).eps)
 
 # Stretches shorter than this many seconds are not matched: a voice vector
-# from under a second of speech is unreliable. Provisional until measured on
-# the cast's clips.
+# from under a second of speech is unreliable.
 MIN_VOICE = 1.0
 
 # Enrolment windows: each stretch of speech in a clip is cut into parts of
@@ -77,10 +88,33 @@ MIN_VOICE = 1.0
 WINDOW = 2.0
 
 # A line is named when its vector's cosine to a person's voice reaches
-# THRESHOLD and beats every other person's by MARGIN. Provisional until
-# measured on the cast's clips.
-THRESHOLD = 0.5
+# THRESHOLD and beats every other person's by MARGIN. Measured on the
+# rehearsals of 13 to 15 October (1073 lines, each recording matched against
+# voices harvested from the others): Lena and Alex were never taken for each
+# other, and 2 % of other voices' lines (direction, technicians) were named
+# one of them. Between 0.45 and 0.5 lie mostly play lines of the two; at 0.5
+# other voices are named in 1 % of lines.
+THRESHOLD = 0.45
 MARGIN = 0.1
+
+# Harvesting: lines of rehearsal recordings taken as further enrolment clips
+# (`harvest`). A line is taken for the voice it is closest to when its cosine
+# reaches HARVEST_THRESHOLD, stricter than THRESHOLD so that hardly a line of
+# anyone else enters an enrolment, and leads the next voice by MARGIN. On the
+# rehearsals of 13 to 15 October the least typical lines taken at 0.55 were
+# still the person's, by their text. At most HARVEST_SECONDS of a person's
+# speech are kept, taken in turn from each recording, most typical first, so
+# that every rehearsal adds its conditions while enrolment at a run's start
+# stays quick.
+HARVEST_THRESHOLD = 0.55
+HARVEST_SECONDS = 300.0
+HARVEST_ROUNDS = 8
+# The harvested clip (.wav) and its list of lines (.csv), in each person's
+# voice folder; replaced by every harvest.
+HARVEST_NAME = "rehearsals"
+# Silence between harvested lines, longer than utterances.END_SILENCE, so that
+# enrolment cuts them apart again.
+HARVEST_GAP = 0.6
 
 _lock = threading.Lock()
 _session = None
@@ -214,11 +248,13 @@ class Voices:
 
     @classmethod
     def enrol(cls, root: Path, **options) -> "Voices":
-        """Every person in a cast folder with clips in their `voice` folder."""
+        """Every person in a cast folder with voice clips: audio files beside
+        their photos, and in their `voice` folder."""
         found = {}
         for person in sorted(path for path in Path(root).iterdir() if path.is_dir()):
-            clips = sorted(path for path in (person / VOICE_FOLDER).glob("*")
-                           if path.suffix.lower() in AUDIO_SUFFIXES)
+            clips = sorted(path for folder in (person, person / VOICE_FOLDER)
+                           for path in folder.glob("*")
+                           if path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES)
             parts = [part for clip in clips for part in windows(decode(clip))]
             if parts:
                 found[person.name] = np.mean([embed(part) for part in parts], axis=0)
@@ -227,6 +263,10 @@ class Voices:
     @property
     def names(self) -> list[str]:
         return list(self._names)
+
+    def voices(self) -> dict[str, np.ndarray]:
+        """Each enrolled person's unit voice vector."""
+        return dict(zip(self._names, self._voices))
 
     def scores(self, vector: np.ndarray) -> dict[str, float]:
         """Cosine of a unit voice vector to each enrolled voice."""
@@ -258,9 +298,165 @@ class Voices:
             return Verdict(None, 0.0, 0.0)
         return self.match(embed(samples))
 
+    def attribute(self, segments: list[transcribe.Segment], sound: np.ndarray,
+                  rate: int) -> list[Verdict]:
+        """Whose voice each Whisper segment of an utterance is.
+
+        `sound` is the utterance's sound at `rate`, from whose start the
+        segments are timed. Each segment is matched on its own sound, so a
+        quick exchange within one utterance is told apart; one shorter than
+        MIN_VOICE names no one.
+        """
+        if not self._names:
+            return [Verdict(None, 0.0, 0.0) for _ in segments]
+        samples = sound if rate == RATE else decode(capture.encode_wav(sound, rate))
+        return [self.identify(samples[int(segment.start * RATE):int(segment.end * RATE)])
+                for segment in segments]
+
     def clear(self):
         """Delete the enrolled voices held."""
         self._names, self._voices = [], np.zeros((0, 0), dtype=np.float32)
+
+
+# Harvesting -----------------------------------------------------------------
+
+@dataclass(frozen=True, eq=False)
+class Line:
+    """A stretch of speech in a recording: where it begins (s), its sound at
+    RATE and its unit voice vector. Each line is equal only to itself."""
+
+    recording: Path
+    begin: float
+    samples: np.ndarray
+    vector: np.ndarray
+
+    @property
+    def seconds(self) -> float:
+        return len(self.samples) / RATE
+
+
+def recording_lines(path: Path) -> list[Line]:
+    """The stretches of speech in a recording at least MIN_VOICE long."""
+    samples = decode(path)
+    return [Line(Path(path).resolve(), first / RATE, samples[first:after],
+                 embed(samples[first:after]))
+            for first, after in speech(samples) if after - first >= MIN_VOICE * RATE]
+
+
+def line_at(lines: list[Line], recording: Path, second: float) -> Line | None:
+    """The line of a recording that is being spoken at `second`."""
+    for line in lines:
+        if (line.recording == Path(recording).resolve()
+                and line.begin <= second < line.begin + line.seconds):
+            return line
+    return None
+
+
+def _unit(vector: np.ndarray) -> np.ndarray:
+    return vector / max(float(np.linalg.norm(vector)), 1e-12)
+
+
+def harvest(anchors: dict[str, np.ndarray], lines: list[Line],
+            threshold: float = HARVEST_THRESHOLD,
+            margin: float = MARGIN) -> dict[str, list[tuple[Line, float]]]:
+    """Each person's lines among `lines`, with their cosine to the person's voice.
+
+    A person's voice starts at their anchor, their enrolled voice or a line
+    they are known to speak, and becomes the mean of the anchor and the lines
+    taken for them, until those no longer change. A line is taken for the
+    voice it is closest to when its cosine reaches `threshold` and leads the
+    next voice by `margin`. Voices without an anchor take no lines.
+    """
+    names = list(anchors)
+    if not names or not lines:
+        return {name: [] for name in names}
+    vectors = np.stack([line.vector for line in lines])
+    centres = np.stack([_unit(anchors[name]) for name in names])
+    taken: list[np.ndarray] | None = None
+    for _ in range(HARVEST_ROUNDS):
+        scores = vectors @ centres.T
+        ranked = np.sort(scores, axis=1)[:, ::-1]
+        lead = ranked[:, 0] - ranked[:, 1] if len(names) > 1 else ranked[:, 0]
+        sure = (ranked[:, 0] >= threshold) & (lead >= margin)
+        closest = scores.argmax(axis=1)
+        now = [np.flatnonzero(sure & (closest == index)) for index in range(len(names))]
+        if taken is not None and all(np.array_equal(old, new) for old, new in zip(taken, now)):
+            break
+        taken = now
+        centres = np.stack([_unit(np.vstack([_unit(anchors[name])[None], vectors[members]])
+                                  .mean(axis=0)) for name, members in zip(names, taken)])
+    return {name: [(lines[i], float(scores[i, index])) for i in members]
+            for index, (name, members) in enumerate(zip(names, taken))}
+
+
+def keep(taken: list[tuple[Line, float]],
+         seconds: float = HARVEST_SECONDS) -> list[tuple[Line, float]]:
+    """Up to `seconds` of a person's lines, taken in turn from each
+    recording, most typical first."""
+    queues: dict[Path, list[tuple[Line, float]]] = {}
+    for line, score in sorted(taken, key=lambda item: -item[1]):
+        queues.setdefault(line.recording, []).append((line, score))
+    kept, total = [], 0.0
+    while total < seconds and any(queues.values()):
+        for queue in queues.values():
+            if queue and total < seconds:
+                line, score = queue.pop(0)
+                kept.append((line, score))
+                total += line.seconds
+    return kept
+
+
+def write_harvest(folder: Path, kept: list[tuple[Line, float]], texts: list[str]):
+    """A person's harvested lines as one clip in their voice folder, each
+    after HARVEST_GAP of silence, and the list of lines beside it."""
+    folder.mkdir(parents=True, exist_ok=True)
+    gap = np.zeros(int(HARVEST_GAP * RATE), dtype=np.float32)
+    sound = np.concatenate([part for line, _ in kept for part in (gap, line.samples)] + [gap])
+    (folder / f"{HARVEST_NAME}.wav").write_bytes(capture.encode_wav(sound, RATE))
+    with open(folder / f"{HARVEST_NAME}.csv", "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["recording", "begin", "seconds", "cosine", "text"])
+        for (line, score), text in zip(kept, texts):
+            writer.writerow([line.recording.name, f"{line.begin:.1f}", f"{line.seconds:.1f}",
+                             f"{score:.2f}", text])
+
+
+def _transcript(line: Line, language: str) -> str:
+    return " ".join(segment.text.strip() for segment in
+                    transcribe.segments(capture.encode_wav(line.samples, RATE), language=language))
+
+
+def _harvest(cast: Path, recordings: list[Path], seeds: list[list[str]], language: str) -> int:
+    anchors = Voices.enrol(cast).voices()
+    lines = []
+    for recording in recordings:
+        found = recording_lines(recording)
+        print(f"{recording.name}: {len(found)} lines")
+        lines += found
+    for name, recording, second in seeds:
+        line = line_at(lines, Path(recording), float(second))
+        if line is None:
+            print(f"no line at {second} s in {recording}; give it with --harvest too",
+                  file=sys.stderr)
+            return 1
+        if name in anchors:
+            print(f"{name} is enrolled already; the seed is not needed", file=sys.stderr)
+            continue
+        anchors[name] = line.vector
+    if not anchors:
+        print(f"no voice clips under {cast}/<Name>/ and no --seed", file=sys.stderr)
+        return 1
+    for name, taken in harvest(anchors, lines).items():
+        kept = keep(taken)
+        if not kept:
+            print(f"{name}: no lines taken; {HARVEST_NAME}.wav left as it was")
+            continue
+        texts = [_transcript(line, language) for line, _ in kept]
+        write_harvest(Path(cast) / name / VOICE_FOLDER, kept, texts)
+        print(f"{name}: {len(taken)} lines found, {len(kept)} kept "
+              f"({sum(line.seconds for line, _ in kept):.0f} s) in "
+              f"{Path(cast) / name / VOICE_FOLDER / HARVEST_NAME}.wav")
+    return 0
 
 
 # Measurement ----------------------------------------------------------------
@@ -371,8 +567,16 @@ def _labelled(dialogue: Path, path: Path) -> list[tuple[str, float, np.ndarray]]
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m sitrep.voices",
-        description="Measure how well the cast's voices are told apart.")
-    parser.add_argument("cast", type=Path, help="cast folder with <Name>/voice/ clips")
+        description="Harvest the cast's voices from rehearsal recordings, and measure "
+                    "how well they are told apart.")
+    parser.add_argument("cast", type=Path, help="cast folder with voice clips in <Name>/")
+    parser.add_argument("--harvest", type=Path, nargs="+", metavar="RECORDING",
+                        help="take each voice's lines from these rehearsal recordings into "
+                             f"<Name>/{VOICE_FOLDER}/{HARVEST_NAME}.wav")
+    parser.add_argument("--seed", nargs=3, action="append", default=[],
+                        metavar=("NAME", "RECORDING", "SECOND"),
+                        help="with --harvest: a person without clips, by a line they speak "
+                             "at SECOND of RECORDING")
     parser.add_argument("--test", type=Path, help="held-out clips, one folder per person")
     parser.add_argument("--dialogue", type=Path, help="a recorded dialogue")
     parser.add_argument("--labels", type=Path, help="the dialogue's labelled lines (CSV)")
@@ -381,13 +585,15 @@ def main(argv=None) -> int:
     parser.add_argument("--language", default=transcribe.LANGUAGE)
     args = parser.parse_args(argv)
 
+    if args.harvest:
+        return _harvest(args.cast, args.harvest, args.seed, args.language)
     if args.dialogue and args.write_labels:
         _write_labels(args.dialogue, args.write_labels, args.language)
         return 0
 
     voices = Voices.enrol(args.cast)
     if not voices.names:
-        print(f"no voice clips under {args.cast}/*/{VOICE_FOLDER}/", file=sys.stderr)
+        print(f"no voice clips under {args.cast}/<Name>/", file=sys.stderr)
         return 1
     print(f"enrolled: {', '.join(voices.names)}  ({active_provider()})")
     for (first, second), similarity in voices.similarities().items():

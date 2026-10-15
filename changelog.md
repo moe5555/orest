@@ -6,6 +6,73 @@ referenced below.
 
 ---
 
+## 2026-10-15 — Speaker diarisation by voice, harvested from the rehearsals (VSH-ARLT-5090)
+
+Requested by Moe, with a voice clip of Lena (`data/cast/Lena/Human_Lena_Voice.mp3`,
+108 s, Elektra's prayer at the grave) and the wish to take the voices from the
+rehearsal material. Completes speaker diarisation, step 4 of the
+Realtime-SITREP in `02_processing.md` ("Sentiment Analysis", updated there),
+and the "Not yet" of the entry of 2026-10-07: a live run now names lines by
+voice.
+
+**Rehearsal sound.** The OBS recordings since 13 Oct 16:18 carry sound (the
+earlier ones are silent). Both channels are one room microphone
+(correlation 0.80–0.90), not one microphone per actor, so the channels
+cannot tell the speakers apart; the voices have to.
+
+**Voices found.** The seven recordings with sound (13–15 Oct, 53 min of
+speech in 1073 lines) group into six voices. One lies at cosine 0.82 to
+Lena's clip: Elektra's lines, and the whole LAWS speech ("Mein Name ist
+Alex Karpfen …"), so Lena gives that speech. Another speaks Orestes' lines
+("Ein zitternder Mann neigt leichter das Haupt …"); Moe confirmed it is Alex.
+The other four are the direction and technicians. Lena's and Alex's voices
+lie far apart (cosine 0.13).
+
+**Harvest** (`python -m sitrep.voices data/cast --harvest REC… [--seed NAME REC SECOND]`):
+- Each person's voice grows from an anchor, their own clip or one line they
+  are known to speak, over the lines close to it (`voices.harvest`): a line
+  is taken at cosine 0.55 (`HARVEST_THRESHOLD`) and a lead of 0.1 over the
+  other voice. From Alex's one seed line (WarmUp, 418 s) it settles after
+  three rounds.
+- Up to 300 s per person are kept, in turn from each recording, most
+  typical first (`HARVEST_SECONDS`), and written to
+  `data/cast/<Name>/voice/rehearsals.wav`, with `rehearsals.csv` listing each
+  line's recording, time, cosine and transcript. Run on 15 Oct: Lena 138
+  lines found, 85 kept; Alex 118 found, 65 kept. The least typical kept
+  lines are still theirs by their text.
+- Enrolment now also reads audio beside the photos, where Moe put Lena's clip.
+
+**Live run.** A line goes to the voice it matches; where none is clearly
+closest, the lips decide as before (`session._sprecher`). Each Whisper
+segment is matched on its own sound, so the utterance's sound now reaches
+the speaker step (`utterances.Sprecher`). Voices name lines also with action
+recognition off. Enrolment at the run's start takes 6 s.
+
+**Threshold.** Measured with each recording matched against voices
+harvested from the others: Lena and Alex were never taken for each other at
+any setting; 2 % of the other voices' lines were named one of them at 0.45,
+1 % at 0.5. Between 0.45 and 0.5 lie mostly play lines of the two, so
+`voices.THRESHOLD` is 0.45 (was a provisional 0.5). The groups came from the
+same voice vectors, so the rates for Lena's and Alex's own lines are
+flattered; the rates for other voices are not.
+
+**Held out:** the recording of 15 Oct 11:30, not harvested, 133 lines:
+21 named Alex, 34 Lena, 78 no one. Alex's oath ("Ich schwöre, diesem Haus
+treu zu dienen …") and Lena's weapons advert ("Die Munition, die Körper
+durchdringt …") are named rightly; the direction's lines, also those
+addressing Lena or Alex by name, are named no one. A few of Lena's lines
+fall below the threshold (e.g. "Zeig mir, wie viel du ertragen kannst",
+0.40). A replay of 838–898 s through a full run (`sitrep.replay`) named
+Lena's and Alex's lines and rated them into their values.
+
+742 tests pass (9 new). Not yet checked in a live run on the Scarlett input.
+
+**Next:** Alex's own recording goes into `data/cast/Alex/`; then
+`--harvest` over the rehearsals again, without `--seed`. Nils and Alessa can
+be seeded the same way from one line each.
+
+---
+
 ## 2026-10-15 — Prototype 4: larger values, outside the picture's frame
 
 Requested by Moe. Concerns Prototype 4 of the Live SITREP (`03_render.md`,

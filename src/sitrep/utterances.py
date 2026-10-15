@@ -20,7 +20,7 @@ MIN_SPEECH, it is taken for a click or a breath and dropped.
 
 Each utterance then goes through the steps a window's speech went through
 before: Whisper on the utterance's own sound (transcribe.py), attribution by
-lip movement (speakers.py) and loudness against the session's normal speech
+voice and lip movement (voices.py, speakers.py) and loudness against the session's normal speech
 (loudness.py). Its lines are handed out at once, unrated: text follows speech
 within about a second. The rating (speech.py) follows on a thread of its own,
 so that a rating under way never holds up the next line; lines handed out
@@ -269,9 +269,10 @@ class Stufen:
     bewerten: float
 
 
-# Who spoke each segment (report.Sprecher), and the lines rated with a few
-# earlier ones as context (speech.rate).
-Sprecher = Callable[[list[transcribe.Segment], datetime], list[report.Aeusserung]]
+# Who spoke each segment of an utterance, given the segments, the moment the
+# utterance's sound begins and that sound at the rate Utterances was given;
+# and the lines rated with a few earlier ones as context (speech.rate).
+Sprecher = Callable[[list[transcribe.Segment], datetime, np.ndarray], list[report.Aeusserung]]
 Einschaetzen = Callable[[list[report.Aeusserung], list[report.Aeusserung]], list[report.Aeusserung]]
 
 
@@ -383,7 +384,7 @@ class Utterances:
         spoken = ends - timedelta(seconds=PAD)
         segmente = transcribe.segments(capture.encode_wav(sound, self.rate),
                                        language=self._language)
-        lines = (self._sprecher(segmente, begins) if self._sprecher else
+        lines = (self._sprecher(segmente, begins, sound) if self._sprecher else
                  [report.Aeusserung(text=segment.text,
                                     beginn=begins + timedelta(seconds=segment.start),
                                     ende=begins + timedelta(seconds=segment.end))
