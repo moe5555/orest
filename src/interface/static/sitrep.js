@@ -615,6 +615,7 @@ function render(snapshot) {
   document.body.dataset.screen = fullPage.state(snapshot);
   renderIntervene(snapshot.empfehlung?.urteil);
   renderManualScreen(snapshot.scene?.screen ?? "");
+  strobe.update();
   for (const view of Object.values(ANSICHTEN)) view.render?.(snapshot);
 }
 
@@ -625,14 +626,15 @@ function render(snapshot) {
 // recommendation to intervene shows alone, with its reason and measure, until
 // the next recommendation or until the operator overrides it (X), in scenes
 // with Einschreiten. R shows the report alone, and R again returns. A scene's
-// key opens a screen of its own (Manual Interference), closed by the same key
-// or X. The screen takes precedence, then the report, since both were asked
-// for.
+// key opens a screen of its own or a stroboscope (Manual Interference), closed
+// by the same key or X. These take precedence, then the report, since both
+// were asked for.
 const fullPage = {
   // The report is on screen, from one R to the next.
   report: false,
 
   state(snapshot) {
+    if (snapshot?.scene?.strobe) return "strobe";
     if (snapshot?.scene?.screen) return "manual";
     if (this.report) return "report";
     const intervene = snapshot?.status === "running" && snapshot.scene?.interference !== false
@@ -650,9 +652,10 @@ const fullPage = {
 
   // R shows the report and asks for a new one while the run is live; with no
   // run and no earlier report there is nothing to show. X closes a scene's
-  // screen, or overrides a recommendation to intervene, while it is on screen.
+  // screen or stroboscope, or overrides a recommendation to intervene, while
+  // it is on screen.
   key(key) {
-    if (key === "x" && current && this.state(current) === "manual") {
+    if (key === "x" && current && ["manual", "strobe"].includes(this.state(current))) {
       post("/api/sitrep/screen/close");
       return true;
     }
@@ -726,6 +729,104 @@ function fitManualScreen(text = $("manual-screen-text").textContent) {
 
 addEventListener("resize", () => fitManualScreen());
 document.fonts.addEventListener("loadingdone", () => fitManualScreen());
+
+// A scene's stroboscope (Manual Interference), in cycles: a flash of fire, a
+// short gap, a second flash of the same fire dying down, moved a little to
+// one side, as if it flickered, then black. Each cycle draws a new fire and
+// varies the lengths within these bounds (ms, lowest and highest), so that it
+// flickers rather than beats. Two flashes in any second, within the three of
+// WCAG 2.3.1.
+const STROBE = {
+  first: [40, 60],
+  gap: [80, 130],
+  second: [30, 50],
+  dark: 3000,
+  // Over black, a flash's opacity is its brightness. The second flash dies
+  // down mostly by cooling (fireGradient's heat and hue), since yellow
+  // darkened much turns olive.
+  firstBrightness: [0.9, 1],
+  secondBrightness: [0.75, 0.9],
+};
+
+// The fire's colours from its heart outwards, as hue, saturation and
+// lightness, each at its place along the glow in percent: pale yellow,
+// yellow, orange, red-orange, deep red, embers.
+const FIRE = [
+  [50, 100, 89, 0], [46, 100, 62, 14], [30, 100, 55, 34],
+  [12, 89, 48, 56], [5, 94, 28, 80], [5, 100, 11, 100],
+];
+
+function between([low, high]) {
+  return low + Math.random() * (high - low);
+}
+
+// A glow rising from the bottom edge, its centre at x, y and its size width
+// by height, in percent of the window. Heat above 1 carries the yellow and
+// orange further out, below 1 leaves more of the window red; hue turns every
+// colour redder (negative) or more golden, stopping at red so the deep reds
+// never turn crimson. The embers stay at the edge.
+function fireGradient({ x, y, width, height, heat, hue }) {
+  const stops = FIRE.map(([h, s, l, at], i) => {
+    const place = i === FIRE.length - 1 ? at : at * heat;
+    return `hsl(${Math.max(0, h + hue).toFixed(1)} ${s}% ${l}%) ${place.toFixed(1)}%`;
+  });
+  return `radial-gradient(ellipse ${width.toFixed(1)}% ${height.toFixed(1)}% `
+    + `at ${x.toFixed(1)}% ${y.toFixed(1)}%, ${stops.join(", ")})`;
+}
+
+// A layer shown at a brightness from `start` for `length` ms of a cycle
+// `total` ms long, switched on and off without fading.
+function flash(layer, start, length, total, brightness) {
+  return layer.animate([
+    { opacity: 0, offset: 0, easing: "step-end" },
+    { opacity: brightness, offset: start / total, easing: "step-end" },
+    { opacity: 0, offset: (start + length) / total },
+    { opacity: 0, offset: 1 },
+  ], total);
+}
+
+const strobe = {
+  on: false,
+  playing: [],
+
+  // Runs while the stroboscope is on screen, from a first flash each time it
+  // appears.
+  update() {
+    const shown = $("strobe").getClientRects().length > 0;
+    if (shown === this.on) return;
+    this.on = shown;
+    if (shown) this.cycle();
+    else for (const animation of this.playing) animation.cancel();
+  },
+
+  // One cycle, then the next with a new fire, until it is closed. The fire is
+  // drawn while the layers are hidden, so a flash never changes as it shows.
+  cycle() {
+    if (!this.on) return;
+    const fire = {
+      x: between([30, 70]), y: between([98, 106]),
+      width: between([110, 150]), height: between([95, 130]),
+      heat: between([0.9, 1.2]), hue: between([-6, 6]),
+    };
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const flicker = { ...fire, x: fire.x + side * between([6, 16]),
+                      heat: fire.heat * between([0.6, 0.8]),
+                      hue: fire.hue - between([3, 8]) };
+    const [one, two] = $("strobe").children;
+    one.style.background = fireGradient(fire);
+    two.style.background = fireGradient(flicker);
+    const first = between(STROBE.first);
+    const gap = between(STROBE.gap);
+    const second = between(STROBE.second);
+    const total = first + gap + second + STROBE.dark;
+    this.playing = [
+      flash(one, 0, first, total, between(STROBE.firstBrightness)),
+      flash(two, first + gap, second, total, between(STROBE.secondBrightness)),
+    ];
+    // Cancelling on close rejects `finished`, which ends the cycles.
+    this.playing[0].finished.then(() => this.cycle(), () => {});
+  },
+};
 
 // ---- Views ----------------------------------------------------------------
 
@@ -813,8 +914,8 @@ document.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
   const bound = current?.scene?.keys?.[key];
   if (bound) {
-    // A screen opened is shown in place of the report.
-    if (bound.action === "screen") fullPage.report = false;
+    // A screen or stroboscope opened is shown in place of the report.
+    if (bound.action === "screen" || bound.action === "strobe") fullPage.report = false;
     post(`/api/sitrep/key/${encodeURIComponent(key)}`);
     event.preventDefault();
     return;

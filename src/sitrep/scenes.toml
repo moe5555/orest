@@ -15,6 +15,7 @@
 # Keys, one lower-case letter or digit each (R, E and X are taken):
 #
 #   keys.t = { screen = "TEXT" }                            open/close a page reading TEXT
+#   keys.t = { strobe = true }                              open/close the stroboscope page
 #   keys.p = { tracked = 3 }                                switch to 3 people tracked and back
 #   keys.w = { person = "Alex", value = "aggression", step = 1 }   raise a manual value
 #   keys.c = { swap = true }                                live feed <-> video
@@ -24,7 +25,7 @@
 ["Szene 1"]
 podest = { step = 1, floor = 2 }
 tracked = 30
-keys.t = { screen = "TROJA IST GEFALLEN" }
+keys.t = { strobe = true }
 keys.p = { tracked = 3 }
 
 ["Szene 1.2"]

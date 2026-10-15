@@ -14,8 +14,9 @@ The spec's settings, and where each takes effect:
 - Interference: `interference`, whether the alarm asks the model for a
   recommendation and an Einschreiten replaces the page (session.py,
   sitrep.js). Einschreiten is the only kind. On by default.
-- Manual Interference: keys with `screen`, a page reading that text, opened
-  with the key and closed with it or with X.
+- Manual Interference: keys with `screen`, a page reading that text, or
+  with `strobe`, a page flashing like a stroboscope; opened with the key and
+  closed with it or with X. One page is open at a time.
 - Tracked Persons: `tracked`, the bodies boxed, named and judged on the
   Podest (actions.ActionRatings.tracked), and keys with `tracked`, which
   switch to another number and back. Four by default, the size of the cast.
@@ -30,7 +31,7 @@ The spec's settings, and where each takes effect:
   feed and `video`, the video from its start each time.
 
 What the operator changes in a scene (`Current`): the number tracked, the
-manual values, the screen open and whether the video plays. It lasts until a
+manual values, the screen or stroboscope open and whether the video plays. It lasts until a
 scene is selected, across runs started meanwhile.
 """
 
@@ -91,8 +92,8 @@ class PodestRule(BaseModel):
 
 class Key(BaseModel):
     """What one key does in a scene: exactly one of opening a screen,
-    switching the number tracked, changing a manual value, or swapping the
-    live feed for the video."""
+    opening the stroboscope, switching the number tracked, changing a manual
+    value, or swapping the live feed for the video."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -102,15 +103,16 @@ class Key(BaseModel):
     value: str | None = None
     step: int | None = None
     swap: bool = False
+    strobe: bool = False
 
     @model_validator(mode="after")
     def _one_action(self) -> "Key":
         adjust = (self.person, self.value, self.step)
         chosen = [self.screen is not None, self.tracked is not None,
-                  any(part is not None for part in adjust), self.swap]
+                  any(part is not None for part in adjust), self.swap, self.strobe]
         if sum(chosen) != 1:
             raise ValueError("a key does exactly one of: screen, tracked, "
-                             "person/value/step, swap")
+                             "person/value/step, swap, strobe")
         if chosen[2]:
             if any(part is None for part in adjust):
                 raise ValueError("a manual value needs person, value and step")
@@ -120,9 +122,11 @@ class Key(BaseModel):
 
     @property
     def action(self) -> str:
-        """"screen", "tracked", "adjust" or "swap"."""
+        """"screen", "strobe", "tracked", "adjust" or "swap"."""
         if self.screen is not None:
             return "screen"
+        if self.strobe:
+            return "strobe"
         if self.tracked is not None:
             return "tracked"
         return "swap" if self.swap else "adjust"
@@ -131,6 +135,8 @@ class Key(BaseModel):
         """What the key does, as the operator reads it."""
         if self.action == "screen":
             return f"„{self.screen}“"
+        if self.action == "strobe":
+            return "Stroboskop"
         if self.action == "tracked":
             return f"{self.tracked} Personen verfolgen"
         if self.action == "adjust":
@@ -231,6 +237,7 @@ class Current:
             self.scene = scene
             self.tracked = scene.tracked
             self.screen: str | None = None
+            self.strobe = False
             self.recorded = scene.prerecorded
             self._manual: dict[str, dict[str, tuple[int, datetime]]] = {}
             # A problem the run met in carrying out the scene, e.g. a video
@@ -247,8 +254,14 @@ class Current:
             bound = self.scene.keys.get(key.lower())
             if bound is None:
                 return None
+            # A screen and the stroboscope each fill the page, so opening
+            # one closes the other.
             if bound.action == "screen":
                 self.screen = None if self.screen == bound.screen else bound.screen
+                self.strobe = False
+            elif bound.action == "strobe":
+                self.strobe = not self.strobe
+                self.screen = None
             elif bound.action == "tracked":
                 self.tracked = self.scene.tracked if self.tracked == bound.tracked else bound.tracked
             elif bound.action == "adjust":
@@ -261,11 +274,12 @@ class Current:
             return bound.action
 
     def close_screen(self) -> bool:
-        """Close the screen a key opened. False when none is open."""
+        """Close the screen or stroboscope a key opened. False when none is open."""
         with self._lock:
-            if self.screen is None:
+            if self.screen is None and not self.strobe:
                 return False
             self.screen = None
+            self.strobe = False
             return True
 
     def values_of(self, name: str) -> list[str]:
@@ -294,6 +308,7 @@ class Current:
                 "podest": scene.podest is not None,
                 "tracked": self.tracked,
                 "screen": self.screen,
+                "strobe": self.strobe,
                 "recorded": self.recorded and scene.video is not None,
                 "video": scene.video.name if scene.video else None,
                 "keys": {key: {"action": bound.action, "label": bound.label()}

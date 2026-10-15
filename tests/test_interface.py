@@ -618,6 +618,7 @@ def scene_controller(run, selected=None):
         scenes.DEFAULT_NAME: scenes.Scene(),
         "Szene 1": scenes.Scene(name="Szene 1", tracked=30,
                                 keys={"t": scenes.Key(screen="TROJA IST GEFALLEN"),
+                                      "z": scenes.Key(strobe=True),
                                       "p": scenes.Key(tracked=3)}),
     }
     return LiveSitrep(lambda: run, scenes.Current(), available,
@@ -661,6 +662,16 @@ def test_a_scene_key_opens_its_screen_and_the_same_key_or_closing_shuts_it(run):
     closed = client.post("/api/sitrep/screen/close").json()
     assert closed["closed"] and closed["scene"]["screen"] is None
     assert not client.post("/api/sitrep/key/q").json()["handled"]
+
+
+def test_the_stroboscope_opens_with_its_key_and_closes_with_closing(run):
+    controller = scene_controller(run)
+    controller.select("Szene 1")
+    client = TestClient(create_app(controller))
+
+    assert client.post("/api/sitrep/key/z").json()["scene"]["strobe"] is True
+    closed = client.post("/api/sitrep/screen/close").json()
+    assert closed["closed"] and closed["scene"]["strobe"] is False
 
 
 def test_on_the_strip_each_person_has_the_values_the_scene_shows_them_with(monkeypatch, run):

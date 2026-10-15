@@ -13,7 +13,7 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     assert list(loaded) == [scenes.DEFAULT_NAME, "Szene 1", "Szene 1.2", "Szene 2.3", "Szene 3"]
     eins = loaded["Szene 1"]
     assert (eins.podest, eins.tracked) == (scenes.PodestRule(step=1, floor=2), 30)
-    assert eins.keys["t"].screen == "TROJA IST GEFALLEN"
+    assert eins.keys["t"].action == "strobe"
     assert eins.keys["p"].tracked == 3
     zwei_drei = loaded["Szene 2.3"]
     assert zwei_drei.values_of("Alex") == ["aggression"]
@@ -40,6 +40,7 @@ def write(tmp_path, text) -> pathlib.Path:
 @pytest.mark.parametrize("text", [
     '["A"]\nkeys.r = { screen = "x" }\n',                      # taken by the page
     '["A"]\nkeys.t = { screen = "x", tracked = 3 }\n',          # two things at once
+    '["A"]\nkeys.t = { screen = "x", strobe = true }\n',        # two pages at once
     '["A"]\nkeys.t = {}\n',                                     # nothing
     '["A"]\nkeys.w = { person = "Alex", value = "risiko", step = 1 }\n',  # measured, not manual
     '["A"]\nkeys.w = { person = "Alex", value = "aggression" }\n',        # no step
@@ -89,6 +90,29 @@ def test_a_screen_opens_and_closes_with_its_key_or_closing():
     assert not current.close_screen()
 
 
+def test_the_stroboscope_opens_and_closes_with_its_key_or_closing():
+    current = scenes.Current(scenes.Scene(keys={"t": scenes.Key(strobe=True)}))
+    assert current.snapshot()["strobe"] is False
+    assert current.press("t") == "strobe"
+    assert current.snapshot()["strobe"] is True
+    current.press("t")
+    assert current.snapshot()["strobe"] is False
+    current.press("t")
+    assert current.close_screen()
+    assert current.snapshot()["strobe"] is False
+    assert not current.close_screen()
+
+
+def test_a_screen_and_the_stroboscope_are_never_open_together():
+    current = scenes.Current(scenes.Scene(keys={"t": scenes.Key(strobe=True),
+                                                "m": scenes.Key(screen="TROJA IST GEFALLEN")}))
+    current.press("m")
+    current.press("t")
+    assert (current.snapshot()["screen"], current.snapshot()["strobe"]) == (None, True)
+    current.press("m")
+    assert (current.snapshot()["screen"], current.snapshot()["strobe"]) == ("TROJA IST GEFALLEN", False)
+
+
 def test_a_key_switches_the_number_tracked_and_back():
     current = scenes.Current(scenes.Scene(tracked=30, keys={"p": scenes.Key(tracked=3)}))
     assert current.tracked == 30
@@ -132,23 +156,29 @@ def test_a_key_the_scene_does_not_have_does_nothing():
 def test_selecting_a_scene_undoes_what_the_operator_changed():
     scene = scenes.Scene(tracked=30, keys={"p": scenes.Key(tracked=3),
                                            "t": scenes.Key(screen="TROJA IST GEFALLEN"),
+                                           "z": scenes.Key(strobe=True),
                                            "w": scenes.Key(person="Alex", value="aggression",
                                                            step=1)})
     current = scenes.Current(scene)
     before = current.generation
-    for key in "ptw":
+    for key in "pzw":
         current.press(key)
     current.select(scene)
     shown = current.snapshot()
-    assert (shown["tracked"], shown["screen"], shown["manual"]) == (30, None, {})
+    assert (shown["tracked"], shown["strobe"], shown["manual"]) == (30, False, {})
     assert current.generation == before + 1
+    current.press("t")
+    current.select(scene)
+    assert current.snapshot()["screen"] is None
 
 
 def test_the_page_is_told_the_keys_and_what_they_do():
     current = scenes.Current(scenes.Scene(name="Szene 2.3", keys={
         "w": scenes.Key(person="Alex", value="aggression", step=1),
-        "m": scenes.Key(screen="Maximales Aggressionspotenzial erreicht.")}))
+        "m": scenes.Key(screen="Maximales Aggressionspotenzial erreicht."),
+        "t": scenes.Key(strobe=True)}))
     keys = current.snapshot()["keys"]
     assert keys == {"w": {"action": "adjust", "label": "Alex: Aggression +1"},
                     "m": {"action": "screen",
-                          "label": "„Maximales Aggressionspotenzial erreicht.“"}}
+                          "label": "„Maximales Aggressionspotenzial erreicht.“"},
+                    "t": {"action": "strobe", "label": "Stroboskop"}}

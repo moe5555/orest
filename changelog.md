@@ -6,6 +6,50 @@ referenced below.
 
 ---
 
+## 2026-10-14 — Scene 1: "T" opens a stroboscope
+
+Requested by Moe. Concerns Manual Interference in the scene configurations
+(`02_processing.md`, Scene 1) and its page in the Live SITREP of the RENDER
+step in `pipeline.md` (`03_render.md`). The "T" page in Scene 1 no longer
+reads "HIER IST DEIN ZEICHEN". It is now a stroboscope: the window flashes
+fire for 40–60 ms, goes black for 80–130 ms, flashes fire again for 30–50 ms,
+then stays black for 3 s, and repeats with a new fire. T or X closes it.
+
+- **A key action of its own.** `keys.t = { strobe = true }` in
+  `scenes.toml`, alongside `screen`, `tracked`, `swap` and the manual values
+  (`scenes.Key`). A text screen and the stroboscope both fill the page, so
+  opening one closes the other. Closing, selecting a scene and the snapshot
+  (`"strobe"`) treat it as they treat a screen.
+- **Drawn by the page** (`sitrep.js`, `strobe`), so the flashes keep time
+  without waiting on the server. It is shown in Prototypes 1 to 4 as a new
+  `data-screen` state, `strobe` (`fullPage`). The page times each cycle with
+  the browser's animations (one layer per flash, over pure black) and starts
+  with the flashes each time it opens. It lies above the Seestone mark, so the
+  mark does not show between the flashes.
+- **Fire colours** (requested by Moe after a first version flashed white).
+  Each flash is a radial glow from the bottom: pale yellow at its heart,
+  through orange, to deep red and embers at the edges (`FIRE`).
+- **A flicker, and a new fire every cycle** (requested by Moe after the fire
+  version's two flashes were identical). Each cycle draws a fire at random
+  within bounds: where the glow sits along the bottom, its size, its heat
+  (how far the yellow and orange reach) and its hue (a little redder or more
+  golden). The second flash is the same fire dying down: moved 6–16 % to one
+  side, cooler and slightly dimmer. The flash lengths and gap vary too
+  (`STROBE`). A plainly dimmed second flash, the first try, turned the yellow
+  olive, so it dies down mostly by cooling. The hue stops at red, so the deep
+  reds never turn crimson.
+- Two flashes in any second, within WCAG 2.3.1's three. Variation lies between
+  flashes rather than within one, which would add flashes.
+
+727 tests pass (4 new). Checked in headless Edge: three cycles seeked through
+(each with its own lengths, e.g. fire 0–43 ms and 143–192 ms, next cycle at
+3191 ms), a contact sheet of eight fires with their second flash at
+1920×1080, and the page itself against a camera-less stub with Szene 1: after
+T, Prototype 3 shows the stroboscope with both layers drawn; after closing,
+the page is back to normal. Not yet checked on the projector.
+
+---
+
 ## 2026-10-14 — Prototype 4 of the Live SITREP display
 
 Completes Prototype 4 in `03_render.md` ("Live SITREP"; RENDER step of
@@ -46,6 +90,17 @@ right of the picture, larger, and only Alex's and Lena's are shown. New tab
 723 tests pass (5 new). Checked in headless Edge at 1920×1080 against a stub
 run with Alex, Lena and Nils in view. Not yet checked on the projector or with
 the camera.
+
+---
+
+## 2026-10-14 — Scene 1: the "T" page reads "HIER IST DEIN ZEICHEN"
+
+Requested by Moe. Concerns Manual Interference in the scene configurations
+(`02_processing.md`, Scene 1) and its screen in the Live SITREP of the RENDER
+step in `pipeline.md` (`03_render.md`). The page that "T" opens in Scene 1 now
+reads "HIER IST DEIN ZEICHEN" instead of "TROJA IST GEFALLEN". Changed in
+`src/sitrep/scenes.toml` and in the Source of Truth; the test that loads the
+scenes file checks the new text. 68 interface and scene tests pass.
 
 ---
 

@@ -478,7 +478,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 /* The Seestone mark, top centre, at the size of the footer's and level with
    the tabs. Placed outside the flow, so no view gives up room for it, and
-   above the screens that fill the window (Einschreiten, a scene's screen). */
+   above the screens that fill the window (Einschreiten, a scene's screen),
+   though not the stroboscope. */
 .mark {
   position: absolute; top: 6px; left: 50%; z-index: 5;
   width: 20px; height: 20px;
@@ -672,6 +673,18 @@ body:not([data-screen="intervene"]) .intervene { display: none; }
 body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="manual"] .ansichten,
 body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="manual"] .wrap > :not(.manual-screen) { display: none; }
 body:not([data-screen="manual"]) .manual-screen { display: none; }
+
+/* A scene's stroboscope (Manual Interference): pure black, above the mark so
+   that nothing shows between the flashes. Each flash is a layer of fire,
+   drawn and timed in sitrep.js (strobe), hidden until its moment. */
+.strobe {
+  position: fixed; inset: 0; z-index: 6;
+  background: #000;
+}
+.strobe-flash { position: absolute; inset: 0; opacity: 0; }
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="strobe"] .ansichten,
+body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="strobe"] .wrap > :not(.strobe) { display: none; }
+body:not([data-screen="strobe"]) .strobe { display: none; }
 
 /* The report on R: alone, in the middle of the page, and clear of the mark
    when it is taller than the window. */
