@@ -2,7 +2,7 @@
 
 Faces name people only while a face is visible and large enough
 (presence.MIN_FACE). Seen from behind, turned away or far off, a person is a
-"Körper", and since body tracks end a second after a person is lost
+"Körper", and since body tracks end a few seconds after a person is lost
 (action/tracking.FORGET), someone who leaves and returns comes back unnamed.
 Their appearance, the clothes, colours and build, is visible from every side.
 

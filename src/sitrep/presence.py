@@ -59,6 +59,13 @@ from . import capture, cli, devices
 # Ollama, which run in the same window.
 INTERVAL = 0.5
 
+# Side of the square the face detector runs on (detect.detect). A 1920x1080
+# frame fitted into 640 shrinks a 40-pixel stage face to 13 pixels, at the
+# detector's limit; at 1280 it keeps 27. Measured on 19 rehearsal frames from
+# the Probebühne camera: 13 faces of at least MIN_FACE found at 1280, 8 at 640.
+# A pass costs 16 ms on the GPU, against 6 ms at 640.
+DETECTOR_SIZE = 1280
+
 # Faces smaller than this are ignored. Below 30 pixels identification recall
 # falls to roughly one in two, so a smaller face mostly adds a weak vector to a
 # track rather than information.
@@ -188,7 +195,7 @@ class PresenceTracker:
     def __init__(self, source, cast: gallery.Gallery | None = None, *,
                  interval: float = INTERVAL, min_face: float = MIN_FACE,
                  threshold: float = gallery.THRESHOLD,
-                 detector_size: int = detect.INPUT_SIZE):
+                 detector_size: int = DETECTOR_SIZE):
         self._source = source
         # Public: a run reports which cast it was given. Faces the operator
         # taught are added to it; the enrolled gallery is kept apart, so a
@@ -564,8 +571,9 @@ def main(argv=None) -> int:
     parser.add_argument("--passes", type=int, help="stop after this many passes")
     parser.add_argument("--threshold", type=float, default=gallery.THRESHOLD,
                         help=f"similarity needed to name a face (default: {gallery.THRESHOLD:g})")
-    parser.add_argument("--detector-size", type=int, default=detect.INPUT_SIZE,
-                        help="square the frame is fitted into before detection")
+    parser.add_argument("--detector-size", type=int, default=DETECTOR_SIZE,
+                        help=f"square the frame is fitted into before detection "
+                             f"(default: {DETECTOR_SIZE})")
     args = parser.parse_args(argv)
 
     cast = None

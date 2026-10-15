@@ -116,6 +116,17 @@ def test_a_body_hidden_briefly_keeps_its_id():
     assert after == before
 
 
+def test_a_body_lost_in_the_dark_for_seconds_keeps_its_id_where_it_stood():
+    """Pose loses an actor in black upstage for up to 2.7 s; the actor is the
+    same body when found again in the same place."""
+    tracker = tracking.BodyTracker()
+    before = next(iter(tracker.update(*detections(figure(500)), at=0.0).bodies))
+    for at in (0.5, 1.5, 2.5):
+        tracker.update(*detections(), at=at)
+    after = next(iter(tracker.update(*detections(figure(503)), at=2.7).bodies))
+    assert after == before
+
+
 def test_a_detection_with_too_few_visible_joints_is_not_followed():
     keypoints, scores = detections(figure(500))
     scores[0, tracking.MIN_JOINTS - 1:] = 0.0

@@ -61,9 +61,11 @@ MIRRORED = [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
 LINK = 0.3
 
 # Seconds a body may go undetected and keep its identity, e.g. behind another
-# actor. Longer, and a person walking out and another walking in could be
-# taken for one.
-FORGET = 1.0
+# actor or in the dark. On the Probebühne camera, pose loses an actor in black
+# against the black curtain upstage for 1.0-2.7 s at a time and finds them
+# again where they stood (box overlap 0.70-0.96). A person walking out and
+# another walking in at the same place within this time are taken for one.
+FORGET = 3.0
 
 # Seconds of frames kept; at least the longest window cut from them.
 HISTORY = 10.0

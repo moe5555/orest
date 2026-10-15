@@ -71,6 +71,16 @@ def test_a_track_keeps_the_box_of_its_latest_sighting():
     assert touched[0].box.tolist() == [100, 0, 150, 50]
 
 
+def test_a_live_pass_detects_on_the_larger_square_that_keeps_stage_faces(monkeypatch):
+    sizes = []
+    monkeypatch.setattr(presence.detect, "detect",
+                        lambda frame, size: sizes.append(size) or [])
+
+    tracker().observe(np.zeros((1080, 1920, 3), dtype=np.uint8), at=START)
+
+    assert sizes == [presence.DETECTOR_SIZE] and presence.DETECTOR_SIZE > presence.detect.INPUT_SIZE
+
+
 def test_naming_a_frame_pairs_each_recognised_face_with_its_name(monkeypatch):
     """name_faces is what annotate.py draws, so each box must carry the name
     of the track its face joined, in detection order. An unrecognised face is

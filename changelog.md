@@ -6,6 +6,66 @@ referenced below.
 
 ---
 
+## 2026-10-14 — Names lost again: tracks break in the dark, and neither face nor costume finds the person again (VSH-ARLT-5090)
+
+**Moe's observation:** in today's run the cast had to be named by hand again
+and again, and recognition did not improve. Concerns "who is in the scene"
+(`02_processing.md`) and the names on the Live SITREP (`03_render.md`). The
+run now reads 1920×1080, as the 2026-10-07 entry asked.
+
+**Measured** on the running `apollon-ui` (Szene 3, cast `data/cast`), with the
+snapshot read four times a second for 5 min, and on the same run's OBS
+recording `2026-10-14 12-15-52_SM.mp4` (raw frames, 640–880 s replayed through
+pose and `tracking.BodyTracker`):
+- **Track ids:** 101 in 5 min live (20 a minute), most of them under a second.
+  In the replay, 19 tracks ended with the person still on stage. In 15 of
+  them, pose lost the person for 1.0–2.7 s and found them again in the same
+  place (box overlap 0.70–0.96 in 12). That was mostly an actor standing
+  upstage in the unlit area, black costume against the black curtain.
+- **Names given by hand:** Alex kept his name on track 743 for 130 s, until
+  the track ended. He returned as `Körper 807`, alone in the picture for part
+  of it, and stayed unnamed for 33 s until he was named again. Lena kept hers
+  on track 758 for 4.5 s and was unnamed for the next 160 s.
+- **Faces:** 10 of the 31 cast photographs hold no usable face (full-body and
+  back views, saved at 640×480 and 320×240), leaving Alessa 5, Alex 5,
+  Lena 8 and Nils 3. On stage, faces are 31–48 px. Their best cast match
+  scored 0.17–0.45, above `gallery.THRESHOLD` (0.40) for 2 of 10 faces. With
+  the detector's 640 px input, 19 frames gave 8 faces; with 1280, 13.
+- **Appearance:** the cast wears one costume, a black T-shirt and dark track
+  trousers with white stripes. On crops identified by eye, the same person
+  scored 0.56–0.69 and Alex against Lena 0.46–0.62, so
+  `appearance.THRESHOLD` (0.65) with `MARGIN` (0.05) names almost no one. A
+  person in a jacket was named Alessa by appearance on three tracks in a row.
+
+**Cause.**
+- A name given by hand belongs to a body track (`ActionRatings.assign`).
+  `tracking.FORGET` (1 s) ends that track during the short pose drop-outs.
+- On this camera and in this costume, neither faces nor appearance carry the
+  name to the new track.
+- What a run learns is not saved (2026-10-06), so every run starts again from
+  the photographs.
+
+**Changed** (requested by Moe):
+- **A lost body keeps its id for 3 s** (`tracking.FORGET`, was 1 s), so a
+  name given by hand, the votes and the action windows hold through the
+  drop-outs. The price: a person walking in where another was lost within
+  3 s is taken for them, with their name.
+- **Live faces are detected on a 1280 px square** (`presence.DETECTOR_SIZE`,
+  was `detect.INPUT_SIZE`, 640), which keeps a 40 px stage face at 27 px
+  for the detector instead of 13. A pass costs 16 ms on the GPU, against
+  6 ms. Cast enrolment keeps 640, since its close-ups would be upscaled.
+
+**Replayed** over the same 640–880 s with the new `FORGET`: 32 tracks instead
+of 52, no drop-out in place left unjoined (was 15), fragments under 0.5 s 16
+(was 26). Tracks at the 75th percentile last 10 s (was 2.7 s). Whether any
+join went to a different person was not checked frame by frame. 729 tests
+pass (2 new). Takes effect when `apollon-ui` is restarted.
+
+**Next:** enrol the cast from this camera: face crops from the rehearsal
+recordings in `data/cast/<Name>/`, and photographs at full resolution.
+
+---
+
 ## 2026-10-14 — Scene 1: "T" opens a stroboscope
 
 Requested by Moe. Concerns Manual Interference in the scene configurations
