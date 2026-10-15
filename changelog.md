@@ -6,6 +6,28 @@ referenced below.
 
 ---
 
+## 2026-10-15 — Athene planetary: an abstract sphere, detections that name nothing
+
+Moe asked for the planetary design to be more abstract: no literal planet
+and no descriptions (`athene/page/designs/planetary.js`).
+- **Sphere:** continents, coast, clouds and day and night are replaced by a
+  field of blue light folded into itself (noise displaced by noise, three
+  octaves), after the Palantír and the ElevenLabs orbs of
+  `athene/description.md`. It is lit from within and darkens to the rim. A
+  first version with six octaves still read as terrain under contour lines.
+- **Voice:** the interior flows 0.02 noise units per second at rest, plus
+  0.12 per second of full smoothed level. The level still brightens contour
+  lines and graticule, and now also lights the sphere from within.
+- **Labels:** removed. Boxes are corner brackets only, Bone when opened by
+  the level and Signal when locked. Identifiers in place of the classes
+  (`53\8891`) were tried first and still read as labels.
+
+Tracks, links, locks, satellites, sweep and ring are unchanged; with fewer
+seeded draws per track, the tracks sit in other places than before.
+`Human_Lena_Voice_planetary_56-66s.mp4` is rendered anew.
+
+---
+
 ## 2026-10-15 — Smart Search server starts without internet
 
 `apollon-search serve` failed on the theatre machine without network. WISE

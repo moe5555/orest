@@ -1,42 +1,52 @@
-/* Planetary: a blue planet read by the lines of a machine that watches it.
+/* Planetary: a sphere of blue light read by the lines of a machine that
+   watches it.
 
-   The planet stands for the world, the points and lines that move around and
-   across it for the planetary computation that analyses everything going on
-   there: Athene, goddess of war and strategy. After the moodboard in
+   The sphere is abstract: a body of light flowing within itself, after the
+   Palantír and the ElevenLabs orbs (athene/description.md). The points and
+   lines that move around and across it stand for a planetary computation
+   that analyses everything, and the detections name nothing: Athene, goddess
+   of war and strategy. The instruments after the moodboard in
    athene/moodboard_planetary: the Northern Circle star maps (polar
    projection, dotted rings, crosshair, fine network lines), the circular
    maps of Frédérique Aït-Touati's Terra Forma, a radar interface, and a dark
    orb under a triangulated mesh.
 
-     planet   drawn per pixel by WebGL: continents with contour lines and a
-              lit coast, clouds, a graticule, day and night, an atmosphere in
-              Signal. It turns once in 90 s; the voice brightens its contour
-              lines and graticule, the planet being read.
+     sphere   drawn per pixel by WebGL: a field folded into itself in shades
+              of blue, its contour lines, a graticule, a rim in Signal. It
+              turns once in 90 s and its interior flows, faster with the
+              voice; the voice also brightens contour lines and graticule
+              and lights it from within, the sphere being read.
      tracks   points on the surface, in clusters, turning with it; links to
               their neighbours run across it as great-circle arcs.
      boxes    detections in the style of Apollon's display (annotate.DISPLAY):
-              corner brackets in Bone, the class in IBM Plex Mono capitals,
-              the confidence in Michroma. The louder the voice, the more
-              tracks are boxed; a box closes in on its track as it opens.
+              corner brackets in Bone, without labels. The louder the voice,
+              the more tracks are boxed; a box closes in on its track as it
+              opens.
      locks    each syllable locks one track in Signal, beams it from the
               nearest satellite and sends packets along its links.
-     sweep    a radar sweep around the planet, faster with the voice; tracks
+     sweep    a radar sweep around the sphere, faster with the voice; tracks
               it passes flash.
      ring     a degree ring with ticks and a crosshair, after the star maps;
-              satellites on their orbits around the planet.
+              satellites on their orbits around the sphere.
 
    Every motion follows the level smoothed both ways and eases in and out. */
 
 "use strict";
 
-const PLANET = {
+const SPHERE = {
   radius: 560,
   tiltToward: 0.32,            // radians the north pole leans towards the audience
-  tiltSide: 0.41,              // radians the axis leans sideways (the Earth's 23.4°)
+  tiltSide: 0.41,              // radians the axis leans sideways
   turn: 2 * Math.PI / 90,      // radians per second
-  clouds: 2 * Math.PI / 240,   // radians per second the clouds drift over the ground
-  light: [-0.55, 0.45, 0.7],   // towards the sun, in view space
-  size: 1520,                  // px, side of the square drawn around the planet
+  light: [-0.55, 0.45, 0.7],   // towards the light, in view space
+  size: 1520,                  // px, side of the square drawn around the sphere
+};
+
+// How far the interior flows, in noise units: slowly at rest, stirred by
+// the voice.
+const FLOW = {
+  rest: 0.02,                  // per second
+  voice: 0.12,                 // added per second of full smoothed level
 };
 
 const TRACKS = {
@@ -48,8 +58,6 @@ const TRACKS = {
   threshold: [0.35, 1.2],      // smoothed level at which a track's box begins to open (some never)
   opening: 0.2,                // level over which it opens fully
   box: [44, 96],               // px
-  labelled: 0.3,               // share of boxes that carry a label
-  classes: ["PERSON", "MENGE", "FAHRZEUG", "KONVOI", "SCHIFF", "FLUGZEUG", "GEBÄUDE", "FUNK"],
 };
 
 const LOCK = {
@@ -61,7 +69,7 @@ const LOCK = {
 
 const ORBITS = {
   count: 6,
-  radius: [1.12, 1.3],         // fractions of the planet's radius
+  radius: [1.12, 1.3],         // fractions of the sphere's radius
   period: [40, 110],           // seconds per orbit
 };
 
@@ -72,9 +80,9 @@ const SWEEP = {
   ping: 0.6,                   // radians behind the sweep over which a passed track fades
 };
 
-const RING = { radius: 1.38, dots: 1.07 };   // fractions of the planet's radius
+const RING = { radius: 1.38, dots: 1.07 };   // fractions of the sphere's radius
 const LINE = { fine: 1.5, box: 2.5 };        // px
-const TEXT = { label: 22, ring: 20 };        // px
+const TEXT = { ring: 20 };                   // px
 const SMOOTH = 0.3;                          // seconds; the level smoothed both ways
 
 const prng = makeRandom(23);
@@ -98,14 +106,14 @@ function unitRandom(rand) {
   return [s * Math.cos(a), z, s * Math.sin(a)];
 }
 
-// A point on the planet (its own frame) seen from the audience at a turn.
+// A point on the sphere (its own frame) seen from the audience at a turn.
 function toView(q, turn) {
-  return rotX(rotZ(rotY(q, -turn), PLANET.tiltSide), PLANET.tiltToward);
+  return rotX(rotZ(rotY(q, -turn), SPHERE.tiltSide), SPHERE.tiltToward);
 }
 
-// View space in planet radii to frame pixels.
+// View space in sphere radii to frame pixels.
 function toScreen(v) {
-  return [LAYOUT.orbX + PLANET.radius * v[0], LAYOUT.orbY - PLANET.radius * v[1]];
+  return [LAYOUT.orbX + SPHERE.radius * v[0], LAYOUT.orbY - SPHERE.radius * v[1]];
 }
 
 // The great circle from a to b at s in [0, 1].
@@ -118,7 +126,7 @@ function slerp(a, b, s) {
 
 // ---- Fixed shapes ----------------------------------------------------------
 
-// Tracks in clusters, as settlements, harbours and roads gather them.
+// Tracks in clusters, so that links run dense within one and sparse between.
 const TRACK_SET = [];
 for (let c = 0; c < TRACKS.clusters; c++) {
   const centre = unitRandom(prng);
@@ -129,9 +137,6 @@ for (let c = 0; c < TRACKS.clusters; c++) {
       p: normalize(centre.map((v, i) => v + offset[i])),
       threshold: pick(TRACKS.threshold),
       box: pick(TRACKS.box),
-      labelled: prng() < TRACKS.labelled,
-      label: `${TRACKS.classes[Math.floor(prng() * TRACKS.classes.length)]} ${String(Math.floor(prng() * 9000) + 1000)}`,
-      confidence: 0.55 + 0.4 * prng(),
       neighbours: [],
     });
   }
@@ -169,15 +174,15 @@ const ORBIT_SET = Array.from({ length: ORBITS.count }, () => {
   };
 });
 
-// View-space position of a satellite at time t, in planet radii.
+// View-space position of a satellite at time t, in sphere radii.
 function satellite(o, t) {
   const u = o.phase + 2 * Math.PI * t / o.period;
   return [0, 1, 2].map((k) => o.radius * (Math.cos(u) * o.e1[k] + Math.sin(u) * o.e2[k]));
 }
 
-const behindPlanet = (v) => v[2] < 0 && v[0] * v[0] + v[1] * v[1] < 1;
+const behindSphere = (v) => v[2] < 0 && v[0] * v[0] + v[1] * v[1] < 1;
 
-// ---- Planet (WebGL) --------------------------------------------------------
+// ---- Sphere (WebGL) --------------------------------------------------------
 
 const VERTEX = `#version 300 es
 void main() {
@@ -190,22 +195,20 @@ precision highp float;
 uniform vec2 uSize;
 uniform float uRadius;
 uniform float uTurn;
-uniform float uClouds;
+uniform float uFlow;       // how far the interior has flowed
 uniform vec2 uTilt;        // towards the audience, sideways
 uniform vec3 uLight;
-uniform float uRead;       // 0 to 1: how strongly the planet is being read
+uniform float uRead;       // 0 to 1: how strongly the sphere is being read
 out vec4 outColor;
 
+// Shades of blue from the darkest to the lightest, then lines and the rim.
 const vec3 DEEP = vec3(0.016, 0.043, 0.102);
-const vec3 OCEAN = vec3(0.043, 0.129, 0.278);
-const vec3 LOW = vec3(0.106, 0.247, 0.478);
-const vec3 HIGH = vec3(0.227, 0.435, 0.769);
-const vec3 PEAK = vec3(0.612, 0.753, 0.969);
-const vec3 COAST = vec3(0.498, 0.690, 1.0);
+const vec3 DARK = vec3(0.043, 0.129, 0.278);
+const vec3 MID = vec3(0.106, 0.247, 0.478);
+const vec3 LIGHT = vec3(0.227, 0.435, 0.769);
+const vec3 PALE = vec3(0.612, 0.753, 0.969);
 const vec3 CONTOUR = vec3(0.561, 0.714, 0.949);
-const vec3 CLOUD = vec3(0.902, 0.933, 0.988);
 const vec3 SIGNAL = vec3(0.357, 0.608, 1.0);
-const float SEA = 0.5;
 
 vec3 rotX(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(v.x, c * v.y - s * v.z, s * v.y + c * v.z); }
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
@@ -235,6 +238,27 @@ float fbm(vec3 p) {
   return v / 0.984;
 }
 
+// Three octaves only: smooth and liquid rather than rugged.
+float smoothFbm(vec3 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 3; i++) {
+    v += a * noise(p);
+    p = p * 2.03 + vec3(1.7, 9.2, 5.3);
+    a *= 0.5;
+  }
+  return v / 0.875;
+}
+
+// The interior, 0 to 1: noise whose coordinates are displaced by noise, so
+// it folds into slow swirls. Shifting the displacement by uFlow makes it
+// flow without repeating.
+float field(vec3 q) {
+  vec3 warp = vec3(smoothFbm(q * 0.9 + vec3(0.0, 0.0, uFlow)),
+                   smoothFbm(q * 0.9 + vec3(5.2, 1.3, -uFlow)),
+                   smoothFbm(q * 0.9 + vec3(1.7, 9.2, 0.7 * uFlow)));
+  return smoothFbm(q * 1.1 + 3.0 * (warp - 0.5) + vec3(3.1, 1.3, 7.7));
+}
+
 // 1 on lines every step of x, anti-aliased to about a pixel.
 float lines(float x, float step) {
   float d = abs(fract(x / step + 0.5) - 0.5) * step;
@@ -254,34 +278,32 @@ void main() {
   vec3 n = vec3(p, sqrt(max(0.0, 1.0 - min(r * r, 1.0))));
   vec3 q = rotY(rotZ(rotX(n, -uTilt.x), -uTilt.y), uTurn);
 
-  float e = fbm(q * 1.7 + vec3(3.1, 1.3, 7.7));
-  float land = smoothstep(SEA - fwidth(e), SEA + fwidth(e), e);
-  vec3 ocean = mix(DEEP, OCEAN, smoothstep(0.3, SEA, e));
-  vec3 ground = mix(LOW, HIGH, smoothstep(SEA, SEA + 0.15, e));
-  ground = mix(ground, PEAK, smoothstep(SEA + 0.15, SEA + 0.28, e));
-  vec3 col = mix(ocean, ground, land);
-  col = mix(col, CONTOUR, lines((e - SEA) / 0.025, 1.0) * land * (0.2 + 0.4 * uRead));
-  col = mix(col, COAST, (1.0 - smoothstep(0.0, fwidth(e) * 1.5, abs(e - SEA))) * 0.8);
+  float f = field(q);
+  vec3 col = mix(DEEP, DARK, smoothstep(0.30, 0.44, f));
+  col = mix(col, MID, smoothstep(0.42, 0.56, f));
+  col = mix(col, LIGHT, smoothstep(0.54, 0.68, f));
+  col = mix(col, PALE, 0.5 * smoothstep(0.64, 0.80, f));
+  col = mix(col, CONTOUR, lines(f / 0.05, 1.0) * (0.12 + 0.4 * uRead));
 
-  float c = fbm(rotY(q, uClouds) * 2.6 + vec3(11.0, 4.0, 2.0));
-  col = mix(col, CLOUD, smoothstep(0.56, 0.78, c) * 0.5);
-
-  float day = smoothstep(-0.2, 0.55, dot(n, uLight));
-  col *= 0.16 + 0.84 * day;
+  // Lit from within, darkening towards the rim, with a little light from
+  // one side for volume; brighter still while she speaks.
+  float shade = (0.3 + 0.7 * n.z) * (0.75 + 0.25 * smoothstep(-0.5, 0.9, dot(n, uLight)));
+  col *= shade;
+  col += SIGNAL * 0.18 * uRead * n.z * n.z;
 
   float lat = degrees(asin(clamp(q.y, -1.0, 1.0)));
   float lon = degrees(atan(q.z, q.x));
   float grid = max(lines(lat, 15.0), lines(lon, 15.0) * smoothstep(80.0, 70.0, abs(lat)));
   col = mix(col, SIGNAL, grid * (0.1 + 0.3 * uRead));
 
-  col += SIGNAL * pow(1.0 - n.z, 3.0) * 0.45 * (0.3 + 0.7 * day);
+  col += SIGNAL * pow(1.0 - n.z, 3.0) * 0.45 * shade;
 
   float cover = 1.0 - smoothstep(1.0 - aa, 1.0, r);
   outColor = vec4(col * cover + SIGNAL * halo * (1.0 - cover), cover + halo * (1.0 - cover));
 }`;
 
-const planetCanvas = offscreen(PLANET.size, PLANET.size);
-const gl = planetCanvas.getContext("webgl2", { premultipliedAlpha: true, preserveDrawingBuffer: true, antialias: false });
+const sphereCanvas = offscreen(SPHERE.size, SPHERE.size);
+const gl = sphereCanvas.getContext("webgl2", { premultipliedAlpha: true, preserveDrawingBuffer: true, antialias: false });
 if (!gl) throw new Error("WebGL2 is not available");
 
 function compile(type, source) {
@@ -298,24 +320,24 @@ gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT));
 gl.linkProgram(program);
 if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
 const uniform = Object.fromEntries(
-  ["uSize", "uRadius", "uTurn", "uClouds", "uTilt", "uLight", "uRead"]
+  ["uSize", "uRadius", "uTurn", "uFlow", "uTilt", "uLight", "uRead"]
     .map((name) => [name, gl.getUniformLocation(program, name)]));
 
-function drawPlanet(t, read) {
-  const s = PLANET.size;
+function drawSphere(t, read, flow) {
+  const s = SPHERE.size;
   gl.viewport(0, 0, s, s);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(program);
   gl.uniform2f(uniform.uSize, s, s);
-  gl.uniform1f(uniform.uRadius, PLANET.radius);
-  gl.uniform1f(uniform.uTurn, PLANET.turn * t);
-  gl.uniform1f(uniform.uClouds, PLANET.clouds * t);
-  gl.uniform2f(uniform.uTilt, PLANET.tiltToward, PLANET.tiltSide);
-  gl.uniform3fv(uniform.uLight, normalize(PLANET.light));
+  gl.uniform1f(uniform.uRadius, SPHERE.radius);
+  gl.uniform1f(uniform.uTurn, SPHERE.turn * t);
+  gl.uniform1f(uniform.uFlow, flow);
+  gl.uniform2f(uniform.uTilt, SPHERE.tiltToward, SPHERE.tiltSide);
+  gl.uniform3fv(uniform.uLight, normalize(SPHERE.light));
   gl.uniform1f(uniform.uRead, read);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  ctx.drawImage(planetCanvas, LAYOUT.orbX - s / 2, LAYOUT.orbY - s / 2);
+  ctx.drawImage(sphereCanvas,LAYOUT.orbX - s / 2, LAYOUT.orbY - s / 2);
 }
 
 // ---- Locks -----------------------------------------------------------------
@@ -328,14 +350,14 @@ function lockOf(j) {
   if (!locks.has(j)) {
     const start = clip.onsets[j][0];
     const rand = makeRandom(7000 + j);
-    const turn = PLANET.turn * start;
+    const turn = SPHERE.turn * start;
     const visible = TRACK_SET.map((tr, i) => [i, toView(tr.p, turn)[2]]).filter(([, z]) => z > LOCK.inner);
     const track = visible.length ? visible[Math.floor(rand() * visible.length)][0] : 0;
     const [tx, ty] = toScreen(toView(TRACK_SET[track].p, turn));
     let sat = 0, best = Infinity;
     ORBIT_SET.forEach((o, k) => {
       const v = satellite(o, start);
-      if (behindPlanet(v)) return;
+      if (behindSphere(v)) return;
       const [sx, sy] = toScreen(v);
       const d = Math.hypot(sx - tx, sy - ty);
       if (d < best) { best = d; sat = k; }
@@ -363,7 +385,7 @@ function lockEnvelope(age) {
 // ---- Overlay ---------------------------------------------------------------
 
 function ringRadius() {
-  return PLANET.radius * RING.radius;
+  return SPHERE.radius * RING.radius;
 }
 
 function drawRing() {
@@ -391,8 +413,8 @@ function drawRing() {
     ctx.fillText(String(deg).padStart(3, "0"), orbX + (r - 34) * Math.cos(a), orbY + (r - 34) * Math.sin(a));
   }
 
-  // The dotted circle close around the planet.
-  const d = PLANET.radius * RING.dots;
+  // The dotted circle close around the sphere.
+  const d = SPHERE.radius * RING.dots;
   ctx.globalAlpha = 0.5;
   ctx.beginPath();
   for (let deg = 0; deg < 360; deg += 1.5) {
@@ -421,7 +443,7 @@ function drawCrosshair() {
   ctx.globalAlpha = 1;
 }
 
-// Orbits behind the planet before it is drawn, those in front after.
+// Orbits behind the sphere before it is drawn, those in front after.
 function drawOrbits(t, front) {
   ctx.lineWidth = LINE.fine;
   ctx.strokeStyle = COLOR.steel;
@@ -516,53 +538,7 @@ function brackets(cx, cy, size) {
   ctx.stroke();
 }
 
-function labelFont(part) {
-  ctx.font = part === "text" ? `600 ${TEXT.label}px "IBM Plex Mono"` : `400 ${TEXT.label}px Michroma`;
-  ctx.letterSpacing = part === "text" ? "0.12em" : "0px";
-}
-
-// The tag a label occupies: [x, y, width, height].
-function labelRect(l) {
-  labelFont("text");
-  l.w = ctx.measureText(l.text).width;
-  labelFont("value");
-  const v = ctx.measureText(l.value).width;
-  return [l.x - 4, l.y - TEXT.label - 4, l.w + v + 22, TEXT.label + 10];
-}
-
-// Labels in order of priority; one that would overlap a label already set
-// is left out.
-function drawLabels(candidates) {
-  const placed = [];
-  const overlaps = (a, b) => a[0] < b[0] + b[2] + 6 && b[0] < a[0] + a[2] + 6 && a[1] < b[1] + b[3] + 6 && b[1] < a[1] + a[3] + 6;
-  candidates.sort((a, b) => b.priority - a.priority);
-  for (const l of candidates) {
-    const rect = labelRect(l);
-    if (placed.some((p) => overlaps(p, rect))) continue;
-    placed.push(rect);
-    label(l, rect);
-  }
-  ctx.globalAlpha = 1;
-}
-
-// A label above a box: the class on a black tag, the confidence after it.
-function label({ x, y, text, value, valueColor, alpha, w }, rect) {
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = COLOR.ground;
-  ctx.globalAlpha = alpha * 0.7;
-  ctx.fillRect(...rect);
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = COLOR.bone;
-  labelFont("text");
-  ctx.fillText(text, x, y);
-  ctx.fillStyle = valueColor;
-  labelFont("value");
-  ctx.fillText(value, x + w + 12, y);
-}
-
 function drawTracks(turn, sweep, opened, locked) {
-  const labels = [];
   TRACK_SET.forEach((tr, i) => {
     const v = toView(tr.p, turn);
     if (v[2] <= 0) return;
@@ -597,19 +573,8 @@ function drawTracks(turn, sweep, opened, locked) {
       ctx.globalAlpha = lock * limb;
       brackets(x, y, tr.box * (1 + 0.8 * (1 - lock)));
     }
-
-    const shown = Math.max(tr.labelled ? ease((open - 0.6) / 0.3) : 0, lock);
-    if (shown > 0.01) {
-      const size = tr.box * (1 + 0.8 * (1 - Math.max(open, lock)));
-      const confidence = tr.confidence + (0.99 - tr.confidence) * lock;
-      labels.push({
-        x: x - size / 2, y: y - size / 2 - 12, text: tr.label, value: confidence.toFixed(2),
-        valueColor: lock > 0.5 ? COLOR.signal : COLOR.bone, alpha: shown * limb,
-        priority: lock > 0 ? 2 + lock : open,
-      });
-    }
   });
-  drawLabels(labels);
+  ctx.globalAlpha = 1;
 }
 
 // Packets along a locked track's links, and the satellite's beam onto it.
@@ -638,7 +603,7 @@ function drawLockLines(t, turn, under) {
 
     if (age < LOCK.beam) {
       const v = satellite(ORBIT_SET[sat], t);
-      if (behindPlanet(v)) continue;
+      if (behindSphere(v)) continue;
       const [sx, sy] = toScreen(v);
       ctx.strokeStyle = COLOR.signal;
       ctx.lineWidth = LINE.box;
@@ -655,15 +620,17 @@ function drawLockLines(t, turn, under) {
 registerDesign({
   prepare(c) {
     c.soft = smoothBoth(c.level, SMOOTH, c.fps);
-    // Seconds of full smoothed level up to each frame, for the sweep's turn.
+    // Seconds of full smoothed level up to each frame, for the sweep's turn
+    // and the interior's flow.
     c.softSum = new Float64Array(c.frames + 1);
     for (let i = 0; i < c.frames; i++) c.softSum[i + 1] = c.softSum[i] + c.soft[i] / c.fps;
   },
 
   drawOrb(t) {
     const soft = at(clip.soft, t, 0);
-    const turn = PLANET.turn * t;
-    const sweep = -Math.PI / 2 + SWEEP.rest * t + SWEEP.voice * at(clip.softSum, t, 0);
+    const turn = SPHERE.turn * t;
+    const spoken = at(clip.softSum, t, 0);
+    const sweep = -Math.PI / 2 + SWEEP.rest * t + SWEEP.voice * spoken;
 
     const opened = TRACK_SET.map((tr) => ease((soft - tr.threshold) / TRACKS.opening));
     const locked = TRACK_SET.map(() => 0);
@@ -672,7 +639,7 @@ registerDesign({
 
     drawRing();
     drawOrbits(t, false);
-    drawPlanet(t, soft);
+    drawSphere(t, soft, FLOW.rest * t + FLOW.voice * spoken);
     drawCrosshair();
     drawSweep(sweep);
     drawLinks(turn, opened, locked);

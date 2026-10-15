@@ -10,7 +10,7 @@
    a design in designs/, chosen with ?design=NAME:
      futurist    flat halo, lines of force and torn fragments
      painterly   a plotter painting that paints itself while she speaks
-     planetary   a blue planet read by the lines of a machine that watches it
+     planetary   a sphere of blue light read by the lines of a machine that watches it
 
    Colours are the Seestone CI's (src/interface/static/style.css) and their
    tints on black. The ground is pure black rather than Void, as every lit
