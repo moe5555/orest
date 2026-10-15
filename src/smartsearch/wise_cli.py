@@ -136,8 +136,16 @@ def serve_command(project: Path, *, index_type: str | None = None) -> list[str]:
 
 
 def server_environment(host: str = config.HOST, port: int = config.PORT) -> dict[str, str]:
-    """Environment for `wise serve`, which takes its address only from there."""
-    return {**os.environ, "LISTEN_ADDRESS": host, "PORT": str(port)}
+    """Environment for `wise serve`, which takes its address only from there.
+
+    The server only constructs extractors the project already holds features
+    for, so their weights and tokenizers are in the Hugging Face cache from
+    extraction. Hub offline mode loads them from there without network: online,
+    every file is first checked against the Hub, and the tokenizer load in
+    transformers 4.57 raises outright when huggingface.co cannot be resolved.
+    An HF_HUB_OFFLINE already set in the environment takes precedence.
+    """
+    return {"HF_HUB_OFFLINE": "1", **os.environ, "LISTEN_ADDRESS": host, "PORT": str(port)}
 
 
 def log_path(command: list[str]) -> Path:

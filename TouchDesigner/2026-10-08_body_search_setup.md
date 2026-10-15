@@ -180,6 +180,7 @@ the largest body in the picture counts, both in the capture and in the index.
 | Terminal 2 searches, but `results` stays unchanged | `bodysearch_osc` still checks for `/orest/results/` (step 1a) |
 | `No body found in the capture.` | Nobody visible during the capture, or too dark for pose detection |
 | `No WISE server at …` in terminal 2 | Terminal 1 isn't running, or serves a different project |
+| Terminal 1 retries `huggingface.co` and stops with `ConnectionError` | WISE was started directly rather than through `apollon-search serve`, which runs it in Hub offline mode. Set `HF_HUB_OFFLINE=1` first |
 | `results` fills, players show a file error | The clip path doesn't exist. Check the path in `results` against `data/clips/hitl_database/` |
 | A player shows black or a frozen frame | The clips were cut with `--cut fast`. Drop the option |
 | A clip opens a few seconds before the movement | A fast clip whose preroll isn't trimmed. Check **Trim** is on and **Trim Start** is in seconds, or drop `--cut fast` |

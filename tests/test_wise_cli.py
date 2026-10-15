@@ -77,6 +77,17 @@ def test_the_listen_address_reaches_the_server_through_the_environment():
     assert environment["PORT"] == "9671"
 
 
+def test_the_server_loads_models_from_the_local_cache(monkeypatch):
+    # The theatre machine has no internet during rehearsals.
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    assert wise_cli.server_environment()["HF_HUB_OFFLINE"] == "1"
+
+
+def test_an_explicit_hub_setting_overrides_offline_mode(monkeypatch):
+    monkeypatch.setenv("HF_HUB_OFFLINE", "0")
+    assert wise_cli.server_environment()["HF_HUB_OFFLINE"] == "0"
+
+
 def test_metadata_import_defaults_to_time_ranges_rather_than_whole_files():
     command = wise_cli.import_metadata_command(
         PROJECT, metadata_id="hindsight", csv_path=Path("/tmp/h.csv")

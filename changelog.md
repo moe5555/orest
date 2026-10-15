@@ -6,6 +6,21 @@ referenced below.
 
 ---
 
+## 2026-10-15 — Smart Search server starts without internet
+
+`apollon-search serve` failed on the theatre machine without network. WISE
+loads SigLIP2 from the local Hugging Face cache, but huggingface_hub first
+checks every file against the Hub, retrying each for about 25 s. The tokenizer
+load in transformers 4.57.6 then queries the Hub for model info with no
+fallback and raises `ConnectionError`, so the server never came up.
+`wise_cli.server_environment` now sets `HF_HUB_OFFLINE=1`, so the server loads
+only from the cache (an explicit `HF_HUB_OFFLINE` in the shell still wins).
+Extraction keeps network access, since a new extractor downloads its weights
+there. This affects body search and every live query of the Smart Search
+feature in `knowledge/source_of_truth/pipeline.md`.
+
+---
+
 ## 2026-10-15 — Athene: planetary design, a planet read by planetary computation
 
 Moe asked for a different style: a planet-like sphere in shades of blue,
