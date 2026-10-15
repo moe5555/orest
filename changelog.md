@@ -6,6 +6,19 @@ referenced below.
 
 ---
 
+## 2026-10-15 — Einschreiten off in every scene but "Standard"
+
+Requested by Moe. `02_processing.md` gives every scene "No auto Einschreiten
+Interference", but `scenes.toml` had left `interference` at its default (on)
+in all of them. Szene 1, 1.2, 2.3 and 3 now set `interference = false`: an
+alarm no longer asks the model for a recommendation, and no Einschreiten
+replaces the page. A recommendation asked for with E is still made, but does
+not replace the page either (`sitrep.js`, `fullPage.state`). "Standard" keeps
+Einschreiten. The test that loads the scenes file checks
+that only "Standard" has it.
+
+---
+
 ## 2026-10-15 — Scene 1: "L" hides and shows the line around the Podest
 
 Requested by Moe. Concerns the On/Off Podest rule of Scene 1 in the scene

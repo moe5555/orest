@@ -24,6 +24,7 @@
 # The page must be restarted (apollon-ui) to read changes to this file.
 
 ["Szene 1"]
+interference = false
 podest = { step = 1, floor = 2 }
 tracked = 30
 keys.t = { strobe = true }
@@ -31,15 +32,18 @@ keys.l = { outline = true }
 keys.p = { tracked = 3 }
 
 ["Szene 1.2"]
+interference = false
 prerecorded = true
 # video = "data/scenes/szene_1_2.mp4"
 
 ["Szene 2.3"]
+interference = false
 values_per_person.Alex = ["aggression"]
 keys.w = { person = "Alex", value = "aggression", step = 1 }
 keys.s = { person = "Alex", value = "aggression", step = -1 }
 keys.m = { screen = "Maximales Aggressionspotenzial erreicht." }
 
 ["Szene 3"]
+interference = false
 keys.c = { swap = true }
 # video = "data/scenes/szene_3.mp4"

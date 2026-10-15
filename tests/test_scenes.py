@@ -21,6 +21,7 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     assert zwei_drei.values_of("Lena") == ["risiko", "menschlichkeit", "berechenbarkeit"]
     assert loaded["Szene 1.2"].prerecorded
     assert loaded["Szene 3"].keys["c"].swap
+    assert [name for name, scene in loaded.items() if scene.interference] == [scenes.DEFAULT_NAME]
 
 
 def test_without_a_scene_the_defaults_apply():
