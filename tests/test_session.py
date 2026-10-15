@@ -874,3 +874,15 @@ def test_the_podest_is_outlined_only_in_scenes_with_the_rule(room, readers):
         assert live.outline_podest(frame) is frame
         scene.select(scenes.Scene(podest=scenes.PodestRule()))
         assert live.outline_podest(frame) is not frame
+
+
+def test_the_podest_outline_is_left_off_while_the_operator_hides_it(room, readers):
+    video, audio, _, _, _ = room
+    scene = scenes.Current(scenes.Scene(podest=scenes.PodestRule(),
+                                        keys={"l": scenes.Key(outline=True)}))
+    frame = np.zeros((48, 64, 3), dtype=np.uint8)
+    with session.Session(video, audio, scene=scene) as live:
+        scene.press("l")
+        assert live.outline_podest(frame) is frame
+        scene.press("l")
+        assert live.outline_podest(frame) is not frame

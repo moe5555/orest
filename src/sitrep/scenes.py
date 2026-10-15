@@ -10,7 +10,10 @@ the defaults of `Scene`, which also apply while no scene is selected
 The spec's settings, and where each takes effect:
 
 - SITREP Spatial Value Rules: `podest`, the Podest count (podest.Counter) in
-  the live values (lage.py). Off by default.
+  the live values (lage.py). Off by default. Its outline on the operator's
+  picture (session.Session.outline_podest) is shown from the scene's
+  selection on; keys with `outline` hide and show it again. The count goes
+  on either way.
 - Interference: `interference`, whether the alarm asks the model for a
   recommendation and an Einschreiten replaces the page (session.py,
   sitrep.js). Einschreiten is the only kind. On by default.
@@ -31,8 +34,9 @@ The spec's settings, and where each takes effect:
   feed and `video`, the video from its start each time.
 
 What the operator changes in a scene (`Current`): the number tracked, the
-manual values, the screen or stroboscope open and whether the video plays. It lasts until a
-scene is selected, across runs started meanwhile.
+manual values, the screen or stroboscope open, whether the Podest is outlined
+and whether the video plays. It lasts until a scene is selected, across runs
+started meanwhile.
 """
 
 import pathlib
@@ -92,8 +96,9 @@ class PodestRule(BaseModel):
 
 class Key(BaseModel):
     """What one key does in a scene: exactly one of opening a screen,
-    opening the stroboscope, switching the number tracked, changing a manual
-    value, or swapping the live feed for the video."""
+    opening the stroboscope, hiding or showing the Podest's outline,
+    switching the number tracked, changing a manual value, or swapping the
+    live feed for the video."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -104,15 +109,17 @@ class Key(BaseModel):
     step: int | None = None
     swap: bool = False
     strobe: bool = False
+    outline: bool = False
 
     @model_validator(mode="after")
     def _one_action(self) -> "Key":
         adjust = (self.person, self.value, self.step)
         chosen = [self.screen is not None, self.tracked is not None,
-                  any(part is not None for part in adjust), self.swap, self.strobe]
+                  any(part is not None for part in adjust), self.swap, self.strobe,
+                  self.outline]
         if sum(chosen) != 1:
             raise ValueError("a key does exactly one of: screen, tracked, "
-                             "person/value/step, swap, strobe")
+                             "person/value/step, swap, strobe, outline")
         if chosen[2]:
             if any(part is None for part in adjust):
                 raise ValueError("a manual value needs person, value and step")
@@ -122,11 +129,13 @@ class Key(BaseModel):
 
     @property
     def action(self) -> str:
-        """"screen", "strobe", "tracked", "adjust" or "swap"."""
+        """"screen", "strobe", "outline", "tracked", "adjust" or "swap"."""
         if self.screen is not None:
             return "screen"
         if self.strobe:
             return "strobe"
+        if self.outline:
+            return "outline"
         if self.tracked is not None:
             return "tracked"
         return "swap" if self.swap else "adjust"
@@ -137,6 +146,8 @@ class Key(BaseModel):
             return f"„{self.screen}“"
         if self.action == "strobe":
             return "Stroboskop"
+        if self.action == "outline":
+            return "Podest-Linie aus/an"
         if self.action == "tracked":
             return f"{self.tracked} Personen verfolgen"
         if self.action == "adjust":
@@ -177,6 +188,8 @@ class Scene(BaseModel):
                 raise ValueError(f"a key is one lower-case letter or digit, not {key!r}")
             if key in RESERVED:
                 raise ValueError(f"key {key!r} is taken by the SITREP page (R, E, X)")
+        if self.podest is None and any(bound.outline for bound in self.keys.values()):
+            raise ValueError("a key with outline needs the scene's podest")
         if self.video is not None and not self.video.is_absolute():
             self.video = REPO_ROOT / self.video
         return self
@@ -238,6 +251,9 @@ class Current:
             self.tracked = scene.tracked
             self.screen: str | None = None
             self.strobe = False
+            # The Podest's outline on the operator's picture, where the scene
+            # has the rule.
+            self.outline = True
             self.recorded = scene.prerecorded
             self._manual: dict[str, dict[str, tuple[int, datetime]]] = {}
             # A problem the run met in carrying out the scene, e.g. a video
@@ -262,6 +278,8 @@ class Current:
             elif bound.action == "strobe":
                 self.strobe = not self.strobe
                 self.screen = None
+            elif bound.action == "outline":
+                self.outline = not self.outline
             elif bound.action == "tracked":
                 self.tracked = self.scene.tracked if self.tracked == bound.tracked else bound.tracked
             elif bound.action == "adjust":
@@ -309,6 +327,7 @@ class Current:
                 "tracked": self.tracked,
                 "screen": self.screen,
                 "strobe": self.strobe,
+                "outline": self.outline,
                 "recorded": self.recorded and scene.video is not None,
                 "video": scene.video.name if scene.video else None,
                 "keys": {key: {"action": bound.action, "label": bound.label()}

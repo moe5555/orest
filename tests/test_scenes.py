@@ -14,6 +14,7 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     eins = loaded["Szene 1"]
     assert (eins.podest, eins.tracked) == (scenes.PodestRule(step=1, floor=2), 30)
     assert eins.keys["t"].action == "strobe"
+    assert eins.keys["l"].action == "outline"
     assert eins.keys["p"].tracked == 3
     zwei_drei = loaded["Szene 2.3"]
     assert zwei_drei.values_of("Alex") == ["aggression"]
@@ -42,6 +43,7 @@ def write(tmp_path, text) -> pathlib.Path:
     '["A"]\nkeys.t = { screen = "x", tracked = 3 }\n',          # two things at once
     '["A"]\nkeys.t = { screen = "x", strobe = true }\n',        # two pages at once
     '["A"]\nkeys.t = {}\n',                                     # nothing
+    '["A"]\nkeys.l = { outline = true }\n',                     # no Podest to outline
     '["A"]\nkeys.w = { person = "Alex", value = "risiko", step = 1 }\n',  # measured, not manual
     '["A"]\nkeys.w = { person = "Alex", value = "aggression" }\n',        # no step
     '["A"]\nkeys.T = { screen = "x" }\n',                       # upper case
@@ -111,6 +113,21 @@ def test_a_screen_and_the_stroboscope_are_never_open_together():
     assert (current.snapshot()["screen"], current.snapshot()["strobe"]) == (None, True)
     current.press("m")
     assert (current.snapshot()["screen"], current.snapshot()["strobe"]) == ("TROJA IST GEFALLEN", False)
+
+
+def test_the_podest_outline_is_shown_until_its_key_hides_it_and_again_after_a_selection():
+    scene = scenes.Scene(podest=scenes.PodestRule(), keys={"l": scenes.Key(outline=True)})
+    current = scenes.Current(scene)
+    assert current.snapshot()["outline"] is True
+    assert current.press("l") == "outline"
+    assert current.snapshot()["outline"] is False
+    current.press("L")
+    assert current.snapshot()["outline"] is True
+    current.press("l")
+    current.select(scene)
+    assert current.snapshot()["outline"] is True
+    assert current.snapshot()["keys"] == {"l": {"action": "outline",
+                                                "label": "Podest-Linie aus/an"}}
 
 
 def test_a_key_switches_the_number_tracked_and_back():

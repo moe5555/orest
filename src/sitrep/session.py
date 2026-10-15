@@ -726,12 +726,14 @@ class Session:
 
     def outline_podest(self, frame):
         """A copy of a frame with the Podest outlined, where the scene in
-        force has the rule.
+        force has the rule and the operator has not hidden the outline
+        (scenes.Current.outline).
 
         For the operator's view only, to check the polygon against where the
         Podest stands today.
         """
-        if not self.actions or not self.options.podest or self.scene.scene.podest is None:
+        if (not self.actions or not self.options.podest or self.scene.scene.podest is None
+                or not self.scene.outline):
             return frame
         return annotate.draw_region(frame, podest.pixels(self.options.podest, frame.shape[:2]))
 

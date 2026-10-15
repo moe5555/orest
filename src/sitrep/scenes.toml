@@ -16,6 +16,7 @@
 #
 #   keys.t = { screen = "TEXT" }                            open/close a page reading TEXT
 #   keys.t = { strobe = true }                              open/close the stroboscope page
+#   keys.l = { outline = true }                             hide/show the line around the Podest (needs podest)
 #   keys.p = { tracked = 3 }                                switch to 3 people tracked and back
 #   keys.w = { person = "Alex", value = "aggression", step = 1 }   raise a manual value
 #   keys.c = { swap = true }                                live feed <-> video
@@ -26,6 +27,7 @@
 podest = { step = 1, floor = 2 }
 tracked = 30
 keys.t = { strobe = true }
+keys.l = { outline = true }
 keys.p = { tracked = 3 }
 
 ["Szene 1.2"]

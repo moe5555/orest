@@ -6,6 +6,31 @@ referenced below.
 
 ---
 
+## 2026-10-15 — Scene 1: "L" hides and shows the line around the Podest
+
+Requested by Moe. Concerns the On/Off Podest rule of Scene 1 in the scene
+configurations (`02_processing.md`, added there with this entry) and the
+operator's picture of the Live SITREP in the RENDER step of `pipeline.md`
+(`03_render.md`). The line around the Podest is shown when Scene 1 is
+selected; "L" hides it, and "L" again shows it, in every view.
+
+- **"L", not "P".** "P" already switches Scene 1 from 30 people tracked to 3
+  (`02_processing.md`, Scene 1), and a key does one thing (`scenes.Key`).
+- **A key action of its own.** `keys.l = { outline = true }` in
+  `scenes.toml` (`scenes.Key.outline`). It toggles `scenes.Current.outline`,
+  which a scene selection resets to shown, and the snapshot carries it
+  (`"outline"`). `session.Session.outline_podest` leaves the frame unmarked
+  while it is off. A scene without `podest` rejects the key, since it would
+  have nothing to hide.
+- **Only the line.** The Podest count goes on while the line is hidden.
+- The page needs no change: it sends the key like any scene key, and the key
+  list on the operator page and in the run's details reads
+  "L: Podest-Linie aus/an".
+
+732 tests pass (3 new). Not yet checked with the camera.
+
+---
+
 ## 2026-10-14 — Names lost again: tracks break in the dark, and neither face nor costume finds the person again (VSH-ARLT-5090)
 
 **Moe's observation:** in today's run the cast had to be named by hand again
