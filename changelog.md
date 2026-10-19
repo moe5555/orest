@@ -6,6 +6,297 @@ referenced below.
 
 ---
 
+## 2026-10-19 — Athene axes4: clips start large, clusters stay where they appear
+
+At Moe's request (`athene/page/designs/axes4.js`):
+- **Large start:** each clip pops up at three times its size (336 px wide),
+  stays so for 8 s and then shrinks within 1.5 s to 112 px. Its offset in
+  the cluster shrinks with it, so the cluster draws together.
+- **Static clusters:** a cluster appears at the tip furthest from the centre
+  and from the other clusters, inside the frame, and stays there. Its centre
+  is kept far enough inside the frame for all its clips at their largest.
+- axes4's sheets are cut at 192 × 108 (`SHEET_SHAPES` in
+  `athene/render.py`), so the large clips stay reasonably sharp.
+
+---
+
+## 2026-10-19 — Athene axes4: twice the clips at half the size, no outlines
+
+At Moe's request (`athene/page/designs/axes4.js`):
+- 16 clips per cluster, 112 px wide, without the white outline, popping up
+  0.05 s apart and scattered up to 110 px.
+- The renderer picks up to 48 clips per group (`SHEET_CLIPS`) and cuts
+  axes4's sheets at 112 × 63 (`athene/render.py`).
+- `athene/cut_clips.py` now cuts 24 clips per video. The online footage is
+  recut to 48 clips.
+- The live preview keeps its playhead across a reload of the tab
+  (`athene/page/athene.js`), so an edited design shows at the same moment.
+
+---
+
+## 2026-10-19 — Athene axes4: webbed forks, clusters that stay, the voice as lightning, online footage
+
+Moe asked for more natural nodes, like the webs between fingers and toes
+that stretch with them. He also wanted smaller clips in their own aspect
+ratio, clusters that keep looping while the network grows on, six clusters
+by the end (three from the rehearsals first, then three cut from other
+footage, to see whether non-rehearsal material works), and the voice back,
+only as a pulsing glow running through the network like lightning. New
+design `athene/page/designs/axes4.js`, now the default, rendered with Lena's
+clip; axes3 stays as it was.
+- **Webs:** at every fork, a web spans each pair of neighbouring edges less
+  than 1.9 rad apart. It runs from the fork out along both edges and is
+  closed by a rim that bows in towards the fork, so it stretches as the
+  edges sway. Its reach grows with the fork's age: up to 5 times the width
+  of the tube ending there (time constant 25 s), at most 150 px and 40 % of
+  the shorter edge. The hub is webbed between its rays and forms a body. The
+  webs replace the round nodes.
+- **Clusters:** eight clips each, 224 px wide in the clips' aspect ratio
+  (16:9). They pop up 0.08 s apart and replay until the end, with no
+  freeze. They appear at 20, 30 and 40 % of the clip (rehearsal) and at 52,
+  62 and 72 % (online footage). Each hangs at a tip that is inside the
+  frame when it appears, half way to the end and at the end, as far from the
+  centre and from the other clusters as possible, and follows it.
+- **Voice:** it moves nothing. Each syllable sends a bolt from the hub out
+  along one ray at 3500 px/s. The bolt follows every continuing edge and
+  half of the side edges, chosen per bolt, and branches like lightning.
+  Edges flash within 0.03 s and fade over 0.22 s, in the glow and in a
+  narrow bolt layer added on top. The glow and bloom rise by up to 30 % with
+  the smoothed level.
+- **Growth clock:** growth runs over 108 s of its own clock whatever the
+  clip's length, while the waves of motion stay in seconds of the clip, so
+  a shorter voice grows the same figure at the same pace of movement.
+- **Clip groups** (`athene/render.py`): `--clips` takes several folders, one
+  group each. By default these are `data/clips/hitl_database` and
+  `data/clips/athene_online`. Sheets are cut to a shape per design
+  (`SHEET_SHAPES`: 224 × 126 for axes4, 240 × 240 squares otherwise) and
+  listed with their group. axes2 and axes3 read the new sheet fields.
+- **Online footage:** `athene/cut_clips.py` cuts twelve evenly spread
+  4-second clips from each video in a folder, as H.264 without sound, into
+  `data/clips/athene_online/` (ignored by git). Cut from the two videos in
+  `Desktop/athene_online_clips`: 24 clips.
+
+---
+
+## 2026-10-19 — Athene axes3: back to the slime mould's movement; nodes swell with age
+
+Moe preferred the movement of axes3 before the probes, so the probes are
+removed and the tentacle waves are back at 0.12 rad of phase per second.
+The seamless joints and the popping clips of the previous entry stay
+(`athene/page/designs/axes3.js`).
+- **Nodes:** where edges spring from the end of an edge, a white disc marks
+  the fork, drawn on the lines and on their glow. Its radius starts at half
+  the width of the tube ending there and grows by up to 10 px, approaching
+  that with a time constant of 30 s of Athene's life since the fork's first
+  edge was born. Old forks near the hub are beads and young ones at the
+  front barely show. The nodes hold still while the network is frozen.
+
+Full render, outside the clusters: the 95th percentile of the change in
+frame difference is 0.013 (0.10 with the probes), so the movement is as
+smooth as the first slime-mould version.
+
+---
+
+## 2026-10-19 — Athene axes3: probing rays, seamless joints, clips that pop
+
+Moe missed the probing of the rays in axes2, which grew forward and
+retracted like tentacles. He also did not want to see where the arms branch
+off, and asked for clips that appear and disappear at once, in larger
+numbers (`athene/page/designs/axes3.js`).
+- **Probes:** every 2.5–7 s each ray thrusts forward by 25–60 % of its
+  length in 0.5 s and draws back over 1.4 s, carrying the network at its end
+  out and in. These are the syllable flicks of axes2, now on a seeded
+  schedule in Athene's life, so they hold during a freeze. The tentacle
+  waves are faster (0.2 instead of 0.12 rad of phase per second).
+- **Joints:** each edge's round end was drawn around the inside of its tip
+  rather than the outside, which cut a small dark notch at every tip. These
+  showed as black dots where arms branch. Fixed in axes, axes2 and axes3.
+  The lines of axes3 are now solid white. Foreshortening and the streaming
+  pulse dim only their glow, which is drawn from a weighted copy of the
+  lines at a quarter of the resolution.
+- **Clusters:** 14 clips each instead of 6. They pop up 0.08 s apart and
+  pop out 0.05 s apart, with no fade or growth. The network is released as
+  the last one leaves. Clips are 260 px, scattered up to 210 px, and the
+  whole cluster is kept inside the frame. The renderer now cuts 32 frame
+  sheets (`SHEET_CLIPS` in `athene/render.py`).
+
+Measured on the full render, outside the clusters: the probes move much
+more of the picture between frames than before (95th percentile 2.97,
+against 0.73 before and 1.39 in axes2). The motion still changes smoothly.
+The 95th percentile of the change in frame difference is 0.10, 0.035 of
+the motion itself, against 0.11 in axes2.
+
+---
+
+## 2026-10-19 — Athene: axes3 design, the star grows like a slime mould, moved by time alone
+
+Moe asked for a version that is not audioreactive, grows organically like a
+slime mould instead of jittering with the sound, only grows larger, and
+covers the screen by the end. He also wanted more dimensions and more glow
+and bloom as it grows, keeping the tentacular growing and shrinking of
+single axes. New design `athene/page/designs/axes3.js`, now the default;
+`axes2` stays as it was.
+- **Time, not voice:** Athene's life is the time the network moves, in
+  seconds. No level, syllable or tone reaches the figure. The window turns
+  slowly (0.02–0.06 rad of wave phase per second), and edges sway and reach
+  ±30 % on slow waves.
+- **Ten dimensions:** twenty rays, joining between 6 % and 60 % of the
+  clip's life. A ray shortens with the square root of its foreshortening.
+- **Growth only:** the figure grows from 12 % of its size to full size over
+  the clip's life. Each edge creeps out over 7 s at an uneven pace. Forks
+  take their size from the nominal length of their parent, not its length on
+  the wall, so an axis turning out of view moves its forks but does not
+  shrink them. Forks reach six generations, with longer and wider side edges
+  than axes2. Measured from the page every 2 s, the total length of the
+  network never falls (323 px at the start, 72,000 px at the end). Its
+  screen coverage (cells of 160 px holding a line) rises from 1 % to about
+  60 %, and the branches pass the edges of the frame from about 90 s on.
+- **Slime mould:** an edge's width grows with the square root of the edges
+  it feeds, as tubes thicken with flow, so the trunks grow heavy and the
+  exploring ends stay fine. A quarter of the side edges beyond the first
+  generation pull back after 8–25 s and vanish with their forks. A brightness
+  pulse (22 %) runs outward through the network every 7 s.
+- **Glow:** the glow rises from 0.45 to 1.0 as the figure grows. A wide
+  bloom at an eighth of the resolution, added on top, rises from 0.1 to
+  0.85.
+- **Clusters:** as in axes2, two clusters in colour with the network frozen
+  (eased over 0.8 s).
+
+Full render: `athene/out/Human_Lena_Voice/Human_Lena_Voice_axes3.mp4`. The
+95th percentile of the change in frame difference from one frame to the
+next is 0.017, against 0.149 for axes2. In proportion to the motion itself
+it is 0.02 against 0.11.
+
+---
+
+## 2026-10-19 — Athene: the Seestone prototypes move to athene/archive
+
+Moe asked for everything prototyped for Athene before the axes approach to
+be archived. `athene/archive/` now holds:
+- the five designs (futurist, painterly, planetary, metallic, liquid) with a
+  copy of the page they were drawn on (Seestone mark, name in Michroma, CI
+  colours), in `archive/page/`;
+- the moodboards;
+- the original brief (`archive/description.md`, Athene as a Seestone
+  program, from git);
+- their renders (`archive/out/`, ignored by git like `athene/out/`);
+- a README.
+
+`python -m athene.render CLIP --archive --design NAME` still renders them.
+Their renders go to `archive/out/`.
+
+The current page (`athene/page/athene.js`, `index.html`) no longer carries
+the Seestone mark, name, typefaces or colours. It draws a black frame and
+leaves the picture to the design (`draw(t)`, formerly `drawOrb`), which may
+load its own assets (`load()`). The renderer serves the Seestone mark and
+fonts only to the archived page.
+
+---
+
+## 2026-10-19 — Athene axes2: a slow start, and the network freezes while a cluster plays
+
+Moe asked for a version over the whole of Lena's clip (108 s). It starts
+with two short axes and grows slowly. When a cluster of clips appears, the
+clips show in their colours and the network freezes; once they are gone,
+the system grows on (`athene/page/designs/axes2.js`).
+- **Slow start:** the figure starts at 30 % of its size and reaches its
+  full size at 80 % of the clip's life. The first new axis joins at 10 %,
+  the last at 50 %. Halves part between 8 % and 45 %, forks begin at 20 %.
+- **Freeze:** Athene's life now counts only the time the network moves. From
+  a cluster's appearance until its last clip has left, life stands still
+  (eased over 0.5 s). Breath, tone and each half-axis's syllable flicks are
+  precomputed per frame and held at their values meanwhile, so the figure
+  is exactly still and moves on from where it stopped. The glow keeps
+  following the voice. The joins and forks are spread over the life that
+  remains, so the whole arc still fits the clip.
+- **Clusters:** two, at 33–45 % and 62–74 % of the clip (36–49 s and
+  67–80 s for Lena), each hanging at the tip furthest from the centre in the
+  frozen figure. The clips show in colour (`clipGrey: false`) and no longer
+  drift.
+
+The full render of Lena's clip is `athene/out/Human_Lena_Voice/Human_Lena_Voice_axes2.mp4`.
+While frozen, the change between frames is near zero (median 0.02–0.05
+against 1.39 at the 95th percentile of the whole clip). Going into and out
+of a freeze, it stays below the 95th percentile. The largest change, near
+the end (102.6 s), is sustained motion of the fully grown network, not a
+jolt.
+
+---
+
+## 2026-10-19 — Athene: axes2 design, the coordinate system grows into the sketch's branching star, with clusters of clips
+
+Moe liked the axes style and sketched where it should grow
+(`athene/athene_axes_sketch.jpg`): rays of unequal length from a hub, ends
+forking into twos and threes that fork again, and clusters of 4-second
+body-search clips at the ends of branches. New design
+`athene/page/designs/axes2.js`, now the default; `axes` stays as it was.
+- **Hub:** six dimensions (twelve rays), each with a dot where they meet. As
+  the axes join, the two halves of each axis take on lasting lengths of their
+  own (0.3 to 1.3 of the axis, between 4 % and 40 % of the clip's life), so
+  the cross turns into rays, some long and some stubs. The last axis joins at
+  45 % of the clip's life.
+- **Branches:** from 16 % of the clip's life on, the ends of the rays fork
+  into two edges, or three in 35 % of forks. One edge carries the ray on with
+  a kink of up to 0.3 rad. The others open 0.5 to 1.0 rad to the sides,
+  further with a bright voice. Ends fork again for up to four generations,
+  less often each generation and half as often on side edges. Every edge
+  sways at its joint and stays straight.
+- **Clusters:** two clusters of six clips (48–66 % and 74–93 % of the
+  clip). Each hangs at the tip furthest from the centre that has room for it.
+  Its clips appear 0.4 s apart, overlap with small offsets and tilts, replay
+  their four seconds in greyscale with a white outline, and leave in reverse
+  order. The conditions that should trigger a cluster are still open; until
+  then the times are set in `AXES.clusters`. This prototypes the body-search
+  results of the RENDER graph in `knowledge/source_of_truth/pipeline.md` on
+  Athene's wall.
+- **Renderer** (`athene/render.py`): picks 12 clips from
+  `data/clips/hitl_database` (seeded; `--clips FOLDER` for another folder)
+  and cuts each into a frame sheet. A sheet is a 240 px square from the
+  middle of the picture at 25 fps, ten by ten frames in one JPEG, cached in
+  `athene/out/_sheets/`, which git ignores. The page reads them from
+  `/clips.json`, so every render of a frame is identical. Designs may now
+  load their own assets (`load()` in `athene/page/athene.js`).
+
+On 50–60 s, where the first cluster appears, the largest change between two
+frames is 1.35 times the 95th percentile.
+
+---
+
+## 2026-10-19 — Athene: axes design, a living high-dimensional coordinate system
+
+Moe set a new direction (`athene/description.md`): Athene is her own entity
+outside the Seestone universe. She is a high-dimensional space that is alive:
+white straight lines on black, starting as a 2D coordinate system that gains
+axes until it looks like a star, with new edges spawning from the ends. New
+design `athene/page/designs/axes.js`, now the default; the others are kept.
+- **Unbranded:** a design that sets `branded: false` is drawn without the
+  Seestone mark and the name (`athene/page/athene.js`).
+- **Space:** the axes are the unit vectors of a 12-dimensional space,
+  projected onto the wall through a window that turns through its planes. So
+  every axis stays straight and passes through the centre, while the angles
+  and lengths change as the axes tilt out of view. Foreshortened axes are
+  dimmer. The mean length is mostly held (normalisation 0.8). Arms near the
+  frame's edge are eased short of a 70 px margin.
+- **Life:** the motion runs on seconds of full-level speech plus 0.2 per
+  second of time, so she moves slowly in silence. The two starting axes are
+  bent by the hidden dimensions from the beginning. The other ten grow out of
+  the centre between 7 % and 70 % of the clip's life, the first ones far
+  apart and the last ones close together.
+- **Voice:** each half-axis reaches out and back on its own (±30 %), and
+  each syllable makes one visible half-axis reach out by up to 40 %. Level
+  widens the figure by up to 12 % and brightens the glow. Tone opens the
+  branches.
+- **Branches:** from 35 % of the clip's life on, 70 % of the ends spawn two
+  edges each, and these spawn two more.
+
+All parameters sit in `AXES` at the top of the design, ready to be exposed
+as controls. On 56–66 s the largest change between two frames is 1.2 times
+the 95th percentile, so there are no jolts. The render runs at 25 fps (about
+4 min for Lena's clip). Not yet built: the clusters of body-search clips
+from the description, which appear under conditions still to be defined.
+
+---
+
 ## 2026-10-15 — New rehearsals are added to a Smart Search project incrementally (VSH-ARLT-5090)
 
 Requested by Moe, after the failed attempt in the next entry. Covers "Process
