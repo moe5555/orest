@@ -8,13 +8,26 @@ Based on certain conditions, I want small clusters of the 4 second clips body se
 
 The video will be synced with the voice and pre-rendered. 
 
+## Athene Rehearsal Interactive Prototyping System
+
 Based on the play, there will be the following moments the system will need to render: 
 
-1. Athene with 2 Axis, moving around, probing.  
-2. Athene with 2 Axis growing to 4 longer ones. No branches. 
-3. Athene death scene. 
-   1. Athene with 5 Axis, first cluster of death scene rehearsal videos appear. Hold. No branches. 
-   2. Athene with 6 Axis, second cluster of DSR videos appear. Hold. No branches. 
-   3. Athene with 7 Axis, third cluster appears. Hold. No branches. 
-   4. Athene with n Axis, n cluster appears. Footage from rehearsals but also from previous wars, Gaza, Ukraine, etc. 
-4. Athene with ever-more Axis growing, need to time how long this animation should roughly take, ever more pulsing light until it is almost stroboscopic. Ends with a kind of bang, everything pulling together into a new shape, a new world order. The shape might just be an Athene logo tbd. 
+1. Athene with 2 Axis, moving around, probing. (athene_voice_placeholder/athene_1_kathycalm.mp3, athene_2) 
+2. Athene death scene. (athene_3, athene_4, athene_5) One parent branch per cluster. Branches static in this scene:
+   1. Athene with 3 Axis, first cluster of death scene rehearsal videos appear. Hold. No child branches. 
+   2. Athene with 4 Axis, second cluster of DSR videos appear. Hold. No child branches. 
+   3. Athene with 5 Axis, third cluster appears. Hold. No child branches. 
+   4. Athene with n Axis, n cluster appears. Footage from rehearsals but also from previous wars, Gaza, Ukraine, etc. Hold. No child branches. 
+3. Athene back to two Axis, moving around. (athene_6)
+4. Athene grows over about 10 minutes. (athene_7, athene_8) Ever-more Axis growing, need to time how long this animation should roughly take, ever more pulsing light until it is almost stroboscopic. Ends with everything pulling together into a new shape, a new world order. For now, this shape is just a glowing circle. 
+
+We will prototype a live page version of these Athene scenes. Once we have the final voice recordings and timing we will render the different clips. For the live localhost version I control during rehearsals, we have following key commands per scene: 
+
+"N" - go to next scene. 
+"B" - go back to previous scene
+"P" - play the audio clip associated with the scene. If multiple audio clips are associated with a scene, simply play the next one in the queue of that scene. 
+"Space" - reset current scene
+
+Scene specific commands: 
+2. Death Scene - "R" for a new clip cluster from rehearsal material. "O" for a new clip cluster from the online video. Reuse the clips you've created for now. 
+4. "E" - triggers ending, "S" activates strobe effect. 

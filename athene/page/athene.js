@@ -12,6 +12,7 @@
      axes2       the coordinate system grown into a branching star, with clusters of clips
      axes3       the branching star growing like a slime mould, moved by time, not the voice
      axes4       the slime mould webbed, carrying clusters of clips, lit by the voice
+     rehearsal   the scenes of the play, performed live from the keyboard (athene/live.py)
 
    Athene stands outside the Seestone universe: no mark, no name, no CI. The
    Seestone-branded prototypes are kept in athene/archive. */
@@ -84,7 +85,8 @@ const ctx = canvas.getContext("2d");
 let design = null;
 
 // Called by the design's script: { draw(t), prepare(clip) optional,
-// load() optional, awaited before the clip is prepared }.
+// load() optional, awaited before the clip is prepared, live() optional,
+// which takes over the page in live mode }.
 function registerDesign(d) {
   design = d;
 }
@@ -174,6 +176,9 @@ load(params.get("design") || "axes4").then(() => {
         return canvas.toDataURL("image/png");
       },
     };
+  } else if (mode === "live" && design.live) {
+    // Live: the design runs the page itself, from the keyboard.
+    design.live();
   } else {
     preview();
   }

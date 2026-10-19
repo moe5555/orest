@@ -6,6 +6,145 @@ referenced below.
 
 ---
 
+## 2026-10-19 — Athene rehearsal: uneven halves, twice the axes, a more hectic growth, an ending flooded with light
+
+At Moe's request, for the growth scene (`athene/page/designs/rehearsal.js`):
+- **Halves:** the two halves of each axis grow on their own. Each joins 0–6
+  s late and at 0.5–2 times the axis's pace. They take on lasting lengths of
+  0.2–1.6 of the axis from the start of the growth (before 0.35–1.3, from
+  5 %).
+- **Speeds:** creeping edges take 1.5–12 s (before 2–8). Shooters take
+  0.06–1.2 s, twice the top speed, and fork again within 0.025 s at the
+  quickest. Up to 90 % of the edges shoot out towards the end.
+- **Hub:** its web spans every gap between the rays and keeps its full reach
+  along short rays, so the body holds as rays turn out of view. Tubes are
+  capped at 12 px wide, so the 112 rays no longer merge into a solid disc at
+  the hub.
+- **Axes:** 56 dimensions, so 112 rays at the five-minute mark (twice as
+  many). The schedule holds 2686 edges, 1602 of them shooters and 720 of
+  these vanishing again.
+- **More hectic:** up to 8 bolts a second and a pulse of up to 3.5 Hz, and
+  the motion speeds up to 2.5 times by full size.
+- **Ending:** while the network explodes, a wide wash of its flickering glow
+  (a sixteenth of the resolution, blurred) floods the wall. The sharp lines
+  fade out, so little of the structure shows until the collapse begins.
+- **Glow:** layers brightened beyond one pass are brightened at their own
+  small size and drawn onto the frame once.
+- **Measured:** 61 fps with the network fully grown. At the peak of the
+  explosion the frame rate drops to about 29 fps: drawing the widened
+  network is the cost, measured by switching the widening off (61 fps).
+
+---
+
+## 2026-10-19 — Athene rehearsal: lightning growth, an exploding ending sucked into a black hole
+
+At Moe's request (`athene/page/designs/rehearsal.js`):
+- **Death scene:** clips settle at 280 px, half the previous size. Their
+  scatter stays at 480 px.
+- **Lightning growth:** every edge of the growth scene now has its own
+  speed.
+  - **Shooters:** of the edges born at a point of the schedule, a share
+    rising from 10 % to 80 % shoots out within 0.12–0.9 s and forks again
+    within 0.05–1.2 s, flashing while it grows. Of these, 45 % vanish again
+    after 0.3–4 s, within 0.2–1.2 s, taking their forks with them.
+  - **Creepers:** the other edges creep out within 2–8 s.
+  - **Axes:** new axes join within 7 s at first and 0.6 s at the end.
+  - **Measured:** of the 1539 edges, 795 shoot out and 372 of these vanish.
+- **Ending (E):**
+  - **Explosion:** for 6 s the network explodes. The strobe flicker comes
+    on, 14 bolts a second run through it, its growth speeds up to 25 times,
+    and it widens to 2.2 times its size, filling the wall. Lines keep their
+    width as they spread.
+  - **Black hole:** within 3.5 s the network is sucked into the centre,
+    faster and faster. Near the centre it falls in sooner and turns faster,
+    up to 4 rad, like matter falling into a black hole.
+  - **Circle:** it opens as the last of the network vanishes, and the strobe
+    stops.
+  - **Measured:** driven headless at 61 fps throughout.
+
+---
+
+## 2026-10-19 — Athene rehearsal: a breathing death scene, clusters across the wall, a faster growth, a lightning strobe
+
+At Moe's request (`athene/page/designs/rehearsal.js`, `athene/live.py`):
+- **Death scene:** the axes move and probe as in scene 1 until the first
+  cluster key, then ease to rest. At rest every ray breathes along its
+  length (±8 %) without turning.
+  - **Placement:** each cluster lands at the best of 40 random points on the
+    wall, the one furthest from the other clusters and at least 550 px from
+    the hub. Its new axis grows from the centre straight to it.
+  - **Size:** clips settle at 560 px wide (four times before) and pop up at
+    1.6 times that. Six clusters of 16 clips cover most of the wall.
+- **Clips as videos:** the live page plays the clusters as looping videos
+  instead of frame sheets. `athene/live.py` cuts the renderer's picks of
+  each clip group to 480 px wide H.264 without sound, into
+  `athene/out/live/clips/`, and the page loads them up front. Sheets sharp
+  enough for 560 px clips would not fit in the browser's memory.
+- **Growth scene:**
+  - **Speed:** full size after 300 s instead of 600 s. The schedule runs on
+    a clock that speeds up (x ^ 1.8 of the span), so axes and forks come
+    faster and faster. The first new axis joins after about 20 s.
+  - **Size:** 28 dimensions (56 rays, twice as many) and a full size of
+    1000 px per axis, so the network covers the wall. Measured with the
+    network fully grown: about 1150 edges, still 60 fps at 4K.
+- **Strobe:** S now flickers the glow of the network instead of the whole
+  frame. Flashes come 0.03–0.28 s apart with random strength (0.5–2.5) and
+  fade within 0.03–0.12 s. Between them the glow sinks to a quarter. The
+  glow layers can now be added more than once, so a flash can rise beyond a
+  single pass.
+
+---
+
+## 2026-10-19 — Athene rehearsal: the play's scenes performed live from the keyboard
+
+Moe described the moments of the play that Athene has to show
+(`athene/description.md`, "Athene Rehearsal Interactive Prototyping
+System") and asked for a live page to control in rehearsals. Settled with
+Moe before building: the cluster keys belong to scene 2; each cluster key
+press is the next step of the death scene; the death scene's network stands
+completely still; E ends the growth scene, which otherwise keeps growing; S
+strobes; B goes back and Space restarts the scene; P stops a voice that is
+playing and plays the next one on the next press; the transitions are
+animated.
+
+New design `athene/page/designs/rehearsal.js`, with the network, webs, glow
+and clusters of axes4, run by `python -m athene.live`
+(`athene/live.py`). The launcher serves the placeholder voices in
+`athene/example_audio/athene_voice_placeholder` with their analyses (kept in
+`athene/out/live/`, redone when a clip is newer) and the two clip groups.
+The page core (`athene/page/athene.js`) has a live mode in which the design
+runs the page itself.
+- **Scene 1, two axes** (voices 1, 2): the axes move, probe on their own
+  every 2–5 s, and reach out on every syllable of the voice.
+- **Scene 2, death scene** (voices 3–5): the network eases to a standstill.
+  R or O grows a new axis out of the centre in 2 s, into the widest gap
+  between the rays, with 16 rehearsal or online clips at its end. The clips
+  are 140 px, slightly larger than axes4's, and pop up three times as large
+  before shrinking. They loop for the rest of the scene. A cluster key
+  pressed beyond the pool reuses its clips.
+- **Scene 3, two axes again** (voice 6): the death scene's axes draw back
+  over 2.5 s, their clusters shrink away, and the two axes move and probe
+  again.
+- **Scene 4, growth** (voices 7, 8): from two axes the network grows ever
+  more axes and forks over 600 s on its own clock, then keeps growing until
+  E. It reaches 14 dimensions and six generations of forks. Bolts of light
+  come on their own, from 0.15 to 4 per second, and a pulse of the glow
+  quickens from 0.2 to 2.5 Hz as it grows. E pulls the network into the
+  centre over 4 s with a surge of light, and a glowing circle (radius
+  700 px) opens out of it. S toggles a strobe: 10 flashes per second, a
+  third of each lit with white over the picture.
+- **Every scene:** each syllable of the playing voice sends a bolt from the
+  hub along one ray, and the glow rises with the level. Changing scene stops
+  the voice. Going back rewinds the growth smoothly, and leaving the ending
+  regrows the network from the centre. A help line in German shows the
+  scene, the voice queue and the keys; H hides it.
+
+Driven headless through every scene and key: no errors. The page holds
+60 fps at full 4K resolution with the network fully grown (about 600
+edges), so it draws at full size by default (`--res 0.5` halves it).
+
+---
+
 ## 2026-10-19 — Athene axes4: clips start large, clusters stay where they appear
 
 At Moe's request (`athene/page/designs/axes4.js`):
