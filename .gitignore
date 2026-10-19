@@ -9,3 +9,6 @@ desktop.ini
 
 # Athene renders
 athene/out/
+
+# Athene renders of the archived designs
+athene/archive/out/
