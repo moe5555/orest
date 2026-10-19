@@ -1,51 +1,28 @@
-/* Athene: an orb that answers a recorded voice, for the LED wall.
+/* Athene: a living high-dimensional space that answers a recorded voice, for
+   the LED wall.
 
    A frame depends on its time and the clip's analysis (athene/analyse.py)
    alone, so the preview with sound and the frame-by-frame render
    (athene/render.py) draw the same pictures, in any order.
 
-   This page holds what every design shares: the frame and its layout after
-   Apollon (the Seestone mark small at the top, the name in Michroma above
-   the orb), the clip, and the preview and render modes. The orb is drawn by
-   a design in designs/, chosen with ?design=NAME:
-     futurist    flat halo, lines of force and torn fragments
-     painterly   a plotter painting that paints itself while she speaks
-     planetary   a sphere of blue light read by the lines of a machine that watches it
-     metallic    a chrome sphere, detection lines flitting around it
-     liquid      liquid metals swirling into one another, detection lines around them
+   This page holds what every design shares: the black frame, the clip, and
+   the preview and render modes. The picture is drawn by a design in
+   designs/, chosen with ?design=NAME:
+     axes        a living high-dimensional coordinate system, white lines on black
+     axes2       the coordinate system grown into a branching star, with clusters of clips
+     axes3       the branching star growing like a slime mould, moved by time, not the voice
+     axes4       the slime mould webbed, carrying clusters of clips, lit by the voice
 
-   Colours are the Seestone CI's (src/interface/static/style.css) and their
-   tints on black. The ground is pure black rather than Void, as every lit
-   value lights the LED wall up to its edges. */
+   Athene stands outside the Seestone universe: no mark, no name, no CI. The
+   Seestone-branded prototypes are kept in athene/archive. */
 
 "use strict";
 
 const W = 3840, H = 2160;
 
-const COLOR = {
-  ground: "#000000",
-  bone: "#f2f2f4",
-  steel: "#8c909c",
-  steelFaint: "#5c5f69",   // Steel at 65 % (style.css)
-  steel35: "#313237",      // Steel at 35 % on black
-  steel15: "#151617",      // Steel at 15 % on black
-  signal: "#5b9bff",
-  signal55: "#32558c",     // Signal at 55 % on black
-  signal30: "#1d3154",     // Signal at 30 % (style.css)
-  signal12: "#0e1627",     // Signal at 12 % (style.css)
-};
-
-// Positions and sizes in pixels of the 3840 × 2160 frame.
-const LAYOUT = {
-  markTop: 56, markSize: 84,
-  nameY: 330, nameSize: 104, nameTrack: 0.04,   // tracking of the Apollon wordmark (.wordmark)
-  orbX: W / 2, orbY: 1230,
-  radius: 600,     // the orb's radius at rest
-};
-
 // ---- Clip ------------------------------------------------------------------
 
-// Without an analysis the orb stands at rest.
+// Without an analysis Athene stands at rest.
 const clip = { fps: 50, frames: 0, level: [], tone: [], onsets: [], spoken: [] };
 
 function prepare(analysis) {
@@ -68,18 +45,6 @@ function at(series, t, fallback) {
 
 function spokenAt(t) {
   return at(clip.spoken, t, 0);
-}
-
-// A turn by `size` radians per full-strength syllable, each taking `time`
-// seconds and easing out, summed over the syllables up to t.
-function jolted(t, size, time) {
-  let angle = 0;
-  for (const [start, strength] of clip.onsets) {
-    if (start > t) break;
-    const x = Math.min(1, (t - start) / time);
-    angle += size * strength * (1 - (1 - x) ** 3);
-  }
-  return angle;
 }
 
 // A series smoothed forwards and backwards with the same time constant, so
@@ -116,10 +81,10 @@ function makeRandom(seed) {
 
 const canvas = document.getElementById("frame");
 const ctx = canvas.getContext("2d");
-let mark = null;
 let design = null;
 
-// Called by the design's script: { drawOrb(t), prepare(clip) optional }.
+// Called by the design's script: { draw(t), prepare(clip) optional,
+// load() optional, awaited before the clip is prepared }.
 function registerDesign(d) {
   design = d;
 }
@@ -131,50 +96,10 @@ function offscreen(width, height) {
   return c;
 }
 
-function disc(c, radius, color) {
-  c.beginPath();
-  c.arc(LAYOUT.orbX, LAYOUT.orbY, radius, 0, 2 * Math.PI);
-  c.fillStyle = color;
-  c.fill();
-}
-
-// Sectors of the orb from radius `inner` to `reach`, one per wedge
-// ({angle, width}), turned by `angle` and widened by `scale`.
-function sectors(wedges, angle, scale, inner, reach) {
-  const { orbX, orbY } = LAYOUT;
-  const path = new Path2D();
-  for (const w of wedges) {
-    const a = w.angle + angle, half = w.width * scale / 2;
-    path.moveTo(orbX + inner * Math.cos(a - half), orbY + inner * Math.sin(a - half));
-    path.arc(orbX, orbY, reach, a - half, a + half);
-    path.arc(orbX, orbY, inner, a + half, a - half, true);
-    path.closePath();
-  }
-  return path;
-}
-
 function draw(t) {
-  ctx.fillStyle = COLOR.ground;
+  ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, W, H);
-  design.drawOrb(t);
-  drawMark();
-  drawName();
-}
-
-function drawMark() {
-  const s = LAYOUT.markSize;
-  ctx.drawImage(mark, (W - s) / 2, LAYOUT.markTop, s, s);
-}
-
-function drawName() {
-  const size = LAYOUT.nameSize;
-  ctx.font = `400 ${size}px Michroma`;
-  ctx.letterSpacing = `${LAYOUT.nameTrack * size}px`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = COLOR.bone;
-  // Tracking also follows the last letter; the shift keeps the word centred.
-  ctx.fillText("ATHENE", W / 2 + LAYOUT.nameTrack * size / 2, LAYOUT.nameY);
+  design.draw(t);
 }
 
 // ---- Modes -----------------------------------------------------------------
@@ -200,12 +125,7 @@ function loadScript(src) {
 
 async function load(designName) {
   await loadScript(`/designs/${designName}.js`);
-  const fonts = [
-    new FontFace("Michroma", "url(/fonts/Michroma-Regular.ttf)"),
-    new FontFace("IBM Plex Mono", "url(/fonts/IBMPlexMono-SemiBold.ttf)", { weight: "600" }),
-  ];
-  for (const font of fonts) document.fonts.add(await font.load());
-  mark = await loadImage("/seestone.png");
+  if (design.load) await design.load();
   const res = await fetch("/clip.json");
   if (res.ok) prepare(await res.json());
 }
@@ -215,6 +135,14 @@ async function preview() {
   const audio = new Audio();
   const res = await fetch("/clip.audio");
   if (res.ok) audio.src = URL.createObjectURL(await res.blob());
+  // The playhead survives a reload of the tab, so an edited design shows at
+  // the same moment.
+  let saved = 0;
+  try { saved = Number(sessionStorage.getItem("athene.playhead")) || 0; } catch {}
+  audio.addEventListener("loadedmetadata", () => { audio.currentTime = saved; }, { once: true });
+  addEventListener("pagehide", () => {
+    try { sessionStorage.setItem("athene.playhead", String(audio.currentTime)); } catch {}
+  });
   const clock = document.getElementById("clock");
   const toggle = () => (audio.paused ? audio.play() : audio.pause());
   addEventListener("keydown", (e) => {
@@ -235,7 +163,7 @@ const params = new URLSearchParams(location.search);
 const mode = params.get("mode") || "preview";
 document.body.dataset.mode = mode;
 
-load(params.get("design") || "liquid").then(() => {
+load(params.get("design") || "axes4").then(() => {
   if (mode === "render") {
     // Render: the driver asks for frame i and receives it as a PNG data URL.
     window.athene = {

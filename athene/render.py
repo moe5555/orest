@@ -1,8 +1,8 @@
 """Athene's renderer: the page drawn frame by frame at 3840 × 2160 and 50 fps.
 
 The page (athene/page) draws a frame from its time and the clip's analysis
-(athene/analyse.py). A local server hands it the page, the Seestone typeface
-and mark, the analysis and the clip. For a render, Edge, driven headless by
+(athene/analyse.py). A local server hands it the page, the analysis and the
+clip. For a render, Edge, driven headless by
 Playwright, draws each frame and returns it as PNG, and ffmpeg joins the
 frames with the clip's sound. The drawing surface is 4K on any monitor, no
 frame is dropped however long one takes, and a render repeats exactly.
@@ -11,17 +11,35 @@ frame is dropped however long one takes, and a render repeats exactly.
     python -m athene.render CLIP --still 1 41.2     # PNG frames at these seconds
     python -m athene.render CLIP                    # the whole clip as video
     python -m athene.render CLIP --span 40 50       # ten seconds of it
-    python -m athene.render CLIP --design futurist  # another design (athene/page/designs)
+    python -m athene.render CLIP --design axes      # another design (athene/page/designs)
+    python -m athene.render CLIP --archive --design futurist   # an archived design
+    python -m athene.render CLIP --clips A B        # cluster clips from other folders
+
+Designs that show clusters of clips (axes2 to axes4) take them as frame
+sheets, in groups: by default the Smart Search clips of the HITL database
+(data/clips/hitl_database), then 4-second clips of other footage
+(data/clips/athene_online, cut by athene/cut_clips.py). From each group
+SHEET_CLIPS clips are picked and each is cut to the design's sheet shape
+(SHEET_SHAPES) from the middle of the picture and tiled frame by frame into
+one JPEG. The sheets are kept in athene/out/_sheets/ and reused; drawing a
+clip's frame from a sheet keeps every render of a frame identical.
+
+The Seestone-branded prototypes are kept in athene/archive with the page
+they were drawn on; --archive serves that page, with the Seestone typeface
+and mark, instead of the current one.
 
 Each run analyses the clip afresh. Everything is written to
-athene/out/<clip>/, named with the design. The video is H.264 (4:2:0, BT.709, limited range, which
+athene/out/<clip>/ (athene/archive/out/<clip>/ with --archive), named with
+the design. The video is H.264 (4:2:0, BT.709, limited range, which
 keeps the black ground at code 16, black on the wall) with the clip's sound
 as AAC.
 """
 
 import argparse
 import base64
+import json
 import math
+import random
 import subprocess
 import sys
 import threading
@@ -35,11 +53,29 @@ from . import analyse
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 PAGE = HERE / "page"
-DESIGNS = sorted(path.stem for path in (PAGE / "designs").glob("*.js"))
-DEFAULT_DESIGN = "liquid"
+ARCHIVE_PAGE = HERE / "archive" / "page"
+DEFAULT_DESIGN = {PAGE: "axes4", ARCHIVE_PAGE: "liquid"}
 FONTS = REPO_ROOT / "src" / "sitrep" / "fonts"
 MARK = REPO_ROOT / "src" / "interface" / "static" / "seestone.png"
 OUT = HERE / "out"
+ARCHIVE_OUT = HERE / "archive" / "out"
+SHEETS = OUT / "_sheets"
+CLIP_GROUPS = [
+    REPO_ROOT / "data" / "clips" / "hitl_database",
+    REPO_ROOT / "data" / "clips" / "athene_online",
+]
+
+# Frame sheets of the cluster clips: up to SHEET_CLIPS clips per group,
+# picked with SHEET_SEED, at SHEET_FPS, SHEET_COLUMNS frames to a row. Ten by
+# ten holds a four-second clip. A frame is SHEET_SHAPES[design] px, or
+# SHEET_SHAPE for designs not listed.
+SHEET_CLIPS = 48
+SHEET_SEED = 3
+SHEET_FPS = 25
+SHEET_SHAPE = (240, 240)
+SHEET_SHAPES = {"axes4": (192, 108)}
+SHEET_COLUMNS = 10
+SHEET_ROWS = 10
 
 FPS = analyse.FPS
 PREVIEW_PORT = 8765
@@ -51,6 +87,7 @@ CONTENT_TYPES = {
     ".js": "text/javascript; charset=utf-8",
     ".json": "application/json",
     ".png": "image/png",
+    ".jpg": "image/jpeg",
     ".ttf": "font/ttf",
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -59,20 +96,66 @@ CONTENT_TYPES = {
 }
 
 
-def routes(clip, analysis_path):
+def frame_sheets(folders, shape):
+    """[(sheet path, frame count, group)] for up to SHEET_CLIPS clips of each
+    folder, cutting the sheets not yet in SHEETS. A folder without clips
+    adds none."""
+    width, height = shape
+    SHEETS.mkdir(parents=True, exist_ok=True)
+    sheets = []
+    for group, folder in enumerate(folders):
+        clips = sorted(folder.glob("*.mp4")) if folder.is_dir() else []
+        picked = random.Random(SHEET_SEED).sample(clips, min(SHEET_CLIPS, len(clips)))
+        for source in picked:
+            path = SHEETS / f"{source.stem}_{width}x{height}.jpg"
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(source)],
+                capture_output=True, text=True, check=True)
+            frames = min(SHEET_COLUMNS * SHEET_ROWS, math.floor(float(probe.stdout) * SHEET_FPS))
+            if not path.is_file():
+                # The largest part of the picture in the frame's shape, from its middle.
+                crop = f"crop='min(iw,ih*{width}/{height})':'min(ih,iw*{height}/{width})'"
+                subprocess.run([
+                    "ffmpeg", "-y", "-v", "error", "-i", str(source),
+                    "-vf", f"fps={SHEET_FPS},{crop},scale={width}:{height},"
+                           f"tile={SHEET_COLUMNS}x{SHEET_ROWS}",
+                    "-frames:v", "1", "-q:v", "3", str(path),
+                ], check=True)
+            sheets.append((path, frames, group))
+    return sheets
+
+
+def write_sheet_list(sheets, shape, path):
+    """The list the page reads from /clips.json."""
+    width, height = shape
+    listing = [{"src": f"/clips/{k}.jpg", "frames": frames, "fps": SHEET_FPS, "group": group,
+                "width": width, "height": height, "columns": SHEET_COLUMNS}
+               for k, (_, frames, group) in enumerate(sheets)]
+    path.write_text(json.dumps(listing), encoding="utf-8")
+
+
+def designs(page):
+    return sorted(path.stem for path in (page / "designs").glob("*.js"))
+
+
+def routes(page, clip, analysis_path, sheets, sheet_list_path):
     """URL path → file. Files are read on every request, so an edited page
     shows on reload."""
     table = {
-        "/": PAGE / "index.html",
-        "/athene.js": PAGE / "athene.js",
-        "/seestone.png": MARK,
+        "/": page / "index.html",
+        "/athene.js": page / "athene.js",
         "/clip.json": analysis_path,
         "/clip.audio": clip,
+        "/clips.json": sheet_list_path,
     }
-    for design in (PAGE / "designs").glob("*.js"):
+    for k, (sheet, _, _) in enumerate(sheets):
+        table[f"/clips/{k}.jpg"] = sheet
+    for design in (page / "designs").glob("*.js"):
         table[f"/designs/{design.name}"] = design
-    for font in FONTS.glob("*.ttf"):
-        table[f"/fonts/{font.name}"] = font
+    if page == ARCHIVE_PAGE:
+        table["/seestone.png"] = MARK
+        for font in FONTS.glob("*.ttf"):
+            table[f"/fonts/{font.name}"] = font
     return table
 
 
@@ -163,21 +246,34 @@ def main():
     parser.add_argument("--preview", action="store_true", help="open the page in the browser, with sound")
     parser.add_argument("--still", type=float, nargs="+", metavar="SECONDS", help="write PNG frames at these times")
     parser.add_argument("--span", type=float, nargs=2, metavar=("START", "END"), help="render only these seconds")
-    parser.add_argument("--design", choices=DESIGNS, default=DEFAULT_DESIGN, help=f"the orb's design (default: {DEFAULT_DESIGN})")
+    parser.add_argument("--design", help=f"the design (default: {DEFAULT_DESIGN[PAGE]}, "
+                                          f"or {DEFAULT_DESIGN[ARCHIVE_PAGE]} with --archive)")
+    parser.add_argument("--archive", action="store_true", help="draw an archived design (athene/archive)")
+    parser.add_argument("--clips", type=Path, nargs="+", default=CLIP_GROUPS, metavar="FOLDER",
+                        help="folders of the cluster clips, one group each (default: the HITL database's, then athene_online)")
     parser.add_argument("--port", type=int, help=f"server port (default: {PREVIEW_PORT} for the preview, any free one otherwise)")
     args = parser.parse_args()
+    page = ARCHIVE_PAGE if args.archive else PAGE
+    design = args.design or DEFAULT_DESIGN[page]
+    if design not in designs(page):
+        parser.error(f"--design must be one of {', '.join(designs(page))}")
 
     clip = args.clip.resolve()
-    folder = OUT / clip.stem
+    folder = (ARCHIVE_OUT if args.archive else OUT) / clip.stem
     analysis = analyse.analyse(clip)
     analysis_path = folder / "analysis.json"
     analyse.write(analysis, analysis_path)
     print(analyse.summary(analysis))
 
+    shape = SHEET_SHAPES.get(design, SHEET_SHAPE)
+    sheets = [] if args.archive else frame_sheets(args.clips, shape)
+    sheet_list_path = folder / "clips.json"
+    write_sheet_list(sheets, shape, sheet_list_path)
+
     port = args.port if args.port is not None else (PREVIEW_PORT if args.preview else 0)
-    server = serve(routes(clip, analysis_path), port)
-    url = f"http://127.0.0.1:{server.server_address[1]}/?design={args.design}"
-    name = f"{clip.stem}_{args.design}"
+    server = serve(routes(page, clip, analysis_path, sheets, sheet_list_path), port)
+    url = f"http://127.0.0.1:{server.server_address[1]}/?design={design}"
+    name = f"{clip.stem}_{design}"
 
     if args.preview:
         print(f"preview at {url}  (Ctrl+C to stop)")
