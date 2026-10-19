@@ -11,6 +11,8 @@
      futurist    flat halo, lines of force and torn fragments
      painterly   a plotter painting that paints itself while she speaks
      planetary   a sphere of blue light read by the lines of a machine that watches it
+     metallic    a chrome sphere, detection lines flitting around it
+     liquid      liquid metals swirling into one another, detection lines around them
 
    Colours are the Seestone CI's (src/interface/static/style.css) and their
    tints on black. The ground is pure black rather than Void, as every lit
@@ -233,7 +235,7 @@ const params = new URLSearchParams(location.search);
 const mode = params.get("mode") || "preview";
 document.body.dataset.mode = mode;
 
-load(params.get("design") || "planetary").then(() => {
+load(params.get("design") || "liquid").then(() => {
   if (mode === "render") {
     // Render: the driver asks for frame i and receives it as a PNG data URL.
     window.athene = {

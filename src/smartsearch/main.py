@@ -3,7 +3,7 @@
 Entry point for the Smart Search affordance of
 knowledge/components/02_processing.md.
 
-    apollon-search extract                     # embed a folder of rehearsal footage
+    apollon-search extract                     # embed a folder of rehearsal footage, or what is new in it
     apollon-search add-extractor --video-id ID # re-embed it with another model
     apollon-search index                       # build the nearest-neighbour indices
     apollon-search serve                       # run WISE, needed for the queries below
@@ -69,14 +69,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
 
-    extract = commands.add_parser("extract", help="extract features from a media folder")
+    extract = commands.add_parser(
+        "extract",
+        help="embed the files of a media folder the project lacks, then index them",
+    )
     _project(extract)
     _extractors(extract)
     extract.add_argument("--media", default=config.MEDIA_DIR, metavar="DIR",
-                         help=f"folder of rehearsal footage (default: {config.MEDIA_DIR})")
+                         help=f"folder of rehearsal footage, subfolders excluded "
+                              f"(default: {config.MEDIA_DIR})")
     extract.add_argument("--include", action="append", default=[], metavar="GLOB",
                          help="only files matching this glob; repeatable")
-    extract.add_argument("--workers", type=int, default=0, help="dataloader workers")
+    extract.add_argument("--workers", type=int, default=0,
+                         help="dataloader workers; above 0, an interrupted pass starts over")
     extract.add_argument("--no-thumbnails", action="store_true",
                          help="skip thumbnail generation")
     extract.add_argument("--autocast", action="store_true",
@@ -331,12 +336,17 @@ def main(argv=None) -> int:
     project = config.project_dir(args.project)
 
     if args.command == "extract":
-        return wise_cli.extract(
-            project, [args.media],
-            video_ids=args.video_id, audio_ids=args.audio_id, image_ids=args.image_id,
-            include=args.include, num_workers=args.workers,
-            thumbnails=not args.no_thumbnails, autocast=args.autocast,
-        )
+        try:
+            return wise_cli.extract_folder(
+                project, Path(args.media),
+                video_ids=args.video_id, audio_ids=args.audio_id, image_ids=args.image_id,
+                include=args.include, num_workers=args.workers,
+                thumbnails=not args.no_thumbnails, autocast=args.autocast,
+            )
+        except KeyboardInterrupt:
+            print("\nInterrupted. Recordings finished so far are kept; "
+                  "run the same command to continue.", file=sys.stderr)
+            return 130
 
     if args.command == "add-extractor":
         if not (args.video_id or args.audio_id or args.image_id):

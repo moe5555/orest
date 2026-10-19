@@ -9,16 +9,36 @@ Each operation is a command builder plus a thin runner, so the argument lists
 can be checked without launching a subprocess. Output is written to the terminal
 and to a log file simultaneously: a run over a rehearsal season lasts hours and
 has previously failed while exiting 0 (changelog.md, 2026-09-08).
+
+New recordings are added to an existing project with WISE patch 0007
+(knowledge/source_of_truth/versions.md): files the project holds are skipped,
+the extractors are named per run, and each finished file is saved as it
+completes, so an interrupted run continues where it stopped.
 """
 
+import fnmatch
+import json
 import os
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from . import config
+
+# Lists a project's extractors from inside WISE's environment.
+EXTRACTORS_SCRIPT = config.REPO_ROOT / "src" / "scripts" / "wise_extractors.py"
+
+
+@dataclass(frozen=True)
+class Extractor:
+    """A feature extractor a project holds features from, for one modality."""
+
+    modality: str  # "video", "audio" or "image"
+    id: str
+    segment_level: bool
 
 # Read size for forwarding subprocess output. One read returns whatever has
 # arrived rather than waiting for a full buffer, so progress bars that redraw
@@ -39,6 +59,7 @@ def extract_command(
     audio_ids=(),
     image_ids=(),
     include=(),
+    files_from: Path | None = None,
     num_workers: int = 0,
     thumbnails: bool = True,
     autocast: bool = False,
@@ -47,17 +68,24 @@ def extract_command(
     """Build an `extract-features` command line.
 
     WISE infers its mode from the arguments: media directories with a fresh
-    project create it, media directories with an existing project add media
-    under the extractors already registered, and no media directories at all
-    re-embed the existing media with a newly named extractor
-    (knowledge/background/wise_learnings.md, section 5).
+    project create it, media directories with an existing project add media,
+    and no media directories at all re-embed the existing media with a newly
+    named extractor (knowledge/background/wise_learnings.md, section 5). When
+    adding media, the named extractors select among those the project holds.
 
     Naming any extractor suppresses the defaults for the other modalities, so
     callers that want audio alongside a non-default visual model must name both.
+
+    `files_from` names a file listing media paths relative to the single media
+    directory; WISE accepts it only without include patterns.
     """
+    if files_from is not None and include:
+        raise ValueError("WISE takes either include patterns or a file list, not both")
     command = ["extract-features", *[str(path) for path in media_dirs]]
     command += ["--project-dir", str(project)]
     command += _repeated("--media-include", include)
+    if files_from is not None:
+        command += ["--media-files-from", str(files_from)]
     command += _repeated("--video-feature-id", video_ids)
     command += _repeated("--audio-feature-id", audio_ids)
     command += _repeated("--image-feature-id", image_ids)
@@ -119,6 +147,100 @@ def import_metadata_command(
         "--from-csv", str(csv_path),
         "--metadata-type", metadata_type,
         "--project-dir", str(project),
+    ]
+
+
+def project_exists(project: Path) -> bool:
+    """Whether WISE treats the project as existing, and so adds media to it."""
+    return project.is_dir() and any(project.iterdir())
+
+
+def media_files(folder: Path, include=()) -> list[str]:
+    """Names of the files directly inside `folder` that match any include glob.
+
+    Subfolders are not searched: OBS records into one flat folder, and
+    recordings set aside are moved into a subfolder of it.
+    """
+    patterns = list(include) or ["*"]
+    return sorted(
+        path.name for path in folder.iterdir()
+        if path.is_file() and any(fnmatch.fnmatch(path.name, pattern) for pattern in patterns)
+    )
+
+
+def write_media_list(names, destination: Path) -> Path:
+    """Write file names one per line, as UTF-8, for `--media-files-from`."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text("".join(f"{name}\n" for name in names), encoding="utf-8")
+    return destination
+
+
+def select_extractors(extractors, *, video_ids=(), audio_ids=(), image_ids=()):
+    """The project's extractors among those named, and the named ones it lacks.
+
+    Naming none selects every extractor the project holds.
+    """
+    named = ({("video", id_) for id_ in video_ids} | {("audio", id_) for id_ in audio_ids}
+             | {("image", id_) for id_ in image_ids})
+    if not named:
+        return list(extractors), []
+    held = {(extractor.modality, extractor.id) for extractor in extractors}
+    selected = [extractor for extractor in extractors
+                if (extractor.modality, extractor.id) in named]
+    missing = sorted(f"{modality} {id_}" for modality, id_ in named - held)
+    return selected, missing
+
+
+def extraction_passes(extractors) -> list[list[Extractor]]:
+    """Group extractors into the WISE runs that add media to a project.
+
+    WISE cannot combine frame-level and segment-level video extractors in one
+    run, and a segment-level run takes its segment length from its first
+    extractor. Frame-level video, audio and image extractors therefore share
+    the first pass, which decodes each file once, and every segment-level
+    extractor runs on its own.
+    """
+    frame = [extractor for extractor in extractors if not extractor.segment_level]
+    segment = [[extractor] for extractor in extractors if extractor.segment_level]
+    return ([frame] if frame else []) + segment
+
+
+def pass_command(
+    project: Path,
+    media_dir: Path,
+    extractors,
+    files_from: Path,
+    *,
+    thumbnails: bool = True,
+    num_workers: int = 0,
+    autocast: bool = False,
+) -> list[str]:
+    """The `extract-features` command for one pass over a list of recordings.
+
+    Thumbnails come from the frame-level pass only. They are keyed by media and
+    timestamp, not by extractor, so a second pass would store a duplicate set.
+    """
+    ids = {modality: [extractor.id for extractor in extractors if extractor.modality == modality]
+           for modality in ("video", "audio", "image")}
+    segment_level = any(extractor.segment_level for extractor in extractors)
+    return extract_command(
+        project, [media_dir],
+        video_ids=ids["video"], audio_ids=ids["audio"], image_ids=ids["image"],
+        files_from=files_from, num_workers=num_workers,
+        thumbnails=thumbnails and not segment_level, autocast=autocast,
+    )
+
+
+def pass_index_commands(project: Path, extractors) -> list[list[str]]:
+    """Rebuild the index of each extractor in a pass over all of its features.
+
+    Overwriting is required: WISE otherwise keeps an existing index as it is,
+    without the vectors just added.
+    """
+    return [
+        index_command(project, modalities=[extractor.modality],
+                      feature_id=extractor.id, overwrite=True)
+        for extractor in extractors
     ]
 
 
@@ -193,6 +315,11 @@ def run(command: list[str], *, env: dict[str, str] | None = None, log: bool = Tr
                 # interrupted, which is the case it exists for.
                 handle.write(chunk)
                 handle.flush()
+    except KeyboardInterrupt:
+        # The console delivers Ctrl+C to WISE as well. Waiting lets it discard
+        # the file in progress before the prompt returns.
+        process.wait()
+        raise
     finally:
         if handle:
             handle.close()
@@ -210,6 +337,82 @@ def extract(project: Path, media_dirs=(), **kwargs) -> int:
 
 def create_index(project: Path, **kwargs) -> int:
     return run(index_command(project, **kwargs))
+
+
+def project_extractors(project: Path) -> list[Extractor]:
+    """The extractors a project holds, read through WISE's environment.
+
+    Apollon's environment has neither WISE's store reader nor its model
+    registry, which records whether an extractor embeds frames or segments.
+    """
+    result = subprocess.run(
+        [str(config.python()), str(EXTRACTORS_SCRIPT), str(project)],
+        stdout=subprocess.PIPE, text=True, check=True,
+    )
+    return [Extractor(**entry) for entry in json.loads(result.stdout)]
+
+
+def extract_folder(
+    project: Path,
+    media_dir: Path,
+    *,
+    include=(),
+    video_ids=(),
+    audio_ids=(),
+    image_ids=(),
+    num_workers: int = 0,
+    thumbnails: bool = True,
+    autocast: bool = False,
+) -> int:
+    """Embed the recordings in a folder, then rebuild the indices over them.
+
+    A new project is created from every file directly in the folder. An
+    existing project receives the files it lacks, one pass per group of
+    extractors (`extraction_passes`), each pass followed by its indices, so an
+    interrupted run leaves the completed passes searchable. Running the same
+    command again continues where it stopped.
+    """
+    # WISE stores the folder as given, and resolves registered files against it.
+    media_dir = media_dir.resolve()
+    names = media_files(media_dir, include)
+    if not names:
+        print(f"No files in {media_dir}", file=sys.stderr)
+        return 1
+    listing = write_media_list(names, log_path(["media"]).with_suffix(".txt"))
+    print(f"{len(names)} files from {media_dir} listed in {listing}", flush=True)
+    options = {"num_workers": num_workers, "autocast": autocast}
+
+    if not project_exists(project):
+        code = extract(project, [media_dir], video_ids=video_ids, audio_ids=audio_ids,
+                       image_ids=image_ids, files_from=listing, thumbnails=thumbnails,
+                       **options)
+        return code or create_index(project)
+
+    extractors, missing = select_extractors(
+        project_extractors(project),
+        video_ids=video_ids, audio_ids=audio_ids, image_ids=image_ids,
+    )
+    if missing:
+        print(f"{project.name} holds no features from: {', '.join(missing)}. "
+              f"Add an extractor with add-extractor.", file=sys.stderr)
+        return 1
+    if not extractors:
+        print(f"{project} holds no features. Remove it to create it anew.", file=sys.stderr)
+        return 1
+
+    passes = extraction_passes(extractors)
+    for number, extractors_of_pass in enumerate(passes, 1):
+        print(f"pass {number} of {len(passes)}: "
+              f"{', '.join(extractor.id for extractor in extractors_of_pass)}", flush=True)
+        code = run(pass_command(project, media_dir, extractors_of_pass, listing,
+                                thumbnails=thumbnails, **options))
+        for command in pass_index_commands(project, extractors_of_pass):
+            if code:
+                break
+            code = run(command)
+        if code:
+            return code
+    return 0
 
 
 def import_metadata(project: Path, **kwargs) -> int:

@@ -6,6 +6,253 @@ referenced below.
 
 ---
 
+## 2026-10-15 — New rehearsals are added to a Smart Search project incrementally (VSH-ARLT-5090)
+
+Requested by Moe, after the failed attempt in the next entry. Covers "Process
+rehearsal footage from folder on computer" of Smart Search in
+`knowledge/source_of_truth/pipeline.md` for a corpus that grows each
+rehearsal day.
+
+**WISE patch 0007** (`knowledge/source_of_truth/wise-patches/`,
+`versions.md`), in add-media mode:
+- Named extractors select among those the project holds, so SigLIP2 and CLAP
+  (frame-level) and pose (segment-level) process new media in separate runs.
+- Files already registered keep their media id instead of being added again,
+  and are not hashed again.
+- Files holding saved features from a selected extractor are skipped. Saved
+  means present in the Faiss store, not merely in `vectors`: rows outlive an
+  interruption that lost their features.
+- Each file is committed and its features saved as soon as it is complete
+  (rows first, then shards), and an interrupted file's unsaved features are
+  discarded. Its rolled-back ids would otherwise be reissued. This needs one
+  loader process; with `--num-workers` above 0 the run commits only at the
+  end. Each file adds one shard per extractor.
+- `--media-files-from` is read as UTF-8, and a last line without a newline
+  keeps its final character.
+
+**`apollon-search extract`** (`src/smartsearch/wise_cli.py`,
+`extract_folder`) lists the files directly in `--media` and writes the list to
+`data/logs/wise-media-<time>.txt`. Subfolders are left out, as
+`HITL_Database/dontuse/` holds footage set aside. A new project is created
+from the list and indexed. On an existing project, the extractors are read
+through WISE's environment (`src/scripts/wise_extractors.py`), because only
+WISE's registry knows which embed segments. They then run in passes: all
+frame-level extractors together with thumbnails, then each segment-level
+extractor alone without (thumbnails are keyed by media and timestamp; see
+`add-extractor` in `main.py`). Each pass ends by rebuilding its own indices
+with `--overwrite`. Without it, WISE keeps an existing index unchanged
+(next entry; `wise_learnings.md` §5: re-run `create-index` after any
+extraction). Naming `--video-id`/`--audio-id` limits the run to those
+extractors. Ctrl+C waits for WISE to discard the file in progress, and the
+same command continues later. That matters because the pose pass for the
+35 new recordings (about 19 h) is longer than a night between rehearsals.
+
+**Verified.** The patch functions were run against a scratch copy of
+`hitl_database`. The 52 registered files were reused with no new rows or
+source collections, and each pass found exactly media 18–52 pending. A
+vectors row without saved features stayed pending, and an interrupt
+discarded unsaved vectors. All seven patches apply to a clean checkout of
+the pinned commit and reproduce the working tree. 757 tests pass (13 new in
+`tests/test_wise_cli.py`). **Not yet verified:** the per-file save in the
+extraction loop, which takes an extraction run. WISE is not yet reinstalled
+into the `wise` environment, so the patch is not active there.
+
+**Open:**
+- `external/wise/src/wise/feature/hf_models.py` still says "Orest" in a
+  comment where patch 0006 says "Apollon". The difference is cosmetic.
+
+---
+
+## 2026-10-15 — New rehearsals cannot be added to `hitl_database` incrementally (VSH-ARLT-5090)
+
+Tried: adding the 35 recordings from 2026-10-07 14:21 to 2026-10-15 (13.3 h,
+216 GB) to `hitl_database` in WISE's add-media mode (`extract-features
+<HITL_Database> --media-files-from <list>`), then `create-index --overwrite`.
+This is "Process rehearsal footage from folder on computer" of Smart Search in
+`knowledge/source_of_truth/pipeline.md`.
+
+**Failed.** Add-media runs every extractor the project holds and accepts no
+selection. `hitl_database` holds SigLIP2 (frame-level) and
+`apollon/pose/rtmo-s/body7` (segment-level) for video, and WISE refuses to mix
+the two in one run (`extract_features.py`, "Frame-level and segment-level video
+feature extractors cannot be combined"). It exits only after registering the
+files, so the project now lists media 18–52 with no vectors, and the rebuilt
+indices hold the same 77,074 vectors as before. Search and the Berechenbarkeit
+reference (2026-10-08) are unaffected.
+
+Also found: add-media does not skip files already registered (no uniqueness on
+path or checksum), and its scan descends into subfolders such as
+`HITL_Database/dontuse/`. Feature stores append a new shard, so incremental
+extraction is safe for existing vectors.
+
+Measured rates on this machine, from the original build: SigLIP2 and CLAP
+57.6 min for 7.8 h of footage, pose 664.6 min. For the new 13.3 h that is about
+1.6 h and 19 h.
+
+---
+
+## 2026-10-16 — Athene liquid: softer satin chrome, after the Starmirror moodboard
+
+Moe asked for softer and more metallic, towards `athene/moodboard_starmirror/`
+(Herndon and Dryhurst's Starmirror, liquid chrome and gold, satin copper and
+steel converging): high-key, mostly silver, smooth folds, no hard lines
+(`athene/page/designs/liquid.js`).
+- **Folds:** the liquid is now a height field (broad noise folded twice by
+  noise, no fine octave) whose slope tilts the surface normal (depth 0.3 at
+  rest to 0.55 at full level), so the reflections run along the folds in
+  satin bands. The four flat metals, seams and silver filaments are removed.
+- **Tint:** silver, with steel blue and copper drifting through it on a
+  slow second noise field, blended softly.
+- **Studio:** soft lobes instead of hard panels: light above, a dimmer floor
+  with a warm bounce, a soft horizon band, a large key light, warm light on
+  the right and cool on the left. Polish 0.02 rad, softer highlights.
+- Folding 0.6 at rest to 1.1 at full level. A first pass with the floor at
+  0.06 left the lower half black; the floor is at 0.2.
+
+On 56–66 s the largest change between two frames is 2.1 times the typical
+one; the render runs at 11 fps (about 8 min for Lena's clip).
+
+---
+
+## 2026-10-16 — Athene: liquid design, liquid metals swirling into one another
+
+Moe asked for a different direction: the ElevenLabs liquid orb, but
+metallic, different liquids mixing and swirling. New design
+`athene/page/designs/liquid.js`, now the default; metallic stays as it was.
+- **Liquid:** noise warped by noise twice over, read on the sphere's
+  surface in a frame turning about the vertical. Its value picks one of four
+  metals with soft seams: deep navy steel, steel blue, copper, peach gold,
+  with silver filaments along the seams. The folding vector bends the
+  surface normal, so reflections ripple along the swirls.
+- **Metal:** each metal reflects a neutral studio (grey backdrop, the two
+  rim lights, key light and strip) tinted by its colour and whiter towards
+  the rim, with the metallic design's polish (four tilted normals) and
+  highlights.
+- **Voice:** flow 0.04/s at rest plus 0.35 per second of full smoothed level
+  (0.3 s both ways); turn once in 90 s plus 0.15 rad per second of full
+  level; folding 0.7 at rest to 1.4 at full level; each syllable swells the
+  folding by up to 0.25 (0.3 s from 0.1 s before it, ebbing over 0.6 s);
+  sheen brightens with the level. The flitting detection boxes are those of
+  the metallic design.
+
+Tried first: a surge rising in 80 ms after each syllable. Raising the
+folding moves the whole liquid at once, so it showed as a jolt (largest
+change between two frames 4.1 times the typical one); with the slow swell
+it is 2.5. The render runs at 9.3 fps (about 10 min for Lena's clip).
+
+---
+
+## 2026-10-16 — Athene metallic: gloss in place of the painted look
+
+Moe found the jagged field painted and childlike and wanted metallic gloss
+back (`athene/page/designs/metallic.js`). The field is unchanged; the
+material is new: the reflection averaged over four normals tilted 0.006 rad
+(polish), desaturated by 18 %, steel-tinted and with deeper mid-tones
+(power 1.1); Fresnel from 0.72 face-on to 1 at the rim; darker towards the
+bottom for volume; two analytic highlights with soft glows. A first pass
+(tilt 0.012, 30 % desaturated, F0 0.55) was glossy but muddy and dark.
+
+---
+
+## 2026-10-16 — Athene metallic: a jagged field with no centre replaces the eye
+
+Moe found the reflected halo a childish eye of Sauron and asked for more
+jagged edges, more abstract, no central eye (`athene/page/designs/metallic.js`).
+Halo, pupil, dot and the planes fanning from the eye are removed. The
+sphere now reflects a field with no centre on the studio backdrop:
+- **Shards:** 70 irregular triangles (12 of them long blades) scattered
+  evenly over all directions, hard-edged, in the painterly palette (rust,
+  deep rust, ember, peach, cream, navy, blue, Signal); straight edges in the
+  tangent plane, so they bend on the sphere. Each syllable jolts 2–6 of
+  them: a turn of 0.12–0.45 rad that stays (0.45 s, starting 0.12 s ahead)
+  and a shift that settles back (0.12 s out, 0.8 s back).
+- **Strokes:** 220 rectangles laid at angles up to ±0.6 rad. With the level
+  (smoothed both ways, 0.35 s) they align with a sideways stream, slide past
+  the shards (0.5 rad per second of full level) and stretch to twice their
+  length as speed lines.
+- Rim crescents, highlights, ripples and detection boxes are unchanged.
+
+Tried first: a stream faster at the top than at the bottom. The shear
+accumulates with the voice and smeared the strokes into marbling within a
+minute; the stream is now a rigid turn. Anti-aliasing widths are taken once
+per pixel, outside the shader's loops, where derivatives are defined.
+
+On 56–66 s the largest change between two frames is 1.6 times the typical
+one; the render runs at 10.8 fps (about 8.5 min for Lena's clip).
+
+---
+
+## 2026-10-16 — Athene metallic: the sphere reflects the painterly composition, cut clean
+
+Moe wanted the reflection abstract rather than earth-like: the Futurist
+style of the painterly design, in the metallic, clear-cut manner. The
+Futurist city is replaced (`environment` in
+`athene/page/designs/metallic.js`):
+- **Surround:** the painterly halo, large and off the sphere's centre
+  (bands at 0.5–1.55 rad from the eye in navy, deep rust, rust, peach,
+  cream, a black pupil and a Bone dot), on a studio backdrop of steel blue
+  above and dark below. Over it, 260 hard-edged rectangular strokes in the
+  colours of the bands beneath them (30 % a neighbouring band's, 18 % blue),
+  and the translucent light and dark planes. Two tall lights behind the
+  sphere, Bone on the left and peach on the right, make bright crescents
+  along its rim; a key light and a strip make the highlights.
+- **Voice:** as in the painterly design, the strokes turn from near
+  horizontal into a vortex about the eye with the level (smoothed both ways,
+  0.35 s), lengthen by up to 60 %, and circle it, inner ones faster; the
+  planes glide 0.14 rad per syllable over 0.45 s with an echo; the bands
+  widen up to 10 % from the inside out. Ripples and detection boxes are
+  unchanged. The surround sways about the vertical (±0.34 rad over 29 and
+  47 s) instead of turning, so the eye stays in view.
+
+Tried on the way: a cool and a warm half meeting in a cream line read as a
+landmass on an ocean; the halo near the sphere's centre with black behind
+it read as an eye painted on a disc, the sphere's edge lost in the black
+ground; a full ring light behind read as a bezel. The rim needs bright
+reflections, and the eye must sit far enough off-centre for the curvature to
+bend it.
+
+On 56–66 s the largest change between two frames is 2.0 times the typical
+one; the render runs at 20 fps (about 4.5 min for Lena's clip).
+
+---
+
+## 2026-10-16 — Athene: metallic design, a chrome sphere with detections flitting around it
+
+Moe wanted nothing of a planet: a metallic sphere in the Futurist colours,
+as if reflecting something (a texture to reflect may follow), with small
+object-detection lines flitting around it with the voice. New design
+`athene/page/designs/metallic.js`, now the default:
+- **Sphere:** chrome, drawn by a WebGL2 shader at twice the size and scaled
+  down. It reflects a procedural Futurist city at dusk, after Depero's New
+  York (`athene/moodboard_itfuturism/`): a sky from cream through Signal to
+  navy with a sun and two searchlights, two rows of towers with lit windows
+  on the horizon, a rust floor with radiating lines. The surroundings are one
+  shader function (`environment`), which an image can replace. Seen from
+  0.2 rad above, the horizon bends below the sphere's top half instead of
+  halving it.
+- **Voice:** the surroundings turn once in 80 s plus 0.25 rad per second of
+  full smoothed level (0.3 s both ways); the level ripples the surface like
+  liquid metal (normal pushed by noise, 0.03 at rest to 0.25), finer for
+  bright tone.
+- **Detections:** 36 boxes (corner brackets, no labels), three always shown,
+  the others appearing as the smoothed level passes their thresholds. Each
+  syllable sends 2–6 showing boxes darting 80–360 px (0.22 s, easing out),
+  each leaving a fading line, and locks one in Signal. A dart that would
+  leave 1.12 radii goes the other way or to a fresh spot, so the boxes do not
+  gather at the edge.
+
+Tried first: a sky above and rust below with rays from the zenith, which
+read as a painted ball split at its equator; then a dark studio with
+coloured panels and bands, which read as glass with ribbons inside. Chrome
+needs a whole surrounding world with a detailed horizon.
+
+`athene/render.py` now reports the page's errors when it does not get ready
+(a GLSL reserved word, `half`, had left it waiting silently). On 56–66 s the
+largest change between two frames is 1.8 times the typical one; the render
+runs at 13 fps (about 7 min for Lena's clip).
+
+---
+
 ## 2026-10-15 — Athene planetary: an abstract sphere, detections that name nothing
 
 Moe asked for the planetary design to be more abstract: no literal planet

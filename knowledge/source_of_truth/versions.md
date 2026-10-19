@@ -2,7 +2,7 @@ WISE pinned at fcfa443fbb46eb361bb19151339338616838a5b5 2026-08-06, cloned 2026-
 
 `external/wise` is a plain clone (not a submodule) and is gitignored by
 `external/` in `.gitignore`, so local edits inside it are invisible to this
-repo's git and are lost on re-clone. Four fixes are needed on
+repo's git and are lost on re-clone. Seven fixes are needed on
 top of the pinned commit above — see `knowledge/source_of_truth/wise-patches/`
 and reapply with `git -C external/wise apply <patch>` after a fresh clone:
 
@@ -29,8 +29,17 @@ and reapply with `git -C external/wise apply <patch>` after a fresh clone:
   plugin mechanism. The extractor itself is **not** in this patch — it lives in
   `wise_ext/` in this repository and is pip-installed into the `wise`
   environment, so only the two registration points are carried here.
+- `0007-resumable-add-media.patch` — `extract_features.py` and `faiss_store.py`,
+  makes adding media to an existing project incremental and resumable. Named
+  extractors select among those the project holds, so frame-level and
+  segment-level extractors process new media in separate runs. Files already
+  registered keep their media id; those holding saved features from a
+  selected extractor are skipped. Each file is committed and its features
+  saved as it completes, and an interrupted file is discarded. With one
+  loader process only (`--num-workers 0`). Also reads `--media-files-from` as
+  UTF-8. Adds one feature shard per file and extractor.
 
-Patches 0002 to 0006 change installed code, so re-run
+Patches 0002 to 0007 change installed code, so re-run
 `pip install --no-deps --force-reinstall .` in `external/wise` after applying
 them. `wise serve` additionally needs the frontend built once:
 `npm install && npm run build` in `external/wise/frontend/`.

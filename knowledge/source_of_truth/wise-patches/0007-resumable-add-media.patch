@@ -1,0 +1,403 @@
+diff --git a/src/wise/_main/extract_features.py b/src/wise/_main/extract_features.py
+index 6ad158a..967fb01 100644
+--- a/src/wise/_main/extract_features.py
++++ b/src/wise/_main/extract_features.py
+@@ -15,6 +15,7 @@
+ ## limitations under the License.
+ 
+ import argparse
++import contextlib
+ import logging
+ import os
+ import pprint
+@@ -28,6 +29,7 @@ import torch
+ import torch.utils.data as torch_data
+ from tqdm import tqdm
+ 
++from wise import db as wise_db
+ from wise.config import APIConfig
+ from wise.data_models import (
+     MediaChunkType,
+@@ -347,9 +349,73 @@ def get_dataloader(stream: torch.utils.data.Dataset, num_workers: int):
+     return av_data_loader
+ 
+ 
++def _path_key(path) -> str:
++    """A file's absolute path in the form used to compare it with others."""
++    return os.path.normcase(os.path.abspath(path))
++
++
++def get_registered_media(db_engine) -> dict[str, DatasetPayload]:
++    """Media the project already holds, keyed by their normalised path."""
++    stmt = sa.select(
++        wise_db.media_table.c.id,
++        wise_db.media_table.c.path,
++        wise_db.media_table.c.media_type,
++        wise_db.source_collections_table.c.location,
++    ).select_from(
++        wise_db.media_table.join(
++            wise_db.source_collections_table,
++            wise_db.media_table.c.source_collection_id
++            == wise_db.source_collections_table.c.id,
++        )
++    )
++    registered = {}
++    with db_engine.connect() as conn:
++        for row in conn.execute(stmt):
++            media_path = os.path.join(row.location, row.path)
++            registered[_path_key(media_path)] = DatasetPayload(
++                row.id, media_path, row.media_type
++            )
++    return registered
++
++
++def get_or_create_source_collection(conn, media_dir: Path):
++    """The project's source collection for a folder, created on first use."""
++    stmt = sa.select(wise_db.source_collections_table).where(
++        wise_db.source_collections_table.c.type == SourceCollectionType.DIR
++    )
++    for row in conn.execute(stmt):
++        if _path_key(row.location) == _path_key(media_dir):
++            return row
++    data = SourceCollection(
++        location=str(media_dir), type=SourceCollectionType.DIR
++    )
++    return SourceCollectionRepo.create(conn, data=data)
++
++
+ def process_media_files(media_dir: Path, db_engine, media_files: list[Path]):
++    # Files the project already holds keep their media id, so adding a folder
++    # again extends the project rather than registering its files twice.
++    registered = get_registered_media(db_engine)
++    dataset_payload: list[DatasetPayload] = []
++    new_files: list[Path] = []
++    for media_file in media_files:
++        known = registered.get(_path_key(media_file))
++        if known is None:
++            new_files.append(media_file)
++        else:
++            dataset_payload.append(known)
++    if dataset_payload:
++        logger.info(
++            "%d of %d media files in '%s' are already registered",
++            len(dataset_payload),
++            len(media_files),
++            media_dir,
++        )
++    if not new_files:
++        return dataset_payload
++
+     # Get metadata and media datasets corresponding to the files
+-    metadata, unknown_files = get_metadata_for_valid_files(media_files)
++    metadata, unknown_files = get_metadata_for_valid_files(new_files)
+     if len(unknown_files) > 0:
+         logger.warning(
+             "Skipping %d invalid media files in directory '%s'",
+@@ -359,14 +425,11 @@ def process_media_files(media_dir: Path, db_engine, media_files: list[Path]):
+         logger.debug("Unknown files:\n%s", "\n".join(map(str, unknown_files)))
+ 
+     # Add metadata to database
+-    dataset_payload: list[DatasetPayload] = []
+     logger.info("Writing metadata to database...")
+     with tqdm(total=len(metadata)) as pbar, db_engine.begin() as conn:
+-        # Add each folder to source collection table
+-        data = SourceCollection(
+-            location=str(media_dir), type=SourceCollectionType.DIR
++        media_source_collection = get_or_create_source_collection(
++            conn, media_dir
+         )
+-        media_source_collection = SourceCollectionRepo.create(conn, data=data)
+ 
+         for media_metadata in metadata:
+             # Get metadata for each file and add it to media table
+@@ -454,11 +517,12 @@ def validate_args(args):
+ 
+     # Feature Extractor IDs
+     # Set default for {image,audio,video}_feature_id_map only if the argument was not provided
+-    if (
++    args.feature_ids_named = not (
+         args.video_feature_id_map is None
+         and args.image_feature_id_map is None
+         and args.audio_feature_id_map is None
+-    ):
++    )
++    if not args.feature_ids_named:
+         args.video_feature_id_map = [
+             "mlfoundations/open_clip/ViT-B-16-SigLIP2-512/webli"
+         ]
+@@ -543,6 +607,12 @@ def get_feature_extractor_ids(
+         project
+     )
+ 
++    if mode is ExtractFeatureMode.add_media:
++        return select_project_feature_extractors(
++            project_feature_extractor_ids,
++            feature_extractor_ids if args.feature_ids_named else None,
++        )
++
+     # Add feature extractor mode
+     # Remove feature extractor ids that already exist in the project
+     feature_extractor_ids_copy = feature_extractor_ids.copy()
+@@ -574,17 +644,114 @@ def get_feature_extractor_ids(
+         if len(feature_extractor_ids[modality_type]) == 0:
+             del feature_extractor_ids[modality_type]
+ 
+-    if mode is ExtractFeatureMode.add_media:
+-        if len(feature_extractor_ids) > 0:
+-            logger.warning(
+-                "A project can only be updated with new media files using the existing feature extractors in the project. Ignoring the following feature extractor ids.\n"
+-                f"{pprint.pformat(feature_extractor_ids)}\n"
+-                "To add new feature extractors, first update the project with new media files and then call this script again without any new media files."
+-            )
+-        # Use existing feature extractor ids in the project, ignoring any provided in the command line args
++    return feature_extractor_ids
++
++
++def select_project_feature_extractors(
++    project_feature_extractor_ids: dict[ModalityType, list],
++    named_feature_extractor_ids: dict[ModalityType, list] | None,
++) -> dict[ModalityType, list]:
++    """Feature extractors for adding media: those named, else all in the project.
++
++    Naming a subset lets frame-level and segment-level extractors, which cannot
++    share a run, process the same new media in separate runs. Only extractors
++    the project already holds can be named, since a new extractor must embed
++    the existing media as well; it is added by a run without media folders.
++    """
++    if named_feature_extractor_ids is None:
+         return project_feature_extractor_ids
+ 
+-    return feature_extractor_ids
++    selected: dict[ModalityType, list] = {}
++    ignored: dict[ModalityType, list] = {}
++    for modality_type, feature_extractor_id_list in (
++        named_feature_extractor_ids.items()
++    ):
++        held = project_feature_extractor_ids.get(modality_type, [])
++        for feature_extractor_id in feature_extractor_id_list:
++            _feature_extractor_id = get_canonical_feature_extractor_id(
++                feature_extractor_id
++            )
++            target = selected if _feature_extractor_id in held else ignored
++            target.setdefault(modality_type, []).append(_feature_extractor_id)
++
++    if ignored:
++        logger.warning(
++            "New media can only be added with feature extractors the project already holds. Ignoring the following feature extractor ids.\n"
++            f"{pprint.pformat(ignored)}\n"
++            "To add new feature extractors, first update the project with new media files and then call this script again without any new media files."
++        )
++    if not selected:
++        logger.error(
++            "None of the named feature extractors is in the project. Nothing to do."
++        )
++        exit(1)
++    return selected
++
++
++def drop_media_with_stored_features(
++    project: WiseProject,
++    db_engine,
++    all_metadata: list[DatasetPayload],
++    feature_extractor_ids: dict[ModalityType, list],
++) -> list[DatasetPayload]:
++    """Remove media that already hold saved features from a selected extractor.
++
++    The extractors of a run process each media file together and their
++    features are saved together, so features from any one of them mark a file
++    as complete for that set. Features are recognised by their id in the
++    feature store rather than by their row in the database: rows remain after
++    an interruption that lost the features, and such files are extracted again.
++    """
++    done: set[int] = set()
++    with db_engine.connect() as conn:
++        for modality_type, feature_extractor_id_list in (
++            feature_extractor_ids.items()
++        ):
++            for feature_extractor_id in feature_extractor_id_list:
++                stored = FaissStore(
++                    modality_type, project.features_dir(feature_extractor_id)
++                ).stored_ids
++                if not stored:
++                    continue
++                stmt = sa.select(
++                    wise_db.vectors_table.c.id,
++                    wise_db.vectors_table.c.media_id,
++                ).where(
++                    wise_db.vectors_table.c.feature_extractor_id
++                    == feature_extractor_id
++                )
++                done.update(
++                    row.media_id for row in conn.execute(stmt) if row.id in stored
++                )
++
++    remaining = [x for x in all_metadata if x.id not in done]
++    if len(remaining) < len(all_metadata):
++        logger.info(
++            "Skipping %d of %d media files, which already hold features from %s",
++            len(all_metadata) - len(remaining),
++            len(all_metadata),
++            pprint.pformat(feature_extractor_ids),
++        )
++    return remaining
++
++
++@contextlib.contextmanager
++def discard_unsaved_features_on_error(
++    feature_stores: dict[ModalityType, dict[str, FaissStore]],
++):
++    """Keep the stores from saving features whose rows were rolled back.
++
++    A store saves its active shard when it is closed or garbage collected. After
++    an error the database rolls back the uncommitted rows, and the ids it hands
++    out next would collide with those features.
++    """
++    try:
++        yield
++    except BaseException:
++        for stores in feature_stores.values():
++            for store in stores.values():
++                store.discard_current_shard()
++        raise
+ 
+ 
+ def get_media_files_for_dataset(
+@@ -609,11 +776,10 @@ def get_media_files_for_dataset(
+                 "Reading filepaths to be included from '%s'",
+                 args.media_files_from,
+             )
+-            with open(args.media_files_from, "rt") as fh:
++            with open(args.media_files_from, "rt", encoding="utf-8") as fh:
+                 ## Remove *only* the \n at the end of each line
+-                media_files = [
+-                    media_dir / line[:-1] for line in fh if len(line) > 1
+-                ]
++                names = (line.rstrip("\n") for line in fh)
++                media_files = [media_dir / name for name in names if name]
+             metadata = process_media_files(media_dir, db_engine, media_files)
+             all_metadata.extend(metadata)
+         else:
+@@ -793,8 +959,9 @@ def main(argv: list[str]):
+ 
+     # If project exists,
+     # if media_dir_list is not empty
+-    #  if feature extractors are provided, then ignore the extra user input with a warning.
++    #  if feature extractors are provided, then use those of them that exist in the project, ignoring the rest with a warning.
+     #  if feature extractors are not provided, then use the existing feature extractors in the project.
++    #  media files already registered keep their media id, and those holding features from the selected extractors are skipped.
+     # if media_dir_list is empty
+     #  if feature extractors are provided, then use them if they don't exist in the project and extract features for existing media files
+     #  if feature extractors are not provided, then exit with an error.
+@@ -846,6 +1013,16 @@ def main(argv: list[str]):
+     logger.info("Initialising internal metadata database")
+     all_metadata = get_media_files_for_dataset(mode, project, args, db_engine)
+ 
++    if mode is ExtractFeatureMode.add_media and len(all_metadata) > 0:
++        all_metadata = drop_media_with_stored_features(
++            project, db_engine, all_metadata, feature_extractor_ids
++        )
++        if len(all_metadata) == 0:
++            logger.info(
++                "Every media file already holds features from the selected feature extractors. Nothing to do."
++            )
++            exit(0)
++
+     if len(all_metadata) == 0:
+         logger.info("No valid media files found. Nothing to do.")
+         exit(0)
+@@ -888,7 +1065,8 @@ def main(argv: list[str]):
+         logger.error(
+             "Frame-level and segment-level video feature extractors cannot be "
+             "combined in a single run. Please run extract-features.py separately "
+-            "for each type."
++            "for each type, naming its feature extractors with --video-feature-id "
++            "and --audio-feature-id."
+         )
+         exit(1)
+ 
+@@ -933,10 +1111,15 @@ def main(argv: list[str]):
+         round(audio_sampling_rate * audio_segment_length)
+     )
+ 
+-    MAX_BULK_INSERT = 1024
++    # With a single loader process media files arrive one after another, and
++    # each is committed and saved once complete, so an interrupted run keeps
++    # every finished file. Parallel workers interleave files, and their run is
++    # committed only at the end.
++    checkpoint_per_media = args.num_workers == 0
+     with (
+         db_engine.connect() as conn,
+         thumbs_engine.connect() as thumbs_conn,
++        discard_unsaved_features_on_error(feature_stores),
+         tqdm(desc="Feature extraction") as pbar,
+         torch.autocast(
+             "cuda" if torch.cuda.is_available() else "cpu",
+@@ -1056,7 +1239,22 @@ def main(argv: list[str]):
+                 )
+                 feature_store.add(feature_metadata.id, segment_feature)
+ 
+-        for idx, (mid, chunks) in enumerate(av_data_loader):
++        def checkpoint():
++            # Rows are committed before their features are saved. An
++            # interruption between the two leaves rows without features, and
++            # the next add-media run extracts that file again.
++            conn.commit()
++            thumbs_conn.commit()
++            for stores in feature_stores.values():
++                for store in stores.values():
++                    store.save_current_shard()
++
++        current_mid = None
++        for mid, chunks in av_data_loader:
++            if checkpoint_per_media and mid != current_mid:
++                if current_mid is not None:
++                    checkpoint()
++                current_mid = mid
+             for media_chunk_type in chunks:
+                 if media_chunk_type is MediaChunkType.THUMBNAILS:
+                     continue
+@@ -1119,12 +1317,8 @@ def main(argv: list[str]):
+                             ),
+                         ),
+                     )
+-            if idx % MAX_BULK_INSERT == 0:
+-                conn.commit()
+-                thumbs_conn.commit()
+ 
+-        conn.commit()
+-        thumbs_conn.commit()
++        checkpoint()
+ 
+     del av_data_loader
+ 
+diff --git a/src/wise/feature/store/faiss_store.py b/src/wise/feature/store/faiss_store.py
+index d8ed8b1..f3daaf7 100644
+--- a/src/wise/feature/store/faiss_store.py
++++ b/src/wise/feature/store/faiss_store.py
+@@ -130,6 +130,26 @@ class FaissStore:
+     def feature_dim(self):
+         return self._dim
+ 
++    @property
++    def stored_ids(self) -> set[int]:
++        """Ids of the vectors saved to shard files, excluding the active shard."""
++        return {
++            vector_id
++            for vector_id, location in self._vector_id_to_shard_location.items()
++            if location != "current"
++        }
++
++    def discard_current_shard(self):
++        """Drop the vectors added since the last save, so close() writes none of them."""
++        if self._current_shard is None:
++            return
++        self._current_shard.reset()
++        self._vector_id_to_shard_location = {
++            vector_id: location
++            for vector_id, location in self._vector_id_to_shard_location.items()
++            if location != "current"
++        }
++
+     def enable_write(self, shard_maxcount=1e6, overwrite: bool = False):
+         # At around 1 million vectors of 1024 dimensions, the file size is around 4GB
+         # Enable write mode for the Faiss index

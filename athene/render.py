@@ -36,7 +36,7 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 PAGE = HERE / "page"
 DESIGNS = sorted(path.stem for path in (PAGE / "designs").glob("*.js"))
-DEFAULT_DESIGN = "planetary"
+DEFAULT_DESIGN = "liquid"
 FONTS = REPO_ROOT / "src" / "sitrep" / "fonts"
 MARK = REPO_ROOT / "src" / "interface" / "static" / "seestone.png"
 OUT = HERE / "out"
@@ -103,13 +103,18 @@ def serve(table, port):
 
 def frames(url, indices):
     """PNG bytes of each frame index, drawn by headless Edge from the page at url."""
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import TimeoutError, sync_playwright
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(channel="msedge")
         page = browser.new_page()
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(f"{url}&mode=render")
-        page.wait_for_function("window.athene && window.athene.ready")
+        try:
+            page.wait_for_function("window.athene && window.athene.ready")
+        except TimeoutError:
+            sys.exit("the page did not get ready" + "".join(f"\n{e}" for e in errors))
         for i in indices:
             data_url = page.evaluate("i => window.athene.frame(i)", i)
             yield base64.b64decode(data_url.split(",", 1)[1])

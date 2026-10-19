@@ -361,7 +361,16 @@ own conda environment (below) and is never imported.
 Build an index over a folder of rehearsal footage:
 
     uv run apollon-search extract --project rehearsals --media <folder>
-    uv run apollon-search index --project rehearsals
+
+This embeds every file directly in the folder and builds the indices.
+Subfolders are left out, so footage that should not be searchable can be moved
+into one. After new rehearsals, run the same command again: it embeds only
+the recordings the project lacks, in one pass per group of models (SigLIP2
+and CLAP together, then the pose model on its own), and rebuilds each pass's
+indices when it finishes. The pose pass is the slow one, about 1.4 h per hour
+of footage on the RTX 5090. Ctrl+C stops it with every finished recording
+kept; the same command continues from there. Restart `serve` afterwards to
+load the new indices.
 
 Then serve it and search. `serve` runs in the foreground, so use a second
 terminal for the queries:
@@ -379,7 +388,7 @@ model to an existing project without re-scanning the footage:
     uv run apollon-search index --project rehearsals
 
 Projects are written to `data/wise-projects/<name>/` and each batch run is
-logged to `data/logs/`. Both are outside `external/`, which is deleted whenever
+logged to `data/logs/`, beside the list of files each `extract` handed WISE. Both are outside `external/`, which is deleted whenever
 WISE is re-cloned. A project stores paths to the footage rather than copies, so
 moving or renaming source files breaks playback.
 
