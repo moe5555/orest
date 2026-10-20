@@ -6,6 +6,187 @@ referenced below.
 
 ---
 
+## 2026-10-20 — Unattended extraction of new rehearsals (VSH-ARLT-5090)
+
+Moe asked to embed the new rehearsal recordings into `hitl_database` without
+watching the run ("Process rehearsal footage from folder on computer" of Smart
+Search, `knowledge/source_of_truth/pipeline.md`).
+
+**State found.** `hitl_database` holds 52 media, of which 1–17 have vectors.
+Media 18–52 (13.3 h, registered by the failed add-media run of 2026-10-15)
+and the six recordings of 2026-10-19/20 (2.4 h) are pending. Patch 0007 is
+applied in `external/wise` but still not installed in the `wise` environment.
+At the measured rates (2026-10-15 entry) the 15.7 h take about 2 h for
+SigLIP2 and CLAP and 22 h for pose.
+
+**`src/scripts/extract_unattended.ps1`** runs `apollon-search extract` and
+keeps Windows from idle sleep until it exits (`SetThreadExecutionState`, reset
+on exit). It refuses to start without patch 0007 installed, as an unpatched
+add-media run registers every listed file again. A failed run is started
+again up to twice; per patch 0007 it continues from the last saved recording.
+That resumption is not yet verified in a real extraction run (2026-10-15
+entry), so this run is its first test.
+
+---
+
+## 2026-10-20 — Athene rehearsal: a straight variant of the growth scene, ending in a zero that becomes a one
+
+At Moe's request, an alternative to scene 4 of the rehearsal page
+(`athene/description.md`, "Athene Rehearsal Interactive Prototyping
+System"; `athene/page/designs/rehearsal.js`):
+- **V** switches the growth scene between the branching growth and a
+  straight variant at any moment. The branches draw back into their axes,
+  or grow out again, within 1.5 s.
+- **Straight axes:** 300 more axes (600 rays) join through the centre
+  between 5 % and 110 % of the schedule. Their number rises with the square
+  of the schedule's progress, each one shooting out faster than the last
+  (4 s down to 0.25 s). Every axis reaches out to 3.5 times its length at
+  full size, so the lines fill the wall and run past its edges.
+- **Planes:** brief flashes light the plane that two axes span from the
+  centre (a parallelogram), or that three span (a hexagon, 25 % of the
+  time). Half of the strobe's own flashes light one plane; with S, every
+  flash lights one to three.
+- **White wall in the ending:** over the last 1.5 s of the explosion the
+  light rises to a fully white wall, which holds for 4 s; the collapse then
+  begins, the white fading over its first 0.8 s, and the zero (or circle)
+  opens 4 s later than before. Both variants. Measured by stepping the
+  ending at 30 fps: every pixel is white from 6.0 s to 10.0 s after E.
+- **Glut look, tried and removed:** against the end reading as a Christmas
+  bauble (pure red with pure white, a round orb, glints like a disco ball),
+  a look in which the lines darkened through steel to oxblood where the red
+  reached them, a wash of the lines' own glow replaced the round core and
+  halo, and the glints calmed as the red arrived. Moe removed it in favour
+  of testing the end without colour (C).
+- **Manual strikes (L, T):** L switches the straight variant's strikes
+  between automatic and manual. In manual the strobe's own flashes and
+  plane strikes stop; holding T fires strikes 0.04–0.18 s apart, each
+  flashing the glow and lighting a plane or beginning a cascade, for as
+  long as T is held. Releasing T ends them, the running cascade with them.
+  Checked: no flashes in 2 s without T, 21 strikes in 1 s with it, none
+  after release. Voice bolts and S are unchanged.
+- **Still light at the end:** after the zero, the blinks and the one
+  flickered, because cascades begun before the ending kept striking and
+  the glow followed the voice, the pulse and the strobe. Cascades and held
+  strikes now end with the collapse, and over the collapse the glow eases
+  out of the voice, the pulse and the strobe. Measured with the voice level
+  swinging between 0 and 1 every frame: the open zero's light does not
+  change between frames, the one's by at most 0.03 %.
+- **Steady digits:** the zero and the one shook as they opened and after.
+  Their size followed the voice (3 % of 1100 px from one frame to the
+  next), and text drawn at a changing scale is re-fitted to the pixel grid
+  at every size. They are now rendered once as images at the drawing
+  resolution and scaled smoothly, and open with the ring only. Measured
+  with a voice level swinging between 0 and 1 every frame: the width only
+  grows while the zero opens, and once open its width and centre stay the
+  same to the pixel.
+- **Colour switch (C):** the straight variant with or without its red,
+  fading over 1.5 s; without it, lines, glow, core and strikes stay white,
+  everything else unchanged. The white version keeps the full glow: the
+  climax is meant to overwhelm. A first pass dimmed the white glow to
+  30 % to match the red's light; Moe dropped it.
+- **Cascades:** every other strike becomes a cascade of quick strikes,
+  30–100 ms apart, each lighting the plane between one axis that stays and
+  a different axis each time, never the same one twice; each strike also
+  flashes the glow at half its strength. At most two cascades run at once.
+  A cascade has from 2 strikes up to as many planes as its axis can span
+  with the axes present, drawn evenly (`cascadeSkew` favours short ones
+  when raised): at most 2 at 30 s of growth, 64 at 150 s, 234 at 230 s and
+  516 at full size (median 271, about 18 s). First built with 2–15
+  strikes. Two maximal cascades add 0.4 ms to a frame. Strikes are dropped
+  after four fade times (2 % of their light), not six.
+- **Glow by strobe:** the glow rests at full strength at the start and at
+  half by full size, and blazes with each flash of a strobe that runs on
+  its own; S switches to the full strobe. A resting glow of 0.3 throughout
+  left the early lines, when flashes are rare, almost without glow. Its flashes
+  and the bolts along the lines follow the cube of the schedule's share:
+  0.1 flashes a second at the start, 0.4 at a quarter of the scene's time
+  (the schedule accelerates), 14 at full size. Each flash fades within
+  0.08–0.2 s at the start and 0.03–0.12 s at full size. A first pass rising
+  evenly, from 0.4 to 8 a second, struck too often early on.
+- **S** adds its flashes to the strobe's own and grows with the network
+  (the share to the power 1.5) until the ending: gaps of 0.4–1.4 s and 30 %
+  strength at the start, the full strobe at full size. Measured: 1.5 faint
+  flashes a second early on, 23 a second at full size. Before, S ran at full
+  strength from the start and, replacing the strobe's own flashes, gave
+  fewer at full size (5.8 a second against 13).
+- **Core:** a glowing core takes the place of the hub's disc and web: a
+  radial glow, white-hot at its heart and fading into the colour without an
+  edge, growing out of nothing at the start to 900 px and full brightness
+  at full size. A halo of the colour around it lights the wall, out to
+  2200 px at 45 % strength at full size. Both swell with the voice and the
+  strobe and sink into the centre with the collapse. A first pass at
+  25–380 px, with no halo and a visible light from the start, was too faint.
+- **Heart:** a white heart at the centre where the lines merge. Its
+  radius is where their widths at the centre add up to the circumference
+  they cross (summed width / 2π), so it grows out of the lines themselves:
+  about 2 px with two axes, about 370 px at full size. Its light falls off
+  as a bell curve (0.8 of that radius wide, out to 2.6 times it), white in
+  the middle and taking on the colour as it fades. A first pass, solid out
+  to the radius and fading over the next 1.2 times, showed a rim and read
+  as a drawn disc.
+- **Glow of the lines:** drawn up to 2.5 times as wide as the lines and
+  brightened up to 3 times by full size.
+- **Metal:** after the satin chrome Moe chose on 2026-10-16 (Starmirror
+  moodboard), each line is shaded along its length by a gradient: satin
+  bands every 520 px, warped by its angle and flowing slowly, and glints
+  where two slowly turning lights catch it, a bowtie of bright lines as on
+  radially brushed metal. Shades run from 12 % of the line's colour through
+  70 % to its colour whitened by 60 %, so the start reads as chrome and the
+  end as red metal. The glints blaze with the strobe. The glow keeps the
+  line's own colour, never whitened: a first pass whitening it too washed
+  the full-grown wall to white and pink. The zero and one are plain white;
+  chrome digits (a bright sky over a dark horizon line) and flat red ones
+  were tried and dropped.
+- **Colour:** the colour lives in the glow; the lines stay chrome-white,
+  since colour on the sharp lines looked poor. From 35 % of the growth's
+  time a front of red runs out along every line's glow from the centre to
+  its tip, a quarter of the line deep, reaching the tips at the end. Each
+  edge turns to a red of its own between RGB(200, 0, 15) and
+  RGB(230, 10, 20), its front up to 15 % of the schedule behind the
+  others. Where red, the glow shimmers: two waves of light (500 px and
+  185 px long) run out along it, brightening and darkening it by up to
+  60 %. Planes, core and halo follow; the branching variant stays white.
+  Dropped on the way: red on the lines themselves, red from the start, the
+  whole edge turning at once, and a front at a fixed speed in px, which
+  passed the short early lines within the first third.
+- **Zero and one:** E ends in a zero set in Michroma, 1100 px high, in
+  place of the circle. `athene/live.py` serves the font. Key 0 makes the
+  zero blink four times; it comes back from the fourth blink as a one.
+- **Frame rate:** the round tips of the edges are now six-sided polygons,
+  and edges are cut off 50 px beyond the frame. With arcs, long edges were
+  drawn through masks the size of their bounds, and the straight variant ran
+  at 9 fps at full size. Both variants now hold 60 fps at full size and at
+  the peak of the explosion (29 fps there before).
+- **Screen resolution:** the live page draws at the size the frame takes
+  on the screen (the window fitted to 16:9, times the device pixel ratio,
+  at most 4K), one pixel per screen pixel, and follows the window when it
+  is resized or goes fullscreen. Before, it drew a fixed 3840 × 2160 frame
+  that the browser scaled down, which made the thin lines shimmer
+  (`hardware_issues.md`, H-11). `--res` / `?res=` still set a fixed share.
+  Checked headless: 1920 × 1080 at pixel ratio 1 and 1.5, an ultrawide
+  window and a resize; 60 fps at full growth on a 1080p window.
+- **Minimum line width:** a sharp line thinner than 1.5 drawn pixels is
+  drawn 1.5 px wide and dimmed in proportion, so it gives the same light
+  without switching single pixels on and off as it moves (both variants).
+  Measured with glow, bands and glints off on a 1080p window, the light of
+  a 40 px tile varies between frames by 23.8 % without it, 18.2 % at 1 px,
+  16.1 % at 1.5 px and 13.4 % at 2 px; part of that is the lines' own
+  motion. 60 fps at full growth.
+- **Metal in every scene:** the chrome lines (satin bands, glints of the
+  two turning lights) now shade every edge in every scene: the two axes of
+  scenes 1 and 3, the death scene's axes and the branching growth
+  (`LIVE.chrome`). Outside the straight variant the glow keeps its full
+  light; only the sharp lines turn to metal. Red, core, heart and the
+  strobe's glow stay with the straight variant.
+- **Frame rate held:** a 30 s soak at full size fell from 48 to 41 fps;
+  each frame built about 700 lines' gradients from up to 40 colour stops,
+  each a fresh array and string (12 ms of JavaScript of a 16.7 ms frame).
+  Colour strings are now kept and reused, and the stops capped at 12 for
+  a line's metal and 10 for its glow: a steady 60 fps over the same 30 s.
+- `athene/README.md` describes how to start the live page and lists the keys.
+
+---
+
 ## 2026-10-19 — Athene rehearsal: uneven halves, twice the axes, a more hectic growth, an ending flooded with light
 
 At Moe's request, for the growth scene (`athene/page/designs/rehearsal.js`):

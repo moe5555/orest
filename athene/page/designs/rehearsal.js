@@ -26,6 +26,17 @@
                       into the centre like a star into a black hole, and a
                       glowing circle opens out of it. S makes the glow
                       flicker like lightning.
+        straight      V switches the growth scene to its straight variant
+                      and back: the branches draw back into their axes, and
+                      ever more straight axes through the centre join, ever
+                      faster, until they fill the wall and reach out beyond
+                      it, out of a glowing core that grows with them. The
+                      lines are metal, chrome turning to red as they grow,
+                      and glow with a strobe of their own, rare for long
+                      and crowding in at the end (S: the full strobe); some
+                      flashes light the plane two or three axes span. E ends it in
+                      a zero instead of the circle, and 0 makes the zero
+                      blink four times and come back as a one.
 
    Keys: N next scene, B previous scene, Space restart the scene, P play the
    scene's next voice clip (or stop the one playing), H show or hide the
@@ -34,8 +45,9 @@
 
    The voice lights the network in every scene: each syllable sends a bolt
    of light from the hub out along one ray, and the glow rises with the
-   level. `LIVE.res` sets the drawing resolution of the live page as a share
-   of 3840 × 2160 (?res= overrides it).
+   level. The live page draws at the resolution the frame takes on the
+   screen, one pixel per screen pixel; `LIVE.res` or ?res= set a fixed share
+   of 3840 × 2160 instead.
 
    AXES holds the parameters of the network, SCENES and LIVE those of the
    performance. */
@@ -117,7 +129,8 @@ const SCENES = [
 ];
 
 const LIVE = {
-  res: 1,               // drawing resolution of the live page, as a share of 3840 × 2160
+  res: 0,               // drawing resolution of the live page, as a share of 3840 × 2160; 0 fits it to the screen
+  minLinePx: 1.5,       // drawn pixels: thinner lines are drawn this wide and dimmed in proportion
   motionEase: 1.5,      // seconds the network takes to stop or start moving
   rewind: 1.2,          // time constant in seconds of the growth drawing back
   // Probes: a ray thrusts forward by a share of its length in `rise`
@@ -146,14 +159,122 @@ const LIVE = {
   // and line width in px) opens within `ringGrow` seconds as it vanishes.
   // While it explodes, the flickering glow floods the wall through a wide
   // wash (`explodeWash` times, blurred `washBlur` px at a sixteenth of the
-  // resolution), and the sharp lines fade out, leaving the glow.
+  // resolution), and the sharp lines fade out, leaving the glow. Over its
+  // last `whiteRise` seconds the light rises to a white wall, which holds for
+  // `whiteHold` seconds before the collapse and fades over its first
+  // `whiteFade` seconds.
   explode: 6, explodeBolts: 14, explodeGrowth: 25, explodeSize: 2.2,
   explodeWash: 3, washBlur: 14,
+  whiteRise: 1.5, whiteHold: 4, whiteFade: 0.8,
   collapse: 3.5, swirl: 4, ringRadius: 700, ringWidth: 16, ringGrow: 3,
   // Strobe: flashes of the glow at irregular gaps (s), of random strength,
   // each fading with a time constant (s); between flashes the glow sinks to
   // `strobeBase` of its strength.
   strobeGap: [0.03, 0.28], strobeStrength: [0.5, 2.5], strobeFade: [0.03, 0.12], strobeBase: 0.25,
+
+  // Straight variant of the growth scene (V): the branches draw back within
+  // `branchFade` seconds and `lines` further axes join through the centre.
+  // They join between these shares of the schedule, the count rising as the
+  // schedule's share to the power 1 / `lineCurve`, each within `lineLife`
+  // seconds (the first to the last), flashing while it shoots out. An axis
+  // is `lineLength` of AXES.radius long and drifts up to `lineDrift` radians;
+  // every axis reaches out to 1 + `outward` × share² times its length, so by
+  // full size most run beyond the wall. Their tubes are `lineWidth` of the
+  // network's and lit at `lineAlpha`.
+  branchFade: 1.5,
+  lines: 300, lineFirst: 0.05, lineLast: 1.1, lineCurve: 0.5, lineLife: [4, 0.25],
+  lineLength: [0.35, 1.1], lineDrift: 0.12, lineDriftRate: [0.03, 0.12],
+  outward: 2.5, outwardCap: 1.6, lineWidth: 0.5, lineAlpha: [0.35, 1],
+  // Glow by strobe: in the straight variant the glow rests at `strobeRest`
+  // (from the start to full size, as the strobe takes over) and blazes with
+  // each flash of a strobe that runs on its own,
+  // `autoStrobe` flashes a second from the start to the full schedule, or
+  // at the strobe's gaps with S. Its flashes and the bolts along the lines
+  // follow the schedule's share to the power `strikeCurve`, so they stay
+  // rare for long and crowd in towards the end; a flash fades within
+  // `strobeFadeEarly` at the start and `strobeFade` at full size.
+  autoStrobe: [0.1, 14], strikeCurve: 3, strobeFadeEarly: [0.08, 0.2], strobeRest: [1, 0.5],
+  // With S, the straight variant's strobe follows the share to the power
+  // `strobeGrowth` until the ending: gaps of `strobeGapEarly` seconds and
+  // `strobeEarly` of the flashes' strength at the start, the full strobe
+  // (strobeGap, strobeStrength) at full size.
+  strobeGrowth: 1.5, strobeGapEarly: [0.4, 1.4], strobeEarly: 0.3,
+  // Core: in the straight variant a glowing core takes the place of the
+  // hub's disc, `coreRadius` px from the start to full size (following the
+  // share to the power `coreCurve`) at `coreGlow` brightness, swelling with
+  // the voice (`coreVoice`) and the strobe (`coreFlash`); its heart is the
+  // colour whitened by `coreHeat`. Around it a halo of the colour lights
+  // the wall out to `haloRadius` px at `haloAlpha` from the start to full
+  // size, brightening by `haloFlash` with the strobe.
+  coreRadius: [0, 900], coreCurve: 1.2, coreGlow: [0, 1], coreVoice: 0.12, coreFlash: 0.15, coreHeat: 0.8,
+  haloRadius: [0, 2200], haloAlpha: [0, 0.45], haloFlash: 0.25,
+  // Heart: within the radius where the lines' widths at the centre add up
+  // to its circumference (their summed width / 2π, times `heartSpread`)
+  // they merge into white light, falling off as a bell curve `heartWidth`
+  // times that radius wide, out to `heartFade` times it. It grows with
+  // every line that joins, from nothing.
+  heartSpread: 1, heartWidth: 0.8, heartFade: 2.6,
+  // The lines' glow in the straight variant, from the start to full size:
+  // drawn `glowWidth` times as wide as the lines and brightened
+  // `lineGlow` times.
+  glowWidth: [1, 2.5], lineGlow: [1.2, 3],
+  // Planes: a flash lights the plane two axes span from the centre (the
+  // parallelogram), or three (`planeTriple` of the time, a hexagon), filled
+  // at `planeAlpha` of its strength and glowing at `planeGlow` of that. The
+  // axes of a plane are at least `planeApart` (the sine of their angle)
+  // apart. `autoPlane` of the strobe's own flashes light one plane; with
+  // S, each flash lights `planesPerFlash`.
+  planeTriple: 0.25, planeAlpha: 0.16, planeGlow: 0.25, planeApart: 0.25,
+  autoPlane: 0.5, planesPerFlash: [1, 3],
+  // Cascades: `cascadeShare` of the strikes become a cascade of quick
+  // strikes, `cascadeGap` seconds apart, each lighting the plane between one
+  // axis that stays and a different axis each time. A cascade has from
+  // `cascadeMin` strikes up to as many as its axis has planes with the
+  // axes present, drawn as a share of that range to the power
+  // `cascadeSkew` (1 even, higher favouring short ones). Each strike fades
+  // within `cascadeFade` and flashes the glow at `cascadeGlow` of its
+  // strength. At most `cascadeMax` run at once.
+  cascadeShare: 0.5, cascadeMin: 2, cascadeSkew: 1, cascadeGap: [0.03, 0.1], cascadeFade: [0.03, 0.1],
+  cascadeGlow: 0.5, cascadeMax: 2,
+  // Metal: every edge, in every scene, is shaded (`chrome` of the way, 0 to
+  // 1) from `metalDark` through `metalMid` of its colour to its colour
+  // whitened by `metalSheen`, after the satin chrome of the liquid design.
+  // Satin bands
+  // `bandLength` px apart run along it, warped by its angle (`bandWarp`
+  // radians) and flowing at `bandFlow` radians a second; two lights, turning
+  // at `lightTurn` radians a second and `glintAngle` apart, make the edges
+  // facing them glint (sharper the higher `glintPower`). Each flash of the
+  // strobe makes the glints blaze by `flashGlint` of its strength. The
+  // gradient along an edge has a stop every quarter band, at most
+  // `metalStops`.
+  chrome: 1, metalDark: 0.12, metalMid: 0.7, metalSheen: 0.6,
+  bandLength: 520, bandWarp: 2.5, bandFlow: 0.15, bandDepth: 0.5,
+  lightTurn: 0.04, glintAngle: 1.9, glintPower: [40, 80], glintSecond: 0.5, glintBase: 0.45,
+  flashGlint: 0.8, metalStops: 12,
+  // Its ending opens a zero, `digitHeight` px high in `digitFont`, instead
+  // of the circle. Key 0 makes it blink `blinks` times (`blinkOff` dark,
+  // `blinkOn` lit, in seconds); it comes back from the last blink as a one.
+  digitHeight: 1100, digitFont: "Michroma", blinks: 4, blinkOff: 0.2, blinkOn: 0.35,
+  // Its colour lives in the glow; the lines themselves stay chrome. The glow
+  // is white until `redStart` of the growth's time; then a front of red runs
+  // out along every line from the centre to its tip by the end of the
+  // schedule, `redSoft` of the line's length deep. Where red, the glow
+  // shimmers: two waves of light, `shimmerLength` px and 0.37 of that
+  // long, run out along it at `shimmerSpeed` radians a second, brightening
+  // and darkening it by up to `shimmer`. A glow gradient has a stop every
+  // quarter wave, at most `shimmerStops`. Each edge turns to a red of its
+  // own between `red[0]` and `red[1]` (RGB), its front up to `redLag` of
+  // the schedule behind the others, so the front is uneven. The core and
+  // the hub take the middle of the range at the centre, the
+  // planes at `redPlanes` of the way out.
+  red: [[200, 0, 15], [230, 10, 20]], redLag: 0.15, redSoft: 0.25, redPlanes: 0.3,
+  redStart: 0.35, shimmer: 0.6, shimmerLength: 500, shimmerSpeed: 3, shimmerStops: 10,
+  colourFade: 1.5,      // seconds C takes to turn the colour off or on
+  // Manual strikes (L switches from automatic): the strobe's own flashes and
+  // plane strikes stop, and holding T fires strikes `strikeGap` seconds
+  // apart, each flashing the glow and lighting a plane (or beginning a
+  // cascade), for as long as T is held.
+  strikeGap: [0.04, 0.18],
 };
 
 // ---- Helpers -------------------------------------------------------------------
@@ -191,6 +312,63 @@ function tweenTo(tw, to, dur, clock, delay = 0) {
   tw.dur = dur;
 }
 
+// How red edge `id` (null for the middle of the range) has turned `u` of
+// the way from the centre to its tip, when the red front has come `p` of
+// the way, all 0 to 1.
+function redAt(id, p, u = 0) {
+  const lag = LIVE.redLag * (id === null ? 0.5 : hash(id, 3.7));
+  const front = (p - lag) / (1 - LIVE.redLag) * (1 + LIVE.redSoft);
+  return ease((front - u) / LIVE.redSoft);
+}
+
+// The straight variant's colour there, as [r, g, b].
+function tint(id, p, u = 0) {
+  const k = redAt(id, p, u);
+  const s = id === null ? 0.5 : hash(id, 9.1);
+  const [lo, hi] = LIVE.red;
+  return lo.map((v, i) => 255 + (v + (hi[i] - v) * s - 255) * k);
+}
+
+// A colour as CSS. The strings are kept, since tens of thousands of
+// gradient stops a frame repeat far fewer colours.
+const cssKept = new Map();
+function css([r, g, b]) {
+  const byte = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const key = (byte(r) << 16) | (byte(g) << 8) | byte(b);
+  let s = cssKept.get(key);
+  if (s === undefined) {
+    s = `rgb(${key >> 16},${(key >> 8) & 255},${key & 255})`;
+    if (cssKept.size < 100000) cssKept.set(key, s);
+  }
+  return s;
+}
+
+function mixRGB(a, b, k) {
+  return a.map((v, i) => v + (b[i] - v) * k);
+}
+
+// Colour `rgb` as metal at `shade`, 0 (dark) to 1 (highlight), with
+// `metal` (0 to 1) of the metal look.
+function metalRGB(rgb, shade, metal) {
+  const s = Math.min(1, Math.max(0, shade));
+  const mid = rgb.map((v) => v * LIVE.metalMid);
+  const lit = s < 0.5
+    ? mixRGB(rgb.map((v) => v * LIVE.metalDark), mid, 2 * s)
+    : mixRGB(mid, mixRGB(rgb, [255, 255, 255], LIVE.metalSheen), 2 * s - 1);
+  return mixRGB(rgb, lit, metal);
+}
+
+// The shade of metal at angle `a` and `r` px from the centre: satin bands
+// along the edges and the glints of two lights, blazing with the strobe.
+function sheen(a, r, now, clock, blaze) {
+  const light = LIVE.lightTurn * clock;
+  const glint = Math.abs(Math.cos(a - light)) ** LIVE.glintPower[0]
+    + LIVE.glintSecond * Math.abs(Math.cos(a - light - LIVE.glintAngle)) ** LIVE.glintPower[1];
+  const band = 0.5 + 0.5 * Math.sin(2 * Math.PI * r / LIVE.bandLength
+    + LIVE.bandWarp * Math.sin(2 * a + LIVE.bandFlow * now) - LIVE.bandFlow * now);
+  return 0.2 + LIVE.bandDepth * band + glint * (LIVE.glintBase + LIVE.flashGlint * blaze);
+}
+
 // A thrust that rises within `rise` seconds and falls back to nothing in `fall`.
 function thrust(x, rise, fall) {
   if (x <= 0 || x >= rise + fall) return 0;
@@ -199,7 +377,7 @@ function thrust(x, rise, fall) {
 
 // ---- The space -------------------------------------------------------------------
 
-const space = { planes: [], joins: [], joinLives: [], roots: [] };
+const space = { planes: [], joins: [], joinLives: [], roots: [], lines: [] };
 
 // The cluster clips ({url, group}, played as videos) and the voice clips with
 // their analyses.
@@ -279,6 +457,40 @@ function buildSpace() {
       forks: forks(0, join + life, false, false),
     });
   }
+  // The straight variant's further axes, in the order they join.
+  space.lines = [];
+  for (let j = 0; j < LIVE.lines; j++) {
+    const x = LIVE.lines > 1 ? j / (LIVE.lines - 1) : 0;
+    space.lines.push({
+      id: 2e6 + 2 * j,
+      join: (LIVE.lineFirst + (LIVE.lineLast - LIVE.lineFirst) * x ** LIVE.lineCurve) * span,
+      life: LIVE.lineLife[0] + (LIVE.lineLife[1] - LIVE.lineLife[0]) * x,
+      angle: 2 * Math.PI * random(),
+      halves: [between(random, LIVE.lineLength), between(random, LIVE.lineLength)],
+      alpha: between(random, LIVE.lineAlpha),
+      drift: wave(random, between(random, LIVE.lineDriftRate)),
+      reach: wave(random, AXES.reachRate),
+    });
+  }
+}
+
+// The plane two or three axes span from the centre, as the polygon of all
+// sums of shares of them: a parallelogram for two, a hexagon for three.
+// Corners relative to the centre, in order around it.
+function spanned(vectors) {
+  const sides = vectors.flatMap(([x, y]) => [[x, y], [-x, -y]])
+    .map((v) => ({ v, angle: (Math.atan2(v[1], v[0]) + 2 * Math.PI) % (2 * Math.PI) }))
+    .sort((a, b) => a.angle - b.angle);
+  // Start at the corner lowest in y: the sum of the axes pointing that way.
+  let x = 0, y = 0;
+  for (const [vx, vy] of vectors) if (Math.atan2(vy, vx) < 0) { x += vx; y += vy; }
+  const corners = [];
+  for (const { v } of sides) {
+    corners.push([x, y]);
+    x += v[0];
+    y += v[1];
+  }
+  return corners;
 }
 
 // ---- The performance ----------------------------------------------------------------
@@ -304,6 +516,16 @@ const live = {
   strobe: false,
   flashes: [],          // the strobe's flashes: {start, strength, fade}
   nextFlash: 0,
+  straight: false,      // the growth scene's straight variant
+  manual: false,        // the straight variant's strikes fired by hand (T) instead of on their own
+  striking: false,      // T is held
+  nextStrike: 0,        // the clock of the next strike while T is held
+  colour: true,         // the straight variant turns red (false: it stays white)
+  colourMix: tween(1),  // 1 in colour, 0 in white, easing between them
+  branching: tween(1),  // 1 with the branches grown, 0 in the straight variant
+  planes: [],           // the planes lit: {start, strength, fade, rays}
+  cascades: [],         // strikes in succession: {anchor, used, left, next}
+  blinkAt: null,        // the clock when 0 was pressed
   queue: 0,             // the scene's next voice clip
   voice: null,          // {audio, analysis, last}
   rays: [],             // the rays of the last frame: {id, angle, length, root}
@@ -339,7 +561,10 @@ function enter(k) {
     tweenTo(live.ring, 0, 1, live.clock);
   }
   live.endAt = null;
+  live.blinkAt = null;
   live.strobe = false;
+  live.planes = [];
+  live.cascades = [];
   showHint();
 }
 
@@ -429,18 +654,113 @@ function endScene() {
   live.strobe = true;
   live.flashes = [];
   live.nextFlash = live.clock;
-  tweenTo(live.ring, 1, LIVE.ringGrow, live.clock, LIVE.explode + 0.85 * LIVE.collapse);
+  tweenTo(live.ring, 1, LIVE.ringGrow, live.clock, LIVE.explode + LIVE.whiteHold + 0.85 * LIVE.collapse);
   showHint();
 }
 
+// Switches the growth scene between its branches and its straight variant.
+function switchVariant() {
+  if (!sceneOf().growing) return;
+  live.straight = !live.straight;
+  tweenTo(live.branching, live.straight ? 0 : 1, LIVE.branchFade, live.clock);
+  live.planes = [];
+  live.cascades = [];
+  showHint();
+}
+
+// The straight variant's zero starts to blink, once it has opened.
+function blinkDigit() {
+  if (!sceneOf().growing || !live.straight || live.blinkAt !== null) return;
+  if (tweenAt(live.ring, live.clock) < 0.5) return;
+  live.blinkAt = live.clock;
+  showHint();
+}
+
+// The digit the straight variant ends with at the live clock: "0", "1", or
+// null while it is dark in a blink.
+function digitAt(clock) {
+  if (live.blinkAt === null) return "0";
+  const x = clock - live.blinkAt, cycle = LIVE.blinkOff + LIVE.blinkOn;
+  const k = Math.floor(x / cycle);
+  if (k >= LIVE.blinks) return "1";
+  if (x - k * cycle < LIVE.blinkOff) return null;
+  return k === LIVE.blinks - 1 ? "1" : "0";
+}
+
+// The rays a plane can be spanned by.
+function planeRays() {
+  return live.rays.filter((r) => r.root && r.length > 20);
+}
+
+// A strike: the plane two or three axes span lights up, the axes picked at
+// random among those well apart in angle; or, `cascadeShare` of the time,
+// a cascade of strikes from one axis begins.
+function planeFlash(strength, fade) {
+  const rays = planeRays();
+  if (rays.length < 2) return;
+  if (live.cascades.length < LIVE.cascadeMax && Math.random() < LIVE.cascadeShare) {
+    const anchor = rays[Math.floor(Math.random() * rays.length)];
+    // The planes this axis can span with the axes present: its most strikes.
+    const planes = rays.filter((r) => Math.abs(Math.sin(r.angle - anchor.angle)) > LIVE.planeApart).length;
+    const least = Math.min(LIVE.cascadeMin, planes);
+    live.cascades.push({
+      anchor: anchor.id,
+      used: new Set([anchor.id]),
+      left: least + Math.floor(Math.random() ** LIVE.cascadeSkew * (planes - least + 1)),
+      next: live.clock,
+    });
+    return;
+  }
+  const count = rays.length > 2 && Math.random() < LIVE.planeTriple ? 3 : 2;
+  const chosen = [];
+  for (let tries = 0; tries < 20 && chosen.length < count; tries++) {
+    const r = rays[Math.floor(Math.random() * rays.length)];
+    if (chosen.every((c) => Math.abs(Math.sin(r.angle - c.angle)) > LIVE.planeApart)) chosen.push(r);
+  }
+  if (chosen.length < 2) return;
+  live.planes.push({ start: live.clock, strength, fade, rays: chosen.map((r) => r.id) });
+}
+
+// The cascades' strikes that are due: each lights the plane between the
+// cascade's axis and one it has not struck yet, and flashes the glow. A
+// cascade ends when its strikes are spent or no axis is left to strike.
+function strikeCascades() {
+  const rays = planeRays();
+  for (const c of live.cascades) {
+    while (c.left > 0 && c.next <= live.clock) {
+      const anchor = rays.find((r) => r.id === c.anchor);
+      const free = anchor ? rays.filter((r) => !c.used.has(r.id)
+        && Math.abs(Math.sin(r.angle - anchor.angle)) > LIVE.planeApart) : [];
+      if (!free.length) {
+        c.left = 0;
+        break;
+      }
+      const partner = free[Math.floor(Math.random() * free.length)];
+      c.used.add(partner.id);
+      const strength = between(Math.random, LIVE.strobeStrength);
+      const fade = between(Math.random, LIVE.cascadeFade);
+      live.planes.push({ start: c.next, strength, fade, rays: [anchor.id, partner.id] });
+      live.flashes.push({ start: c.next, strength: strength * LIVE.cascadeGlow, fade });
+      c.left -= 1;
+      c.next += between(Math.random, LIVE.cascadeGap);
+    }
+  }
+  live.cascades = live.cascades.filter((c) => c.left > 0);
+}
+
 // The ending at the live clock: how far the explosion and the collapse have
-// come, each 0 to 1.
+// come, each 0 to 1, and how white the wall is between them, 0 to 1.
 function endingOf(clock) {
-  if (live.endAt === null) return { explode: 0, collapse: 0 };
+  if (live.endAt === null) return { explode: 0, white: 0, collapse: 0 };
   const x = clock - live.endAt;
+  const collapseAt = LIVE.explode + LIVE.whiteHold;
+  const white = x < collapseAt
+    ? ease((x - (LIVE.explode - LIVE.whiteRise)) / LIVE.whiteRise)
+    : 1 - ease((x - collapseAt) / LIVE.whiteFade);
   return {
     explode: Math.min(1, x / LIVE.explode),
-    collapse: Math.min(1, Math.max(0, (x - LIVE.explode) / LIVE.collapse)),
+    white,
+    collapse: Math.min(1, Math.max(0, (x - collapseAt) / LIVE.collapse)),
   };
 }
 
@@ -454,6 +774,27 @@ function onKey(e) {
     KeyR: () => deathCluster(0),
     KeyO: () => deathCluster(1),
     KeyE: endScene,
+    KeyV: switchVariant,
+    KeyL: () => {
+      if (!sceneOf().growing || !live.straight) return;
+      live.manual = !live.manual;
+      live.striking = false;
+      live.cascades = [];
+      showHint();
+    },
+    KeyT: () => {
+      if (!sceneOf().growing || !live.straight || !live.manual || live.endAt !== null) return;
+      live.striking = true;
+      live.nextStrike = live.clock;
+    },
+    KeyC: () => {
+      if (!sceneOf().growing || !live.straight) return;
+      live.colour = !live.colour;
+      tweenTo(live.colourMix, live.colour ? 1 : 0, LIVE.colourFade, live.clock);
+      showHint();
+    },
+    Digit0: blinkDigit,
+    Numpad0: blinkDigit,
     KeyS: () => {
       if (!sceneOf().growing) return;
       live.strobe = !live.strobe;
@@ -477,7 +818,15 @@ function showHint() {
   const voice = live.voice ? "STIMME LÄUFT" : `P: STIMME ${Math.min(live.queue + 1, scene.voices.length)}/${scene.voices.length}`;
   const parts = [`SZENE ${live.scene + 1}/${SCENES.length} · ${scene.name}`, voice];
   if (scene.death) parts.push("R: PROBEN-CLUSTER", "O: ONLINE-CLUSTER");
-  if (scene.growing) parts.push("E: ENDE", `S: STROBO ${live.strobe ? "AN" : "AUS"}`);
+  if (scene.growing) {
+    parts.push(`V: ${live.straight ? "GERADE ACHSEN" : "VERZWEIGT"}`, "E: ENDE", `S: STROBO ${live.strobe ? "AN" : "AUS"}`);
+    if (live.straight) {
+      parts.push(`L: BLITZE ${live.manual ? "MANUELL" : "AUTOMATISCH"}`);
+      if (live.manual) parts.push("T: BLITZ (HALTEN)");
+      parts.push(`C: FARBE ${live.colour ? "AN" : "AUS"}`);
+    }
+    if (live.straight && live.endAt !== null) parts.push("0: NULL ZU EINS");
+  }
   parts.push("N: WEITER", "B: ZURÜCK", "LEERTASTE: NEUSTART", "H: HILFE");
   hint.textContent = parts.join(" \\ ");
 }
@@ -540,24 +889,71 @@ function update(dt) {
     showHint();
   }
   if (scene.growing && ending.collapse < 1) {
-    const rate = live.endAt !== null ? LIVE.explodeBolts : between(() => share, LIVE.boltRate);
+    // The pace of the strikes: in the straight variant rare for long, then
+    // crowding in towards the end.
+    const pace = live.straight ? share ** LIVE.strikeCurve : share;
+    const rate = live.endAt !== null ? LIVE.explodeBolts : between(() => pace, LIVE.boltRate);
     if (Math.random() < rate * dt) {
       const ray = randomRay(false);
       if (ray !== null) live.bolts.push({ start: live.clock, strength: 0.6 + 0.4 * Math.random(), ray, seed: Math.random() * 1000 });
     }
     live.pulsePhase += 2 * Math.PI * between(() => share, LIVE.pulseRate) * dt;
+    // The straight variant's own strobe, quickening as the network grows;
+    // S adds its flashes to these. With manual strikes it is silent, and T
+    // fires strikes while it is held.
+    if (live.straight && live.manual && live.striking) {
+      while (live.nextStrike <= live.clock) {
+        const flash = {
+          start: live.nextStrike,
+          strength: between(Math.random, LIVE.strobeStrength),
+          fade: between(Math.random, LIVE.strobeFade),
+        };
+        live.flashes.push(flash);
+        planeFlash(flash.strength, flash.fade);
+        live.nextStrike += between(Math.random, LIVE.strikeGap);
+      }
+    }
+    if (live.straight && !live.manual && Math.random() < between(() => pace, LIVE.autoStrobe) * dt) {
+      const fade = LIVE.strobeFadeEarly.map((v, i) => v + (LIVE.strobeFade[i] - v) * pace);
+      const flash = {
+        start: live.clock,
+        strength: between(Math.random, LIVE.strobeStrength),
+        fade: between(Math.random, fade),
+      };
+      live.flashes.push(flash);
+      if (Math.random() < LIVE.autoPlane) planeFlash(flash.strength, flash.fade);
+    }
   }
   if (live.strobe) {
+    // In the straight variant the strobe grows with the network until the
+    // ending: sparse and faint at first, the full strobe at full size.
+    const full = scene.growing && live.straight && live.endAt === null ? share ** LIVE.strobeGrowth : 1;
+    const gap = LIVE.strobeGapEarly.map((v, i) => v + (LIVE.strobeGap[i] - v) * full);
+    const strength = LIVE.strobeEarly + (1 - LIVE.strobeEarly) * full;
     while (live.nextFlash <= live.clock) {
-      live.flashes.push({
+      const flash = {
         start: live.nextFlash,
-        strength: between(Math.random, LIVE.strobeStrength),
+        strength: strength * between(Math.random, LIVE.strobeStrength),
         fade: between(Math.random, LIVE.strobeFade),
-      });
-      live.nextFlash += between(Math.random, LIVE.strobeGap);
+      };
+      live.flashes.push(flash);
+      if (scene.growing && live.straight) {
+        const planes = Math.round(between(Math.random, LIVE.planesPerFlash) * full);
+        for (let k = 0; k < planes; k++) planeFlash(flash.strength, flash.fade);
+      }
+      live.nextFlash += between(Math.random, gap);
     }
   }
   live.flashes = live.flashes.filter((f) => live.clock - f.start < 6 * f.fade);
+  // Once the network has collapsed, no strike outlasts it.
+  if (live.endAt !== null && ending.collapse >= 1) {
+    live.cascades = [];
+    live.striking = false;
+  }
+  strikeCascades();
+  // A plane has faded to 2 % after four of its fade times; its large fill is
+  // dropped then.
+  live.planes = live.planes.filter((f) => live.clock - f.start < 4 * f.fade);
   live.pokes = live.pokes.filter((p) => live.clock - p.start < p.rise + p.fall);
   live.bolts = live.bolts.filter((b) => live.clock - b.start < 3 + 5 * AXES.boltFade);
   live.deathAxes = live.deathAxes.filter((d) => d.leaving === null || live.clock - d.leaving < LIVE.deathRetract);
@@ -645,12 +1041,16 @@ function figure() {
   const scale = AXES.radius * size / Math.max(mean, 0.05) ** AXES.normalise;
   const halves = ease((Math.min(1, share) - AXES.halvesFirst) / (AXES.halvesLast - AXES.halvesFirst));
   const [cx, cy] = AXES.centre;
+  // The straight variant: branches drawn back, every axis reaching outward.
+  const branch = tweenAt(live.branching, clock);
+  const straight = 1 - branch;
+  const outward = 1 + straight * LIVE.outward * Math.min(share, LIVE.outwardCap) ** 2;
   const edges = [], forks = [], rays = [];
 
-  const add = (x, y, angle, length, alpha, dist, g, lit) => {
+  const add = (x, y, angle, length, alpha, dist, g, lit, id) => {
     const dx = Math.cos(angle), dy = Math.sin(angle);
     const flash = lit.length ? flashOf(lit, clock, dist + length / 2) : 0;
-    const e = { x, y, dx, dy, length, alpha, dist, feed: g, fedEnd: 0, flash };
+    const e = { id, x, y, dx, dy, length, alpha, dist, feed: g, fedEnd: 0, flash };
     edges.push(e);
     return { e, tip: { x: x + dx * length, y: y + dy * length, dx, dy, angle, length, dist: dist + length } };
   };
@@ -659,15 +1059,16 @@ function figure() {
     let carried = 0, born = Infinity;
     const arms = [{ dx: -from.dx, dy: -from.dy, length: from.length }];
     for (const f of fork) {
-      const g = crept(f, growth, now);
+      const out = crept(f, growth, now);
+      const g = out * branch;
       if (g <= 0) continue;
       born = Math.min(born, f.birth);
       const angle = from.angle + f.turn + AXES.sway * f.sway(now);
       const nominal = from.nominal * f.length * (1 + AXES.reach * f.stretch(now));
       const on = f.carry ? lit : lit.filter((b) => hash(b.seed, f.id) < AXES.boltFork);
-      const { e, tip } = add(from.x, from.y, angle, nominal * g, alpha * (0.55 + 0.45 * g), from.dist, g, on);
+      const { e, tip } = add(from.x, from.y, angle, nominal * g, alpha * (0.55 + 0.45 * g), from.dist, g, on, f.id);
       // A shooter flashes while it shoots out and while it vanishes.
-      if (f.shooter && g < 1) e.flash += AXES.shootFlash * (1 - g);
+      if (f.shooter && out < 1) e.flash += AXES.shootFlash * (1 - out);
       tip.nominal = nominal * g;
       e.fedEnd = grow(f.forks, tip, alpha, on);
       e.feed += e.fedEnd;
@@ -692,15 +1093,38 @@ function figure() {
       const angle = Math.atan2(sign * q[i], sign * p[i]);
       const stretch = (1 + (root.bias - 1) * halves) * (1 + AXES.reach * root.reach(now));
       const nominal = scale * mean * stretch * half;
-      const length = nominal * ((projected / mean) ** AXES.foreshorten + pokedAt(root.id, clock)) * breath(root.breathe);
+      const length = nominal * ((projected / mean) ** AXES.foreshorten + pokedAt(root.id, clock)) * breath(root.breathe) * outward;
       const lit = live.bolts.filter((b) => b.ray === root.id);
-      const { e, tip } = add(cx, cy, angle, length, alpha, 0, half, lit);
+      const { e, tip } = add(cx, cy, angle, length, alpha, 0, half, lit, root.id);
       tip.nominal = nominal;
       e.fedEnd = grow(root.forks, tip, alpha, lit);
       e.feed += e.fedEnd;
       hubFed += e.feed;
       hubArms.push({ dx: e.dx, dy: e.dy, length: e.length });
       rays.push({ id: root.id, angle, length, root: true });
+    }
+  }
+
+  // The straight variant's further axes: straight lines through the centre,
+  // shooting out as they join and reaching outward with the growth.
+  if (straight > 0.001) {
+    for (const line of space.lines) {
+      const out = ease((growth - line.join) / line.life);
+      if (out <= 0) continue;
+      const g = out * straight;
+      const angle = line.angle + LIVE.lineDrift * line.drift(now);
+      const stretch = (1 + AXES.reach * line.reach(now)) * outward * size * g;
+      for (const half of [0, 1]) {
+        const id = line.id + half;
+        const lit = live.bolts.filter((b) => b.ray === id);
+        const a = angle + half * Math.PI;
+        const { e } = add(cx, cy, a, AXES.radius * line.halves[half] * stretch, line.alpha * straight, 0, g, lit, id);
+        e.widthScale = LIVE.lineWidth;
+        if (out < 1) e.flash += AXES.shootFlash * (1 - out);
+        hubFed += e.feed;
+        hubArms.push({ dx: e.dx, dy: e.dy, length: e.length });
+        rays.push({ id, angle: a, length: e.length, root: true });
+      }
     }
   }
 
@@ -713,7 +1137,7 @@ function figure() {
     for (const [half, angle, share] of [[0, d.angle, 1], [1, d.angle + Math.PI, LIVE.deathBack]]) {
       const id = d.id + half / 2;
       const lit = live.bolts.filter((b) => b.ray === id);
-      const { e } = add(cx, cy, angle, d.length * share * g * breath(d.breathe), 1, 0, g, lit);
+      const { e } = add(cx, cy, angle, d.length * share * g * breath(d.breathe), 1, 0, g, lit, id);
       hubFed += e.feed;
       hubArms.push({ dx: e.dx, dy: e.dy, length: e.length });
       rays.push({ id, angle, length: e.length, root: false });
@@ -726,17 +1150,44 @@ function figure() {
 
 // ---- Drawing -----------------------------------------------------------------------------
 
-// The live page draws at LIVE.res (or ?res=), every other mode at full size.
-const RES = mode === "live" ? Number(params.get("res")) || LIVE.res : 1;
+// The drawing resolution, as a share of 3840 × 2160. The live page draws
+// at the size the frame takes on the screen (the window fitted to 16:9,
+// times the device pixel ratio, at most 4K), one pixel per screen pixel, so
+// the browser never rescales it and thin lines keep their pixels; ?res= or
+// LIVE.res set a fixed share instead. Every other mode draws at full size.
+function screenRes() {
+  if (mode !== "live") return 1;
+  const fixed = Number(params.get("res")) || LIVE.res;
+  if (fixed) return fixed;
+  const shown = Math.min(innerWidth, innerHeight * W / H) * (devicePixelRatio || 1);
+  return Math.min(1, shown / W);
+}
+
 const layer = (scale) => {
   const c = offscreen(Math.round(W * scale), Math.round(H * scale));
   return { canvas: c, ctx: c.getContext("2d"), scale };
 };
-const axesL = layer(RES), glowSourceL = layer(RES / 4), glowL = layer(RES / 4), bloomL = layer(RES / 8);
-const flashSourceL = layer(RES / 4), flashL = layer(RES / 4), washL = layer(RES / 16);
+let RES, axesL, glowSourceL, glowL, bloomL, flashSourceL, flashL, washL, planesL;
+const scratch = new Map();
+const digitImages = new Map();   // the digits rendered at RES (digitImage)
+
+// The layers drawn into, at `res`; the scratch layers follow on demand.
+function buildLayers(res) {
+  RES = res;
+  axesL = layer(RES);
+  glowSourceL = layer(RES / 4);
+  glowL = layer(RES / 4);
+  bloomL = layer(RES / 8);
+  flashSourceL = layer(RES / 4);
+  flashL = layer(RES / 4);
+  washL = layer(RES / 16);
+  planesL = layer(RES / 2);
+  scratch.clear();
+  digitImages.clear();
+}
+buildLayers(screenRes());
 
 // A scratch layer of the same size as `l`, for brightening it.
-const scratch = new Map();
 function boosted(l) {
   if (!scratch.has(l)) scratch.set(l, layer(l.scale));
   return scratch.get(l);
@@ -746,14 +1197,31 @@ function tube(feed) {
   return Math.min(AXES.maxWidth, AXES.minWidth + AXES.widthGain * Math.sqrt(feed));
 }
 
+// How far a line from (x, y) along (dx, dy) runs before it leaves the frame
+// widened by `pad` px.
+function frameReach(x, y, dx, dy, pad = 50) {
+  const along = (pos, d, lo, hi) => (d > 1e-9 ? (hi - pos) / d : d < -1e-9 ? (lo - pos) / d : Infinity);
+  return Math.max(0, Math.min(along(x, dx, -pad, W + pad), along(y, dy, -pad, H + pad)));
+}
+
+// An edge as a tapering tube with a round tip, cut off where it leaves the
+// frame. The tip is a polygon of TIP_STEPS sides, not an arc, so the tube
+// stays a polygon the canvas fills directly: with an arc, long edges are
+// drawn through a mask the size of their bounds, which slows the frame
+// several times over once many of them cross the wall.
+const TIP_STEPS = 6;
 function edge(c, x, y, dx, dy, length, w0, w1) {
+  length = Math.min(length, frameReach(x, y, dx, dy));
   if (length < 0.5) return;
   const ex = x + dx * length, ey = y + dy * length;
   const nx = -dy, ny = dx;
+  const side = Math.atan2(ny, nx);
   c.beginPath();
   c.moveTo(x + nx * w0 / 2, y + ny * w0 / 2);
-  c.lineTo(ex + nx * w1 / 2, ey + ny * w1 / 2);
-  c.arc(ex, ey, w1 / 2, Math.atan2(ny, nx), Math.atan2(ny, nx) - Math.PI, true);
+  for (let k = 0; k <= TIP_STEPS; k++) {
+    const a = side - Math.PI * k / TIP_STEPS;
+    c.lineTo(ex + Math.cos(a) * w1 / 2, ey + Math.sin(a) * w1 / 2);
+  }
   c.lineTo(x - nx * w0 / 2, y - ny * w0 / 2);
   c.closePath();
   c.fill();
@@ -807,7 +1275,7 @@ function sunk(edges, forks, fill, k) {
     const [x0, y0] = sink(e.x, e.y, fill, k);
     const [x1, y1, scale] = sink(e.x + e.dx * e.length, e.y + e.dy * e.length, fill, k);
     const length = Math.hypot(x1 - x0, y1 - y0);
-    Object.assign(e, { x: x0, y: y0, dx: length > 1e-6 ? (x1 - x0) / length : e.dx, dy: length > 1e-6 ? (y1 - y0) / length : e.dy, length, widthScale: Math.max(0.15, Math.min(1, scale)) });
+    Object.assign(e, { x: x0, y: y0, dx: length > 1e-6 ? (x1 - x0) / length : e.dx, dy: length > 1e-6 ? (y1 - y0) / length : e.dy, length, widthScale: (e.widthScale || 1) * Math.max(0.15, Math.min(1, scale)) });
   }
   for (const f of forks) {
     const [x, y, scale] = sink(f.x, f.y, fill, k);
@@ -838,6 +1306,43 @@ function blurInto(target, source, px) {
   target.ctx.filter = `blur(${px}px)`;
   target.ctx.drawImage(source.canvas, 0, 0, target.canvas.width, target.canvas.height);
   target.ctx.filter = "none";
+}
+
+// A digit in LIVE.digitFont, white, LIVE.digitHeight px high, rendered once
+// at the drawing resolution: {canvas, w, h}, w and h in frame px, the ink
+// centred. Text drawn at a changing scale is re-fitted to the pixel grid at
+// every size and shakes; the image scales smoothly. The size is taken from
+// the zero, so both digits stand equally high.
+function digitImage(digit) {
+  if (digitImages.has(digit)) return digitImages.get(digit);
+  const probe = offscreen(1, 1).getContext("2d");
+  probe.font = `400 100px ${LIVE.digitFont}, sans-serif`;
+  const zero = probe.measureText("0");
+  const size = 100 * LIVE.digitHeight / Math.max(1, zero.actualBoundingBoxAscent + zero.actualBoundingBoxDescent);
+  probe.font = `400 ${size}px ${LIVE.digitFont}, sans-serif`;
+  const m = probe.measureText(digit);
+  const pad = 8;
+  const w = m.actualBoundingBoxLeft + m.actualBoundingBoxRight + 2 * pad;
+  const h = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent + 2 * pad;
+  const canvas = offscreen(Math.ceil(w * RES), Math.ceil(h * RES));
+  const c = canvas.getContext("2d");
+  c.scale(RES, RES);
+  c.font = probe.font;
+  c.fillStyle = "#ffffff";
+  c.textAlign = "left";
+  c.textBaseline = "alphabetic";
+  c.fillText(digit, pad + m.actualBoundingBoxLeft, pad + m.actualBoundingBoxAscent);
+  const image = { canvas, w, h };
+  digitImages.set(digit, image);
+  return image;
+}
+
+// A digit centred on (cx, cy) at `scale` of its size.
+function drawDigit(c, digit, cx, cy, scale) {
+  const { canvas: image, w, h } = digitImage(digit);
+  c.imageSmoothingEnabled = true;
+  c.imageSmoothingQuality = "high";
+  c.drawImage(image, cx - w * scale / 2, cy - h * scale / 2, w * scale, h * scale);
 }
 
 function drawClusters() {
@@ -886,39 +1391,142 @@ function drawLive({ level, share }) {
   // easing off as the collapse begins. The sharp lines fade out with it.
   const flood = ease(ending.explode) * (1 - ease(2 * ending.collapse));
   const sharp = 1 - flood > 0.02;
-  const c = axesL.ctx, g = glowSourceL.ctx, fl = flashSourceL.ctx;
-  for (const l of [axesL, glowSourceL, flashSourceL]) begin(l, Math.max(pull, 1e-3));
+  // The straight variant: how far it has come in (metal) and how far its
+  // red front has run, from `redStart` of the growth's time to its end.
+  const metal = 1 - tweenAt(live.branching, clock);
+  const red = metal * tweenAt(live.colourMix, clock)
+    * Math.min(1, Math.max(0, (live.growth / AXES.growthSpan - LIVE.redStart) / (1 - LIVE.redStart)));
+  // The strobe's flashes as they stand: they blaze in the metal's glints.
+  let blaze = 0;
+  for (const f of live.flashes) {
+    const x = clock - f.start;
+    if (x >= 0) blaze += f.strength * Math.exp(-x / f.fade);
+  }
+  const baseRGB = tint(null, red);
+  // The straight variant's glow, rising with the growth.
+  const grownNow = Math.min(1, share);
+  const glowWide = 1 + (between(() => grownNow, LIVE.glowWidth) - 1) * metal;
+  const glowBoost = 1 + (between(() => grownNow, LIVE.lineGlow) - 1) * metal;
+  const base = metal > 0 ? css(metalRGB(baseRGB, 0.75, metal)) : "#ffffff";
+  const planeColour = metal > 0 ? css(metalRGB(tint(null, red, LIVE.redPlanes), 0.75, metal)) : "#ffffff";
+  const c = axesL.ctx, g = glowSourceL.ctx, fl = flashSourceL.ctx, pl = planesL.ctx;
+  for (const l of [axesL, glowSourceL, flashSourceL, planesL]) begin(l, Math.max(pull, 1e-3));
+  let hubWidth = 0;     // the summed width of the lines where they leave the centre
+  // The narrowest sharp line in frame px: LIVE.minLinePx drawn pixels. A
+  // line thinner than a pixel or so switches the pixels it crosses on and
+  // off as it moves; drawn at this width and dimmed in proportion it gives
+  // the same light and moves smoothly.
+  const minLine = LIVE.minLinePx / RES;
   if (pull > 0.002 && ending.collapse < 1) {
     for (const e of edges) {
       const ws = e.widthScale || 1;
       const w0 = tube(e.feed) * ws, w1 = (e.fedEnd > 0 ? tube(e.fedEnd) : tube(e.feed) * AXES.taperTip) * ws;
-      if (sharp) edge(c, e.x, e.y, e.dx, e.dy, e.length, w0, w1);
       const mid = e.dist + e.length / 2;
+      if (LIVE.chrome > 0) {
+        // Gradients along the visible part of the edge: the line in chrome,
+        // shaded at each stop; the glow carrying the red front out along it,
+        // shaded as the middle of the line.
+        const angle = Math.atan2(e.dy, e.dx);
+        const seen = Math.min(e.length, frameReach(e.x, e.y, e.dx, e.dy));
+        const tip = e.dist + e.length;
+        if (seen >= 0.5) {
+          // colourAt(r, u): r px from the centre, u of the way to the tip.
+          const along = (l, stops, colourAt) => {
+            const grad = l.createLinearGradient(e.x, e.y, e.x + e.dx * seen, e.y + e.dy * seen);
+            for (let k = 0; k < stops; k++) {
+              const t = k / (stops - 1);
+              const r = e.dist + t * seen;
+              grad.addColorStop(t, css(colourAt(r, r / tip)));
+            }
+            return grad;
+          };
+          if (sharp) {
+            const stops = Math.min(LIVE.metalStops, Math.max(2, Math.ceil(4 * seen / LIVE.bandLength) + 1));
+            c.fillStyle = along(c, stops, (r) => metalRGB([255, 255, 255], sheen(angle, r, live.now, clock, blaze), LIVE.chrome));
+          }
+          // The glow keeps the edge's own colour, brightened or darkened by
+          // its shade but never whitened, so the wall stays in its colour;
+          // where it has turned red, light shimmers out along it.
+          const shade = Math.min(1.2, sheen(angle, mid, live.now, clock, blaze));
+          const phase = 2 * Math.PI * hash(e.id, 5.3);
+          const wave = 2 * Math.PI / LIVE.shimmerLength, run = LIVE.shimmerSpeed * clock;
+          const glowStops = Math.min(LIVE.shimmerStops, Math.max(2, Math.ceil(4 * seen / LIVE.shimmerLength) + 1));
+          g.fillStyle = fl.fillStyle = along(g, glowStops, (r, u) => {
+            const rgb = tint(e.id, red, u);
+            const shimmer = 1 + LIVE.shimmer * redAt(e.id, red, u)
+              * (0.6 * Math.sin(wave * r - run + phase) + 0.4 * Math.sin(wave * r / 0.37 - 1.7 * run + 2 * phase));
+            // Outside the straight variant the glow keeps its full light.
+            const lit = 1 + (shade * shimmer - 1) * metal;
+            return mixRGB(rgb, rgb.map((v) => Math.min(255, v * lit)), LIVE.chrome);
+          });
+        }
+      }
+      if (e.dist === 0) hubWidth += w0;
+      if (sharp) {
+        const thin = Math.min(1, (w0 + w1) / 2 / minLine);
+        c.globalAlpha = thin;
+        edge(c, e.x, e.y, e.dx, e.dy, e.length, w0 / thin, w1 / thin);
+      }
       const pulse = 1 - AXES.pulse * (0.5 + 0.5 * Math.sin(phase - 2 * Math.PI * mid / AXES.pulseLength));
       g.globalAlpha = Math.min(1, e.alpha * pulse + e.flash);
-      edge(g, e.x, e.y, e.dx, e.dy, e.length, w0, w1);
+      edge(g, e.x, e.y, e.dx, e.dy, e.length, w0 * glowWide, w1 * glowWide);
       if (e.flash > 0.01) {
         fl.globalAlpha = Math.min(1, e.flash);
         edge(fl, e.x, e.y, e.dx, e.dy, e.length, 1.5 * w0, 1.5 * w1);
       }
     }
+    c.globalAlpha = 1;
+    c.fillStyle = g.fillStyle = base;
+    // In the straight variant the core takes the place of the hub's web
+    // and disc.
     for (const f of forks) {
+      const shown = f.hub ? 1 - metal : 1;
+      if (shown <= 0.001) continue;
+      c.globalAlpha = shown;
       if (sharp) webs(c, f);
-      g.globalAlpha = f.alpha;
+      g.globalAlpha = f.alpha * shown;
       webs(g, f);
     }
+    // The planes the flashes light, spanned by their axes as they stand now
+    // and moved with the network in the ending.
+    const raysById = new Map(live.rays.map((r) => [r.id, r]));
+    pl.fillStyle = g.fillStyle = planeColour;
+    for (const f of live.planes) {
+      const alpha = Math.min(1, LIVE.planeAlpha * f.strength * Math.exp(-(clock - f.start) / f.fade));
+      const rays = f.rays.map((id) => raysById.get(id)).filter(Boolean);
+      if (alpha < 0.004 || rays.length < 2) continue;
+      const corners = spanned(rays.map((r) => [r.length * Math.cos(r.angle), r.length * Math.sin(r.angle)]))
+        .map(([x, y]) => sink(cx + x, cy + y, fill, ending.collapse));
+      for (const [l, a] of [[pl, alpha], [g, alpha * LIVE.planeGlow]]) {
+        l.globalAlpha = a;
+        l.beginPath();
+        corners.forEach(([x, y], k) => (k ? l.lineTo(x, y) : l.moveTo(x, y)));
+        l.closePath();
+        l.fill();
+      }
+    }
     for (const l of [c, g]) {
-      l.globalAlpha = 1;
+      if (metal >= 1) break;
+      l.globalAlpha = 1 - metal;
       l.beginPath();
       l.arc(cx, cy, hub * fill * (1 - ending.collapse), 0, 2 * Math.PI);
       l.fill();
     }
   }
-  // The new shape: a circle opening out of the centre.
-  if (ring > 0.001) {
+  // The new shape opening out of the centre: a circle, or in the straight
+  // variant a zero that blinks into a one.
+  const digit = live.straight ? digitAt(clock) : null;
+  if (ring > 0.001 && (!live.straight || digit)) {
     for (const l of [axesL, glowSourceL]) {
       l.ctx.setTransform(l.scale, 0, 0, l.scale, 0, 0);
       l.ctx.globalAlpha = Math.min(1, ring * 1.5);
+      l.ctx.fillStyle = l.ctx.strokeStyle = base;
+      if (live.straight) {
+        // The digits stay white whatever colour the network has turned, and
+        // steady: they open with the ring and do not follow the voice.
+        drawDigit(l.ctx, digit, cx, cy, ring);
+        continue;
+      }
       l.ctx.lineWidth = LIVE.ringWidth;
       l.ctx.beginPath();
       l.ctx.arc(cx, cy, LIVE.ringRadius * ring * (1 + 0.03 * level), 0, 2 * Math.PI);
@@ -937,15 +1545,17 @@ function drawLive({ level, share }) {
   const grownShare = Math.min(1, share);
   const pulseDepth = sceneOf().growing ? between(() => grownShare, LIVE.pulseDepth) : 0;
   const surge = 0.8 * ease(ending.explode) * (1 - ending.collapse) + 1.5 * Math.sin(Math.PI * ending.collapse);
-  let flicker = 1;
-  if (live.strobe) {
-    flicker = LIVE.strobeBase;
-    for (const f of live.flashes) {
-      const x = clock - f.start;
-      if (x >= 0) flicker += f.strength * Math.exp(-x / f.fade);
-    }
-  }
-  const lift = (1 + AXES.levelGlow * level) * (1 + pulseDepth * (0.5 + 0.5 * Math.sin(live.pulsePhase))) * (1 + surge) * flicker;
+  // The strobe flickers the glow; in the straight variant the glow rests
+  // low and lives on its flashes.
+  let flicker = live.strobe ? LIVE.strobeBase + blaze : 1;
+  if (metal > 0) flicker += (between(() => grownNow, LIVE.strobeRest) + blaze - flicker) * metal;
+  const flickering = live.strobe || metal > 0;
+  // Over the collapse the glow settles: it stops following the voice, the
+  // pulse and the strobe, so the light around the new shape is still.
+  const settle = ease(ending.collapse);
+  flicker += (1 - flicker) * settle;
+  const lift = (1 + AXES.levelGlow * level * (1 - settle))
+    * (1 + pulseDepth * (0.5 + 0.5 * Math.sin(live.pulsePhase)) * (1 - settle)) * (1 + surge) * flicker;
   const strength = Math.max(grownShare, ring);
   const lerp = ([a, b]) => a + (b - a) * strength;
   // A layer added `amount` times over, so the glow can rise beyond one
@@ -974,14 +1584,66 @@ function drawLive({ level, share }) {
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, W, H);
   ctx.globalCompositeOperation = "lighter";
-  addLayer(bloomL, lerp(AXES.bloom) * lift);
-  addLayer(glowL, live.strobe ? lerp(AXES.glow) * lift : Math.min(1, lerp(AXES.glow) * lift));
-  addLayer(flashL, AXES.boltGlow * (live.strobe ? flicker : 1));
+  addLayer(bloomL, lerp(AXES.bloom) * lift * glowBoost);
+  addLayer(glowL, flickering ? lerp(AXES.glow) * lift * glowBoost : Math.min(1, lerp(AXES.glow) * lift));
+  if (live.planes.length) addLayer(planesL, 1);
+  addLayer(flashL, AXES.boltGlow * (flickering ? flicker : 1));
   if (flood > 0) addLayer(washL, LIVE.explodeWash * flood * flicker);
   ctx.globalCompositeOperation = "source-over";
   if (sharp) {
     ctx.globalAlpha = 1 - flood;
     ctx.drawImage(axesL.canvas, 0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+  // The straight variant's core: light at the centre the axes grow out of,
+  // fading into the colour without an edge, larger and brighter as the
+  // network grows, with a wide halo of the colour lighting the wall, and
+  // the white heart where the lines merge. It sinks into the centre with
+  // the collapse.
+  const core = metal * (1 - ending.collapse) * pull;
+  if (core > 0.002) {
+    const swell = 1 + LIVE.coreVoice * level + LIVE.coreFlash * Math.min(2, blaze);
+    const r = between(() => grownNow ** LIVE.coreCurve, LIVE.coreRadius) * fill * swell;
+    const halo = between(() => grownNow, LIVE.haloRadius) * fill * swell;
+    const heart = mixRGB(baseRGB, [255, 255, 255], LIVE.coreHeat);
+    const rgba = (rgb, a) => `rgba(${rgb.map(Math.round).join(",")},${a})`;
+    const glowAt = (radius, stops, alpha) => {
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      for (const [t, rgb, a] of stops) grad.addColorStop(t, rgba(rgb, a));
+      ctx.globalAlpha = Math.min(1, alpha);
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - radius, cy - radius, 2 * radius, 2 * radius);
+    };
+    ctx.globalCompositeOperation = "lighter";
+    glowAt(halo, [[0, baseRGB, 1], [0.25, baseRGB, 0.55], [0.6, baseRGB, 0.15], [1, baseRGB, 0]],
+      between(() => grownNow, LIVE.haloAlpha) * (1 + LIVE.haloFlash * Math.min(2, blaze)) * core);
+    glowAt(r, [[0, heart, 0.8], [0.25, baseRGB, 0.55], [0.6, baseRGB, 0.18], [1, baseRGB, 0]],
+      between(() => grownNow, LIVE.coreGlow) * core);
+    // The heart: out to the radius where the lines' widths fill the
+    // circumference they cross, they overlap into one light.
+    // Its light falls off as a bell curve with no rim, white at the middle
+    // and taking on the colour as it fades.
+    const merged = LIVE.heartSpread * hubWidth / (2 * Math.PI) * fill * (1 + 0.5 * (swell - 1));
+    if (merged > 1) {
+      const reach = merged * LIVE.heartFade;
+      const stops = [];
+      for (let k = 0; k <= 12; k++) {
+        const t = k / 12;
+        const x = t * reach / (LIVE.heartWidth * merged);
+        stops.push([t, mixRGB([255, 255, 255], heart, Math.min(1, t * 1.5)), k === 12 ? 0 : Math.exp(-x * x)]);
+      }
+      glowAt(reach, stops, core);
+    }
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+  }
+  // The white wall between the explosion and the collapse.
+  if (ending.white > 0.001) {
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = Math.min(1, ending.white);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
   }
   drawClusters();
@@ -990,6 +1652,11 @@ function drawLive({ level, share }) {
 // ---- Loading and modes ---------------------------------------------------------------------
 
 async function loadLive() {
+  try {
+    document.fonts.add(await new FontFace(LIVE.digitFont, `url(/fonts/${LIVE.digitFont}-Regular.ttf)`).load());
+  } catch {
+    // Without the font the digits fall back to the browser's sans-serif.
+  }
   const clips = await fetch("/clips.json");
   if (clips.ok) {
     for (const c of await clips.json()) {
@@ -1011,9 +1678,23 @@ async function loadLive() {
 // The live page: the frame follows the performance, drawn as fast as the
 // machine allows.
 function runLive() {
-  canvas.width = Math.round(W * RES);
-  canvas.height = Math.round(H * RES);
+  // The frame follows the window, so going fullscreen or moving to another
+  // screen redraws it at that screen's resolution.
+  const fit = () => {
+    const res = screenRes();
+    if (res !== RES) buildLayers(res);
+    canvas.width = Math.round(W * RES);
+    canvas.height = Math.round(H * RES);
+  };
+  fit();
+  addEventListener("resize", fit);
   addEventListener("keydown", onKey);
+  // Letting go of T ends the strikes, the cascade with them.
+  addEventListener("keyup", (e) => {
+    if (e.code !== "KeyT" || !live.striking) return;
+    live.striking = false;
+    live.cascades = [];
+  });
   enter(0);
   let last = performance.now();
   const tick = (ms) => {

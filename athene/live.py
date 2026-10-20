@@ -13,8 +13,9 @@ without sound, cut once into athene/out/live/clips/.
 
 Keys on the page: N next scene, B previous, Space restart the scene, P play
 or stop the scene's next voice clip, R and O a rehearsal or online cluster in
-the death scene, E the ending and S the strobe in the growth scene, H the
-help line.
+the death scene, E the ending, S the strobe and V the straight variant in the
+growth scene, 0 the zero turning into a one at the straight variant's end,
+H the help line.
 """
 
 import argparse
@@ -71,7 +72,7 @@ def main():
     parser.add_argument("--voices", type=Path, default=VOICES, help="folder of the scenes' voice clips")
     parser.add_argument("--clips", type=Path, nargs="+", default=render.CLIP_GROUPS, metavar="FOLDER",
                         help="folders of the cluster clips, one group each (default: rehearsal, then online)")
-    parser.add_argument("--res", type=float, help="drawing resolution as a share of 3840 × 2160 (default: the design's)")
+    parser.add_argument("--res", type=float, help="drawing resolution as a share of 3840 × 2160 (default: fitted to the screen)")
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
 
@@ -94,6 +95,8 @@ def main():
     clip_list.write_text(json.dumps([{"src": f"/clips/{k}.mp4", "group": group}
                                      for k, (_, group) in enumerate(clips)]), encoding="utf-8")
     table["/clips.json"] = clip_list
+    # The straight growth variant ends in digits set in Michroma.
+    table["/fonts/Michroma-Regular.ttf"] = render.FONTS / "Michroma-Regular.ttf"
     for k, (path, _) in enumerate(clips):
         table[f"/clips/{k}.mp4"] = path
 

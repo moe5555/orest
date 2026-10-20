@@ -247,6 +247,33 @@ will stand.
 
 ---
 
+### H-11 · Athene's thin lines shimmer on screen
+
+Moe saw the thin lines of the rehearsal page's straight growth variant jitter
+pixel by pixel as they move (2026-10-20). The live page draws a fixed
+3840 × 2160 frame that the browser scales to the window
+(`athene/page/index.html`), and those lines are 1.5–2.8 px wide in that
+frame, below one screen pixel on a 1080p screen. Thin lines moving slowly
+switch the pixels they cross on and off, and the browser's downscaling
+skips detail.
+
+**Done (2026-10-20):** the live page now draws at the display's own
+resolution (window size × device pixel ratio, at most 4K) and follows the
+window, so the browser no longer rescales it.
+
+**Done (2026-10-20):** every sharp line is at least 1.5 drawn pixels wide
+(`LIVE.minLinePx`), dimmed in proportion instead of thinned; the light of
+moving lines varies between frames by about a third less (`changelog.md`).
+
+**If shimmer remains:** raise `LIVE.minLinePx` to 2 (measured a further
+sixth less), then draw the lines at twice the resolution and scale down
+once.
+
+**Open:** which screen shows it (monitor, LED wall or both), and the LED
+wall's resolution, which sets what the page should draw at in the show.
+
+---
+
 ## Working through this list
 
 Suggested order on `VSH-ARLT-5090`:
