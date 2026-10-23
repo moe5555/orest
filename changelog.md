@@ -27,7 +27,12 @@ Found while checking it, and changed with it:
   sheets, 24 MB) instead of 192 px videos, which are gone. Fetching a
   video's picture costs the browser about 0.45 ms a clip, and with all 17
   clusters the strip ran at 3–7 fps (30 fps with the videos playing but not
-  drawn). Not yet measured with the sheets.
+  drawn). Measured with the sheets, both pages at full size in one
+  browser: the strip holds 30 fps in every scene, also with 17 clusters
+  standing large (was 3 fps) and settled (was 7 fps), about one frame behind
+  the wall (median 16–19 ms, at most 29 ms); the wall holds 60 fps. All 266
+  clips load as sheets, the strip plays no videos, and its screens show the
+  clusters large and settled as expected. No errors.
 
 Checked headless: with `?rehearsal` the world is 3840 px wide, six clusters
 all fell on the 16:9 wall, and 91 of 96 clips were drawable (the rest
