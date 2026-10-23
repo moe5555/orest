@@ -51,6 +51,17 @@ voices. Each scene shows them under the part they play there:
 
 ---
 
+## 2026-10-22 — Live SITREP: no "Kein Ton" panel
+
+Requested by Moe. Concerns the Live SITREP of the RENDER step in
+`pipeline.md` (`03_render.md`). The large red "Kein Ton" panel above the
+picture is gone from every view (`sitrep.html`, `sitrep.js`, `style.css`). A
+silent source now shows only in the header, where the sound level turns red;
+the header is hidden on the prototypes. The terminal's `KEIN TON` line and the
+`Ton` event (`session.Ton`) stay.
+
+---
+
 ## 2026-10-20 — Unattended extraction of new rehearsals (VSH-ARLT-5090)
 
 Moe asked to embed the new rehearsal recordings into `hitl_database` without

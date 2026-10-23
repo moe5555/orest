@@ -448,8 +448,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .bar .ton { font: 12px/1 var(--mono); color: var(--text-dim); white-space: nowrap; }
 .bar .ton:is([data-stumm="true"], [data-no-device="true"]) { color: var(--red); }
-.panel.stumm { background-color: var(--alarm-ground); border-color: var(--alarm-line); }
-.panel.stumm .error-text { margin: 0; }
 
 .live-zeilen { margin: 0; color: var(--text); max-height: 360px; overflow-y: auto; }
 .live-zeilen .waiting { padding: 12px 4px; }
@@ -509,28 +507,27 @@ body[data-ansicht="p1"] .bar,
 body[data-ansicht="p1"] .top .live { display: none; }
 body[data-ansicht="p1"] .top { grid-template-columns: minmax(0, 1fr); }
 
-/* Errors and a silent sound source stay visible: without them the view
-   would go blank or quiet with no reason given. */
-body[data-ansicht="p1"][data-screen="normal"] .wrap > :not(.top, .p1-seite, #error, #stumm) { display: none; }
+/* Errors stay visible: without them the view would go blank with no reason
+   given. */
+body[data-ansicht="p1"][data-screen="normal"] .wrap > :not(.top, .p1-seite, #error) { display: none; }
 
 /* Laid out for a landscape projection: the picture on the left, and on the
    right the people in view, the left-most on top, with the alarm beneath
    them. Errors span both columns above. Rows are spaced by margins rather
-   than the grid's gap, so the rows of hidden messages take no room. */
+   than the grid's gap, so the row of a hidden error takes no room. */
 body[data-ansicht="p1"][data-screen="normal"] .wrap {
   max-width: none;
   min-height: calc(100vh - 30px);
   padding: 16px 24px;
   grid-template-columns: minmax(0, 2fr) minmax(340px, 1fr);
-  grid-template-rows: repeat(3, auto);
+  grid-template-rows: repeat(2, auto);
   column-gap: 24px; row-gap: 0;
   align-content: center;
 }
 body[data-ansicht="p1"][data-screen="normal"] #error { grid-column: 1 / -1; grid-row: 1; margin-bottom: 16px; }
-body[data-ansicht="p1"][data-screen="normal"] #stumm { grid-column: 1 / -1; grid-row: 2; margin-bottom: 16px; }
-body[data-ansicht="p1"][data-screen="normal"] .top { grid-column: 1; grid-row: 3; }
+body[data-ansicht="p1"][data-screen="normal"] .top { grid-column: 1; grid-row: 2; }
 body[data-ansicht="p1"] .top .feed { height: auto; aspect-ratio: 16 / 9; max-height: calc(100vh - 64px); }
-.p1-seite { grid-column: 2; grid-row: 3; display: grid; gap: 16px; align-content: start; }
+.p1-seite { grid-column: 2; grid-row: 2; display: grid; gap: 16px; align-content: start; }
 
 .p1-personen { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-content: start; }
 .p1-personen .waiting { grid-column: 1 / -1; }
@@ -574,7 +571,7 @@ body[data-ansicht="p1"] .top .feed { height: auto; aspect-ratio: 16 / 9; max-hei
 
 body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) .bar,
 body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) .top .live { display: none; }
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="normal"] .wrap > :not(.top, .p2-scene, #error, #stumm) { display: none; }
+body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="normal"] .wrap > :not(.top, .p2-scene, #error) { display: none; }
 
 /* The picture as large as the window allows with the scene beneath it, and
    centred. 150px holds the tabs, the padding and the scene's row. */
@@ -586,8 +583,7 @@ body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-scre
   align-content: center;
   justify-items: center;
 }
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) #error,
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) #stumm { width: var(--p2-width); }
+body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) #error { width: var(--p2-width); }
 body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) .top { width: var(--p2-width); grid-template-columns: minmax(0, 1fr); }
 body[data-ansicht="p2"] .top .feed { height: auto; aspect-ratio: 16 / 9; }
 

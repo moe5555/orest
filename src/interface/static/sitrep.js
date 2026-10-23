@@ -144,22 +144,17 @@ function ratingRow(name, value) {
 
 // ---- Live lane ------------------------------------------------------------
 
-// The sound's level in the header; a silent source as a warning above all.
-// A run without an audio device says so in the header, in red, in place of
-// the level.
+// The sound's level in the header, in red while the source is silent. A run
+// without an audio device says so in the header, in red, in place of the
+// level.
 function renderTon(ton, running) {
   const level = $("ton");
   level.hidden = !running || !ton;
-  $("stumm").hidden = !running || !ton?.stumm;
   if (level.hidden) return;
   level.dataset.stumm = String(ton.stumm);
   level.dataset.noDevice = String(Boolean(ton.no_device));
   level.textContent = ton.no_device ? "Kein Audiogerät ausgewählt"
     : ton.pegel_db === null ? "Ton –" : `Ton ${Math.round(ton.pegel_db)} dBFS`;
-  $("stumm-text").textContent =
-    `Von „${ton.quelle}“ kommt seit ${Math.round(ton.still_s)} s kein Ton. Ohne Ton entstehen ` +
-    "keine Zeilen, und die Chronik sieht nur Standbilder. Tonquelle prüfen: --audio oder " +
-    "--audio-ndi, z. B. --audio-ndi \"VSH-ARLT-5090 (OBS PGM)\".";
 }
 
 function renderAlarm(werte, laeuft) {
