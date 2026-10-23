@@ -16,9 +16,9 @@ frame is dropped however long one takes, and a render repeats exactly.
     python -m athene.render CLIP --clips A B        # cluster clips from other folders
 
 Designs that show clusters of clips (axes2 to axes4) take them as frame
-sheets, in groups: by default the Smart Search clips of the HITL database
-(data/clips/hitl_database), then 4-second clips of other footage
-(data/clips/athene_online, cut by athene/cut_clips.py). From each group
+sheets, in groups: by default 4-second clips of the death scene rehearsals
+(data/clips/athene_deathscene), then of the play's end videos
+(data/clips/athene_endvideos), both cut by athene/cut_clips.py. From each group
 SHEET_CLIPS clips are picked and each is cut to the design's sheet shape
 (SHEET_SHAPES) from the middle of the picture and tiled frame by frame into
 one JPEG. The sheets are kept in athene/out/_sheets/ and reused; drawing a
@@ -61,8 +61,8 @@ OUT = HERE / "out"
 ARCHIVE_OUT = HERE / "archive" / "out"
 SHEETS = OUT / "_sheets"
 CLIP_GROUPS = [
-    REPO_ROOT / "data" / "clips" / "hitl_database",
-    REPO_ROOT / "data" / "clips" / "athene_online",
+    REPO_ROOT / "data" / "clips" / "athene_deathscene",
+    REPO_ROOT / "data" / "clips" / "athene_endvideos",
 ]
 
 # Frame sheets of the cluster clips: up to SHEET_CLIPS clips per group,
@@ -251,7 +251,7 @@ def main():
                                           f"or {DEFAULT_DESIGN[ARCHIVE_PAGE]} with --archive)")
     parser.add_argument("--archive", action="store_true", help="draw an archived design (athene/archive)")
     parser.add_argument("--clips", type=Path, nargs="+", default=CLIP_GROUPS, metavar="FOLDER",
-                        help="folders of the cluster clips, one group each (default: the HITL database's, then athene_online)")
+                        help="folders of the cluster clips, one group each (default: athene_deathscene, then athene_endvideos)")
     parser.add_argument("--port", type=int, help=f"server port (default: {PREVIEW_PORT} for the preview, any free one otherwise)")
     args = parser.parse_args()
     page = ARCHIVE_PAGE if args.archive else PAGE

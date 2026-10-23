@@ -1,0 +1,204 @@
+{
+  "01_Peter Thiel.mp4": [
+    {"start": 120.0, "shows": "Thiel speaking, his name inserted at the side"},
+    {"start": 860.0, "shows": "Thiel speaking"},
+    {"start": 1841.0, "shows": "Thiel speaking, his name inserted at the side"},
+    {"start": 2740.0, "shows": "Thiel speaking, closer"},
+    {"start": 3305.0, "shows": "Thiel speaking"}
+  ],
+  "02_Andoril.mp4": [
+    {"start": 2.6, "shows": "missile launch, underwater, soldier in red light"},
+    {"start": 6.5, "shows": "war room map table, thermal targeting display"},
+    {"start": 10.4, "shows": "jet, drone strikes a pickup"},
+    {"start": 15.0, "shows": "clean room, rocket motor test, helicopter"},
+    {"start": 19.0, "shows": "attack helicopter, tank, blast on the ground"},
+    {"start": 23.0, "shows": "drone hit in the sky, fireball"}
+  ],
+  "03_FPV Ukraine.mp4": [
+    {"start": 40.0, "shows": "FPV drone onto a vehicle"},
+    {"start": 52.0, "shows": "blast on a road"},
+    {"start": 87.0, "shows": "drone over a pickup with a soldier"},
+    {"start": 108.0, "shows": "FPV drone dives onto an armoured vehicle"},
+    {"start": 122.0, "shows": "aerial view, a vehicle burns"},
+    {"start": 215.0, "shows": "drone above a vehicle"},
+    {"start": 273.0, "shows": "aerial view, smoke over a tree line"},
+    {"start": 319.0, "shows": "aerial view, hit in the tree line, smoke"},
+    {"start": 341.0, "shows": "aerial view, a house explodes"},
+    {"start": 470.0, "shows": "aerial view, a building explodes"},
+    {"start": 505.0, "shows": "vehicles in a field, explosions"},
+    {"start": 527.0, "shows": "aerial view of a village, a ruined tree line"}
+  ],
+  "04_Journalist Gaza.mp4": [
+    {"start": 1.0, "shows": "journalist, caption: reporting live when an Israeli airstrike targeted a nearby building"},
+    {"start": 8.0, "shows": "journalist reporting live over Gaza City"},
+    {"start": 35.0, "shows": "the airstrike: the journalist ducks out of the picture"},
+    {"start": 66.0, "shows": "smoke column over Gaza City"},
+    {"start": 82.0, "shows": "smoke column over Gaza City"},
+    {"start": 98.0, "shows": "smoke column over Gaza City"}
+  ],
+  "05_Moskau.mp4": [
+    {"start": 20.0, "shows": "fire in a tower block (news frame)"},
+    {"start": 28.0, "shows": "debris, refinery fire"},
+    {"start": 32.0, "shows": "refinery explosion"},
+    {"start": 36.5, "shows": "smoke over Moscow"},
+    {"start": 43.0, "shows": "drone hits a refinery, explosion (news frame)"},
+    {"start": 49.5, "shows": "blast at night, fire, burning church"},
+    {"start": 55.0, "shows": "church and roof on fire"},
+    {"start": 61.5, "shows": "refinery burning"},
+    {"start": 73.0, "shows": "drones in a hangar, soldiers in silhouette"}
+  ],
+  "06_Nord Korea.mp4": [
+    {"start": 22.0, "shows": "Kim Jong-un walks with generals"},
+    {"start": 87.0, "shows": "Kim Jong-un walks before the ICBM"},
+    {"start": 119.0, "shows": "launch control room, the ICBM"},
+    {"start": 145.0, "shows": "officer on the phone, \"Fire!\""},
+    {"start": 150.5, "shows": "a finger presses the launch button"},
+    {"start": 158.0, "shows": "ICBM launch"},
+    {"start": 170.0, "shows": "the ICBM lifts off"},
+    {"start": 255.0, "shows": "Kim Jong-un watches through a window"},
+    {"start": 266.5, "shows": "Kim Jong-un and officers cheer"},
+    {"start": 283.0, "shows": "Kim Jong-un among cheering officers"}
+  ],
+  "07_Netanjahu.mp4": [
+    {"start": 178.0, "shows": "Netanyahu, \"Trump on ceasefire, hostage deal\""},
+    {"start": 348.0, "shows": "Trump and Netanyahu, \"We want peace, people to stop being killed\""},
+    {"start": 433.0, "shows": "Trump, \"Gaza is a demolition site right now\""},
+    {"start": 621.0, "shows": "Trump, \"Gaza is not a place for people to be living\""},
+    {"start": 655.0, "shows": "Netanyahu, \"Gaza is not a place for people to be living\""},
+    {"start": 757.0, "shows": "Trump, \"Netanyahu: we're not giving up on the hostages\""}
+  ],
+  "08_Söder.mp4": [
+    {"start": 24.0, "shows": "Söder aims a weapon at Rheinmetall"},
+    {"start": 30.5, "shows": "Söder with a weapon at Rheinmetall"},
+    {"start": 43.0, "shows": "dignitaries at the foundation stone of the powder plant"},
+    {"start": 80.0, "shows": "artillery fires, soldiers in a trench"},
+    {"start": 92.0, "shows": "artillery shells"},
+    {"start": 104.0, "shows": "Söder handles shells"},
+    {"start": 110.0, "shows": "artillery shells, nitrocellulose"},
+    {"start": 152.0, "shows": "Söder at an armoured vehicle"}
+  ],
+  "09_Alex Karp.mp4": [
+    {"start": 62.0, "shows": "Karp in an armchair, subtitled"},
+    {"start": 100.0, "shows": "Karp, subtitled \"don't\""},
+    {"start": 126.0, "shows": "Karp on the AIPCon stage"},
+    {"start": 186.0, "shows": "Karp in conversation on stage, subtitled"},
+    {"start": 222.0, "shows": "Karp on stage in a white T-shirt"}
+  ],
+  "10_Elon Musk.mp4": [
+    {"start": 1.0, "shows": "Musk speaking at the lectern"},
+    {"start": 19.4, "shows": "Musk at the lectern, the raised arm"},
+    {"start": 24.5, "shows": "Musk, hand on his heart"}
+  ],
+  "11_Frontline.mp4": [
+    {"start": 14.0, "shows": "drone caught in a net, camouflaged quad"},
+    {"start": 98.0, "shows": "aerial view of a destroyed road"},
+    {"start": 160.0, "shows": "soldier on a ladder at the anti-drone nets"},
+    {"start": 191.0, "shows": "burnt-out car, reporter with soldiers"},
+    {"start": 222.0, "shows": "soldiers on a road, the reporter runs"},
+    {"start": 274.0, "shows": "soldier with a rifle"},
+    {"start": 284.0, "shows": "aerial view, road under nets"},
+    {"start": 300.0, "shows": "reporter takes cover behind a tree"},
+    {"start": 326.0, "shows": "soldiers shoot at a drone, burnt-out car"},
+    {"start": 336.0, "shows": "soldier walks past a burnt-out car"}
+  ],
+  "12_Garan Drone.mp4": [
+    {"start": 4.8, "shows": "Shahed drone hits a house"},
+    {"start": 42.0, "shows": "air defence vehicle against the sky"},
+    {"start": 51.0, "shows": "kill marks of drones on a vehicle"},
+    {"start": 100.0, "shows": "attack drone in flight, night view"},
+    {"start": 113.0, "shows": "jet-powered drone, smoke column in the crosshair"},
+    {"start": 118.0, "shows": "smoke column in the crosshair"},
+    {"start": 137.4, "shows": "drone shot down, thermal and daylight"},
+    {"start": 186.0, "shows": "thermal view, a drone shot down"}
+  ],
+  "13_AI Drone War.mp4": [
+    {"start": 1.0, "shows": "\"Both Ukraine and Russia are increasingly using artificial intelligence in drones\""},
+    {"start": 40.0, "shows": "armed drones in the sky"},
+    {"start": 64.0, "shows": "drone view, \"to avoid civilian casualties\""},
+    {"start": 69.6, "shows": "drone view locks onto a vehicle"},
+    {"start": 93.0, "shows": "drone views with targets marked"},
+    {"start": 122.0, "shows": "\"we're giving a machine the right to decide whether or not to kill a person\""},
+    {"start": 127.0, "shows": "drone view, \"I make decisions faster than the human controlling me?\""},
+    {"start": 159.0, "shows": "targeting view, \"artificial intelligence and control systems\""}
+  ],
+  "14_Inside Gaza.mp4": [
+    {"start": 2.0, "shows": "aerial view, smoke over houses"},
+    {"start": 10.0, "shows": "soldiers walk through dust"},
+    {"start": 25.4, "shows": "rubble"},
+    {"start": 33.0, "shows": "ruins, then Trump's \"Board of Peace\""},
+    {"start": 63.6, "shows": "soldiers cross a sand berm"},
+    {"start": 71.0, "shows": "soldiers on a road through ruins"},
+    {"start": 108.0, "shows": "tunnel"},
+    {"start": 175.8, "shows": "drone surveillance, a person circled"},
+    {"start": 273.0, "shows": "bullet holes in a wall"},
+    {"start": 333.0, "shows": "destroyed houses"}
+  ],
+  "15_Ballons.mp4": [
+    {"start": 10.0, "shows": "drone on the ground, cockpit display"},
+    {"start": 29.8, "shows": "balloon above the clouds"},
+    {"start": 162.0, "shows": "balloon above the clouds, a radar vehicle"},
+    {"start": 197.4, "shows": "stratospheric balloon over the earth"},
+    {"start": 214.0, "shows": "barrage balloon, aircraft"},
+    {"start": 235.0, "shows": "barrage balloons"},
+    {"start": 264.0, "shows": "bombers in formation"},
+    {"start": 315.0, "shows": "drone wing, balloons"}
+  ],
+  "16_DJI Werbung.mp4": [
+    {"start": 2.0, "shows": "aerial view of a motorway, mountains"},
+    {"start": 29.0, "shows": "drones in the dark, rain"},
+    {"start": 70.0, "shows": "drone in flight, city skyline"},
+    {"start": 130.0, "shows": "drone over a motorway"},
+    {"start": 145.0, "shows": "infrared camera: boat and car at night"},
+    {"start": 161.0, "shows": "boats at night, thermal image"},
+    {"start": 199.0, "shows": "mapping from the air"},
+    {"start": 204.0, "shows": "vessels detected from the air"}
+  ],
+  "17_DIY Drone.mp4": [
+    {"start": 80.0, "shows": "hands assemble a drone frame"},
+    {"start": 462.0, "shows": "soldering the drone"},
+    {"start": 653.0, "shows": "drone takes off from a path"},
+    {"start": 717.0, "shows": "FPV flight over a pond"},
+    {"start": 843.0, "shows": "FPV flight over a pond, on-screen display"},
+    {"start": 908.0, "shows": "FPV flight over a path"}
+  ],
+  "18_Hücke Russland.mp4": [
+    {"start": 1.0, "shows": "Höcke in a crowd"},
+    {"start": 13.0, "shows": "Höcke at the microphone"},
+    {"start": 20.0, "shows": "Höcke at the lectern, \"ENDE\" behind him"},
+    {"start": 34.0, "shows": "rally with flags"},
+    {"start": 48.0, "shows": "Höcke speaking, close"},
+    {"start": 54.5, "shows": "quote: \"Western media want to build Putin up as the new Hitler\""},
+    {"start": 64.0, "shows": "Höcke at the lectern, \"ENDE\" behind him"}
+  ],
+  "19_Bundeswehr Drohne.mp4": [
+    {"start": 1.0, "shows": "a vehicle thrown into the air"},
+    {"start": 12.0, "shows": "tank in a smoke screen"},
+    {"start": 66.0, "shows": "top view, drone over a vehicle"},
+    {"start": 104.0, "shows": "top view, drones mark a target"},
+    {"start": 111.0, "shows": "loitering munitions in the sky"},
+    {"start": 161.0, "shows": "soldier with a loitering munition launcher"},
+    {"start": 193.0, "shows": "soldiers carry a launcher"},
+    {"start": 231.0, "shows": "tank from above"},
+    {"start": 240.0, "shows": "smoke trails, tank from above"},
+    {"start": 250.0, "shows": "crashed drone in the field"}
+  ],
+  "20_Palantir Commercial.mp4": [
+    {"start": 1.0, "shows": "drones over the sea, command display"},
+    {"start": 6.0, "shows": "red targeting display, soldier"},
+    {"start": 10.5, "shows": "warship, drone wakes in the sea"},
+    {"start": 15.2, "shows": "drone swarm, warship, targeting display"},
+    {"start": 22.2, "shows": "\"target lock\", targeting display"}
+  ],
+  "21_Rheinmetall.mp4": [
+    {"start": 34.0, "shows": "armoured vehicles drive through dust"},
+    {"start": 66.0, "shows": "armoured vehicle, jets, missile"},
+    {"start": 104.0, "shows": "armoured vehicle in a forest"},
+    {"start": 119.5, "shows": "tank drives and fires"},
+    {"start": 136.0, "shows": "hands load a shell"},
+    {"start": 141.5, "shows": "armoured vehicle fires smoke"},
+    {"start": 178.5, "shows": "rocket artillery fires, missile in flight"},
+    {"start": 190.0, "shows": "robot dog with soldiers"},
+    {"start": 195.5, "shows": "soldier and tank in a forest"},
+    {"start": 238.0, "shows": "warship, engineers at screens"}
+  ]
+}
