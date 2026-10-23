@@ -21,6 +21,8 @@ Based on the play, there will be the following moments the system will need to r
 3. Athene back to two Axis, moving around. (athene_6)
 4. Athene grows over about 10 minutes. (athene_7, athene_8) Ever-more Axis growing, need to time how long this animation should roughly take, ever more pulsing light until it is almost stroboscopic. Ends with everything pulling together into a new shape, a new world order. For now, this shape is just a glowing circle. 
 
+Voice recordings of 21 October (athene_voice_2110), used instead of the placeholders above: athene_1 and athene_2 → scene 1, athene_3 → scene 2 (death scene), athene_4_new → scene 3 (back to two axes), athene_5_new and athene_6_new → scene 4 (growth).
+
 We will prototype a live page version of these Athene scenes. Once we have the final voice recordings and timing we will render the different clips. For the live localhost version I control during rehearsals, we have following key commands per scene: 
 
 "N" - go to next scene. 

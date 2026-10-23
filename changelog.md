@@ -6,6 +6,35 @@ referenced below.
 
 ---
 
+## 2026-10-22 — Athene live: `--rehearsal`, the 16:9 Athene as before the strip
+
+At Moe's request, `python -m athene.live --rehearsal` brings back Athene as
+it was before the 9:1 strip (previous entry on the two outputs): the world
+is the 16:9 frame itself, so the network is centred on it and the death
+scene's clusters spread across it. One page, the wall; no strip address is
+printed. The page takes it as `?rehearsal` (`WORLD_W` in
+`athene/page/designs/rehearsal.js`).
+
+Found while checking it, and changed with it:
+- **Clips play freely again.** The two-output entry kept every clip on the
+  performance's clock by setting it back when it drifted; under the load of
+  many clips the seeks stalled them, and in the death scene most clips went
+  missing (about 10 of 96 drawn). A clip now only starts where the clock
+  puts it (`playFrom`: on a follower that starts it late, or when it comes
+  back into view) and then plays freely, as before the strip.
+- **The strip draws its clips from frame sheets** (`athene/live.py`
+  `strip_sheet`: 128 × 72 px frames, 12.5 a second, 10 × 5 to a JPEG; 266
+  sheets, 24 MB) instead of 192 px videos, which are gone. Fetching a
+  video's picture costs the browser about 0.45 ms a clip, and with all 17
+  clusters the strip ran at 3–7 fps (30 fps with the videos playing but not
+  drawn). Not yet measured with the sheets.
+
+Checked headless: with `?rehearsal` the world is 3840 px wide, six clusters
+all fell on the 16:9 wall, and 91 of 96 clips were drawable (the rest
+between loops). No errors.
+
+---
+
 ## 2026-10-22 — Live SITREP: the cast under their parts, per scene
 
 Requested by Moe. This finishes the "cast vs character names" note in
@@ -59,6 +88,342 @@ picture is gone from every view (`sitrep.html`, `sitrep.js`, `style.css`). A
 silent source now shows only in the header, where the sound level turns red;
 the header is hidden on the prototypes. The terminal's `KEIN TON` line and the
 `Ton` event (`session.Ton`) stay.
+
+---
+
+## 2026-10-22 — Athene live: a 9:1 strip and the 16:9 wall, two NDI streams from one performance
+
+Moe asked for two simultaneous outputs, 4K 16:9 and 4K 9:1 (3840 × 427).
+Settled with Moe: the 9:1 is the main output and the 16:9 is its middle
+section; both leave the PC as two NDI streams from OBS; the death scene's
+clusters spread along the whole strip.
+- **One world, two views** (`athene/page/designs/rehearsal.js`): Athene is
+  drawn in a 9:1 world as high as the frame, 19440 × 2160 px, centred as
+  before. `?view=strip` draws all of it at 3840 × 427, `?view=wall` (the
+  default) its middle 3840 × 2160 at full resolution, so the wall shows
+  what it showed before. The layers, transforms, the clipping of edges and
+  the fills follow the view (`VIEWS`, `ZOOM`, `inWorld`); lines, blurs and
+  the thinnest line scale with it.
+- **Conductor and follower:** the wall's page conducts (keys, voices,
+  performance) and every frame posts its state on a BroadcastChannel
+  (`snapshot`); a page opened with `?follow` takes it on (`adopt`) and
+  draws its own view, without keys or sound. The death scene's axes now
+  carry the seed of their breathing instead of the function, so both pages
+  breathe them alike. `?hint=0` hides the help line from the start.
+- **Clusters along the strip:** placed anywhere in the 9:1 world, kept in it
+  while large. A clip's play position now follows the performance's clock
+  (`playInStep`, checked at most once a second, set back beyond 0.15 s,
+  `clipDrift`), and each page plays only the clips in its view; the others
+  are paused. The strip loads 192 px copies (`SMALL_CLIP_WIDTH` in
+  `athene/live.py`, served as `/clips/k_small.mp4`).
+- **`athene/live.py --obs`:** opens no browser and prints the addresses of
+  the two OBS Browser Sources (wall with `&hint=0`, strip with `&follow`);
+  without it, the wall opens in the browser and the strip's address is
+  printed. The OBS setup (Browser Sources, DistroAV "Dedicated NDI Output"
+  filters, keys through "Interact") is in `athene/README.md`.
+
+Measured headless in Edge (RTX 5090, hardware video decoding), both pages at
+full size in one browser: the wall holds 60 fps in every scene, also with
+17 clusters (before, with every clip playing, 37 fps); the strip follows
+about one frame behind (median 20–25 ms) and runs at 30 fps, 16 fps while
+17 clusters placed within five seconds stand large. Drawing a frame takes
+the wall 0.2–11 ms and the strip 0.3–13 ms (median; spikes to 80 ms in the
+strip while its 272 small videos start). Screens of both views per scene
+match: the wall is the strip's middle section. Not yet checked: OBS (that
+its Browser Sources reach each other over the BroadcastChannel, frame rate
+there, the dedicated outputs' resolution) and QLab.
+
+---
+
+## 2026-10-22 — Athene rehearsal: manual strikes from the start
+
+At Moe's request, the growth scene's strikes are manual when the page
+starts (`live.manual` in `athene/page/designs/rehearsal.js`): the help line
+reads "L: BLITZE MANUELL \ T: BLITZ (HALTEN)", holding T fires strikes, and
+L switches to automatic and back. Changing scene keeps the setting, as
+before. Checked headless: manual on arriving in the growth scene, six
+flashes while T was held for 1 s, L toggled both ways. No errors.
+
+---
+
+## 2026-10-22 — Athene rehearsal: new voice clips for the growth scene, the zero's blinks on them
+
+At Moe's request:
+- **Growth scene voices:** `athene_5_new.mp3` (54.8 s) and
+  `athene_6_new.mp3` (38.5 s) in place of `athene_5_ende` and
+  `athene_6_ende` (`SCENES` in `athene/page/designs/rehearsal.js`, named
+  in full; `athene/description.md`).
+- **Zero to one:** found again by Whisper in the new clips
+  (`athene/live.py`, unchanged): the closing "von null auf eins" of
+  `athene_6_new` at 36.96, 37.34, 37.60 and 37.88 s. The clip says the
+  sentence once before ("eine neue Ordnung von null auf eins", 27.6 s);
+  the last one counts, as before. The ending now begins at 18.8 s, on
+  "effizient ausübt, ohne Hürden" (was 20.2 s in `athene_6_ende`, on
+  "Ohne Hürden"), 18.2 s ahead, so the zero stands open 2 s before the
+  words.
+- **Unused clips deleted** from `athene/example_audio/athene_voice_2110/`:
+  `athene_4.mp3`, `athene_5_ende.mp3`, `athene_6_ende.mp3` (still in the
+  folder's zip in Downloads).
+
+Played through on the live page headless: the ending began at 18.81 s of
+`athene_6_new`, the zero went dark before each word and lit on it
+(36.97, 37.37, 37.61 s) and came back as a one on "eins" at 37.88 s. No
+errors.
+
+---
+
+## 2026-10-22 — Athene rehearsal: the growth scene reaches its full network two minutes sooner
+
+At Moe's request, the growth scene's span (`growthSpan` in
+`athene/page/designs/rehearsal.js`) is 180 s instead of 300. Everything
+scheduled on it comes 40 % sooner in the same order and at the same
+quickening: full size after 3:00 instead of 5:00, all 56 dimensions after
+2:34 instead of 4:16, and all 300 further axes after 3:10 instead of 5:16.
+The strobe's pace and the speed-up of the motion follow the same share of
+the span. Checked on the live page by setting the scene's growth clock: at
+3:10, 300 of 300 further axes stand fully out, at 3:00, 243. No errors.
+
+---
+
+## 2026-10-22 — Athene rehearsal: a new voice clip for scene 3
+
+At Moe's request, scene 3 (back to two axes) plays
+`athene_voice_2110/athene_4_new.mp3` (16.4 s) instead of `athene_4.mp3`
+(`SCENES` in `athene/page/designs/rehearsal.js`; mapping noted in
+`athene/description.md`). The scene names it in full, as "athene_4" alone
+would match the old clip first. The old clip stays in the folder, unused.
+Driven headless: P played the new clip in scene 3, the other scenes their
+clips as before. No errors.
+
+---
+
+## 2026-10-22 — Athene rehearsal: the zero and the one in typeface proportions
+
+Moe found the digits that end the growth scene too tall, stretched and odd
+(`athene/page/designs/rehearsal.js`; 2026-10-21 entry "the zero and the one
+drawn as clean lines"). They stay drawn as white lines, but in the
+proportions of a sans-serif typeface:
+- **Size and weight:** 620 px high instead of 900 (29 % of the wall's
+  height instead of 42 %), the line 46 px instead of 32, so about 7 % of the
+  height, a light typeface weight, where it was a hairline.
+- **Zero:** a superellipse (exponent 2.4, `digitRound`) 0.68 of its height
+  wide, with the straighter flanks of a typeset zero, instead of an
+  egg-shaped ellipse.
+- **One:** a stem with a diagonal flag reaching 0.3 of the height to the
+  left and 0.22 down (`digitFlag`), instead of a short stub, centred on its
+  width.
+
+Chosen from three variants drawn side by side; the others were narrower
+and heavier, and one had a foot like a typewriter one. Screens of the live
+page after E and 0 show both digits as expected. No errors.
+
+---
+
+## 2026-10-22 — Athene death scene: the axes at rest move along their length
+
+At Moe's request, Athene moves a little again once the death scene has come
+to rest (`athene/page/designs/rehearsal.js`), without turning: the axes keep
+their angles and only change length.
+- **Breathing:** stronger and quicker, a share of 0.12 of the length at
+  0.9 rad/s of wave phase (was 0.08 at 0.6, a typical ±4 % over 7–17 s,
+  hardly visible).
+- **Small probes:** every 1.5–4 s a ray reaches out by 5–12 % of its length
+  over 0.9 s and draws back over 2.2 s (`restProbe…`), a quarter of scene
+  1's probes and slower. They take any ray, the axes to the clusters too,
+  which now carry probes as well.
+
+Measured headless over 12 s at rest: no ray turned (angle change 0), each
+changed its length by 14–24 % between its shortest and longest, and seven
+probes came. No errors.
+
+---
+
+## 2026-10-22 — Athene death scene: one key for mixed clusters, clips that start large and shrink slowly
+
+At Moe's request (`athene/page/designs/rehearsal.js`, `athene/live.py`),
+building on the 2026-10-21 entries on the death scene's clusters:
+- **One key, mixed clusters:** C places a cluster in place of R and O, which
+  no longer do anything. Each cluster mixes the death scene rehearsals and
+  the end videos in proportion to their numbers (`mixedOrder`): 6 or 7
+  rehearsal clips and 9 or 10 end video clips, so both run out together
+  after 17 clusters, the last of ten clips. Within each group the order
+  that spreads the source videos (`spread_order` in `athene/live.py`) is
+  kept. Still no clip twice per run of the scene; the help line reads
+  "C: CLUSTER (NOCH 17)" down to "KEINE MEHR".
+- **Animation:** a clip appears at 2.5 times its settled size instead of
+  1.6 (700 px wide on the 4K wall), stays so for 12 s instead of 8, and
+  shrinks over 6 s instead of 1.5, drawing into its cluster as it does. While
+  large, the clips spread out around the cluster in proportion to their
+  size and are kept on the wall.
+- **Sharper clips:** the live copies are 640 px wide instead of 480, the
+  end videos' own width and about that of a clip at its largest. The 266
+  copies take about 51 MB in the browser. The 480 px copies were removed
+  from `athene/out/live/clips/`.
+
+Driven headless through `athene.live`: 17 C presses showed all 266 clips
+once, each cluster mixed as above; R and O assigned no clips; the screens
+3.5, 13.5, 17 and 22 s after C show the clips large and spread out, then
+shrinking into the cluster. No errors.
+
+---
+
+## 2026-10-21 — Athene rehearsal: the last voice clip ends the growth scene, the one on "Eins"
+
+At Moe's request, the end of the growth scene follows its last voice clip
+(`athene_6_ende.mp3`, ending on "Von Null auf Eins" at 38.4–39.4 s of its
+39.8 s) without E or 0 pressed:
+- **Finding the sentence:** `athene/live.py` transcribes each voice clip
+  once with Whisper (large-v3-turbo, word times, German; GPU, else CPU) and
+  takes the last "von null auf eins" (numbers also as digits). Each word's
+  start moves to the nearest syllable onset of the clip's analysis within
+  0.2 s, the audible attack. Kept in `out/live/<clip>_zero_to_one.json`
+  and redone when the clip is newer; passed to the page in `voices.json`.
+  For `athene_6_ende`: 38.40, 38.74, 38.96, 39.20 s (Whisper: 38.36,
+  38.58, 38.90, 39.12). Its two earlier occurrences (8.7 s, 28.7 s) are
+  left alone.
+- **The ending by itself:** the zero is fully open 16 s after the ending
+  begins. A clip with the sentence begins the ending so that the zero has
+  stood open `zeroHold` (2 s) before the first blink: in `athene_6_ende`
+  at 20.2 s, on "Ohne Hürden und woke Widerrede". The white wall then
+  holds over its second "Eine neue Ordnung von Null auf Eins" and the
+  collapse falls on "Die Disruption der alten Welt". E pressed earlier
+  begins the ending at once. The help line shows "ENDE MIT DER STIMME (E:
+  SOFORT)" while such a clip plays before the ending.
+- **Blinking on the words:** the voice reaching the sentence starts the
+  zero's four blinks, one per word: dark 0.2 s before a word (at most half
+  the time since the word before), lit again on it, and on "Eins" lit as
+  the one. Key 0 still blinks it in its own rhythm by hand.
+- **Checked headless** with the clip playing from P and no other key: the
+  ending began at 20.23 s; the zero lit again at 38.41, 38.76 and 38.96 s
+  and the one appeared at 39.20 s of the clip, each within a frame of its
+  word.
+
+---
+
+## 2026-10-21 — Athene rehearsal: the voice recordings of 21 October
+
+At Moe's request, the live page (`athene/live.py`) plays the six voice clips
+of `athene/example_audio/athene_voice_2110` by default instead of the
+placeholders. Their scenes (`SCENES` in `athene/page/designs/rehearsal.js`,
+noted in `athene/description.md`): athene_1 and athene_2 in scene 1 (two
+axes), athene_3 in the death scene, athene_4 in scene 3 (back to two axes),
+athene_5_ende and athene_6_ende in the growth scene. The placeholders are
+kept; with `--voices` they would now be played under this mapping.
+
+Driven headless: P played athene_1, athene_2 in scene 1, athene_3 in scene
+2, athene_4 in scene 3 and athene_5_ende, athene_6_ende in scene 4. No
+errors.
+
+---
+
+## 2026-10-21 — Athene death scene: no clip twice, R clusters from the death scene rehearsals
+
+At Moe's request (`athene/page/designs/rehearsal.js`, `athene/live.py`,
+`athene/cut_clips.py`, `athene/render.py`), building on the next entry:
+- **No clip twice:** a run of the death scene shows each clip at most once.
+  R and O take the next 16 clips of their group, and once a group is spent
+  its key does nothing; before, the clusters started over at the first
+  clip. The help line shows the clusters each key has left
+  ("R: PROBEN-CLUSTER (NOCH 7)", "… (KEINE MEHR)"). Space, or entering the
+  scene again, starts over with all clips.
+- **Larger pools:** `athene/live.py` loads up to 160 clips per group
+  (`GROUP_CLIPS`, ten clusters) instead of the renderer's 48 (`SHEET_CLIPS`,
+  which stays for the axes designs). The 160 small copies of a group take
+  about 13 MB in the browser. The clips are ordered so that each cluster
+  mixes the source videos (`spread_order`): every R cluster has clips of all
+  six rehearsals, every O cluster clips of 13 to 16 of the 21 end videos.
+- **End videos (O):** 112 more clips, 160 in all, three to twelve per video,
+  picked the same way (`athene/endvideo_picks.json`). Ten O clusters.
+- **Death scene rehearsals (R):** 106 clips from the six recordings in
+  `Desktop/HITL_Database` named "DeathScene" (7, 8, 12, 13 and 15 October),
+  picked on contact sheets: the pistol pointed, the grab, the struggle on
+  and off the podium, strangling, falls, the body lying still
+  (`athene/deathscene_picks.json`). The wide rehearsal camera shows the
+  actors small, so each clip is cropped to the 960 × 540 px around them;
+  the picks file holds the crop. Moments with crew in front of the camera
+  or no one acting were left out. Seven R clusters, the last of ten clips.
+  They replace the Smart Search clips of `hitl_database` as group 0
+  (`CLIP_GROUPS`), which stay on disk.
+- **`athene/cut_clips.py`:** a pick may carry a `crop` (x, y, width,
+  height), applied before scaling.
+
+Driven headless through `athene.live`: 7 R and 10 O clusters showed 266
+clips, all distinct; the 8th R and the 11th O did nothing; after Space, the
+pools were full again. No errors.
+
+---
+
+## 2026-10-21 — Athene death scene: O clusters from the play's end videos
+
+At Moe's request, key O in the death scene (`athene/page/designs/rehearsal.js`)
+now shows clips of the 21 end videos in `Desktop/04_Endvideos` (Thiel,
+Anduril, FPV footage from Ukraine, Gaza, Moscow, North Korea, Netanyahu and
+Trump, Söder, Karp, Musk, Höcke, Bundeswehr, Palantir, Rheinmetall and
+others) instead of the two placeholder online videos. This is the material
+`athene/description.md` asks for in the death scene's last clusters
+("footage from previous wars, Gaza, Ukraine").
+- **Picked by hand:** each video was looked through on contact sheets and
+  2–3 four-second windows chosen per video (one for Musk and for the DIY
+  drone build): explosions, drone views, launches, faces with their news
+  captions, and no end cards, logos, black or presenters cut in at the edges.
+  48 clips in all, the size of a clip group's pool (`SHEET_CLIPS`,
+  2026-10-19 "axes4: twice the clips"), so every clip is used and three O
+  presses show all of them, 16 each, mixed across the videos. A fourth O
+  press reuses them, as before.
+- **`athene/endvideo_picks.json`:** the picks, each with its start and what
+  it shows, so a single clip can be swapped.
+- **`athene/cut_clips.py`:** `--picks FILE` cuts the clips at the starts in
+  a picks file instead of spreading them evenly. Video names are matched in
+  composed Unicode (the end videos come from a Mac, with umlauts as two
+  code points), and umlauts are spelt out in clip names (`08_Soeder-…`).
+  The default destination is now `data/clips/athene_endvideos/`.
+- **`athene/render.py`:** the second clip group (key O on the live page)
+  is `data/clips/athene_endvideos`. `data/clips/athene_online` stays on
+  disk, unused.
+
+Run through `athene.live` headless: the page loads 48 rehearsal and 48 end
+video clips, and three O presses in the death scene place three clusters of
+end video clips, each with its axis. No errors.
+
+---
+
+## 2026-10-21 — Athene rehearsal: the growth scene in white straight axes only
+
+At Moe's request, with Athene to run live in the performance (to the LED
+wall via NDI to QLab), the growth scene keeps only its straight variant, in
+white (`athene/page/designs/rehearsal.js`; 2026-10-20 entry):
+- **No colour:** the red front, its shimmer and key C are gone. The look is
+  that of C off before: chrome-white lines, white glow, core and planes. The
+  glow of a line is now one shade instead of a gradient along it.
+- **No branching variant:** key V, the branches (forks, shooting and dying
+  edges, their webs) and the glowing circle ending are gone. The growth
+  scene is the former straight variant from the start; its look (glow
+  shaded as metal, the core in place of the hub's disc, the strobe resting
+  low) comes in over 1.5 s as the scene is entered and goes as it is left
+  (`lookFade`), so scenes 1–3 look as before. Without the branches the
+  random layout of the axes differs from before; their parameters are
+  unchanged.
+- The help line, `athene/README.md` and `athene/live.py` list the keys
+  without V and C.
+- **Checked headless** (Edge on the RTX 5090, page at a 1920 × 1080
+  viewport): every key of the growth scene without errors; 60 fps at half
+  and at full 4K drawing resolution (`?res=1`) through full size, the
+  strobe and the explosion.
+
+---
+
+## 2026-10-21 — Athene rehearsal: the zero and the one drawn as clean lines
+
+At Moe's request, the digits that end the straight variant of the growth
+scene (`athene/page/designs/rehearsal.js`; 2026-10-20 entry) look less
+digital and glow less:
+- **Drawn, not set:** the zero is a plain ellipse (900 px high, 0.8 of
+  that wide) and the one a vertical stroke as high with a short flag, both
+  a 32 px line with round ends, the way Athene's network is drawn (white
+  lines on black). Michroma is no longer loaded, and `athene/live.py` no
+  longer serves it.
+- **Less glow:** the digits light the glow layers at 10 % of their strength
+  (`digitGlow`), so they stay crisp against the light of the ending.
 
 ---
 
