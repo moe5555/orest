@@ -8,8 +8,9 @@
     POST /api/sitrep/empfehlung  ask for a recommendation (key E on the page)
     POST /api/sitrep/override    set the recommendation aside (key X on the page);
                                  ?nummer=N only if it is still recommendation N
-    POST /api/sitrep/assign      name a body in view as a cast member, or release
-                                 it to the automatic naming (name null)
+    POST /api/sitrep/assign      name a body in view as a cast member, or as a part
+                                 in a scene with parts, or release it to the
+                                 automatic naming (name null)
     POST /api/sitrep/key/{key}   carry out a key of the scene in force
     POST /api/sitrep/screen/close  close the screen a scene's key opened (X)
     /api/sitrep/state        the current snapshot, as JSON
@@ -93,8 +94,9 @@ class SceneChoice(BaseModel):
 
 
 class Assignment(BaseModel):
-    """A body in view, by the recogniser's track id, and the cast name it is
-    given; None releases it to the automatic naming."""
+    """A body in view, by the recogniser's track id, and the name it is
+    given, one the scene offers (scenes.Current.offered); None releases it to
+    the automatic naming."""
 
     body: int
     name: str | None = None

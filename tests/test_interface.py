@@ -522,6 +522,39 @@ def test_a_name_outside_the_cast_is_refused(client, live, run):
     assert "Besetzung" in response.json()["detail"]
 
 
+def test_in_a_scene_with_parts_the_sides_show_alex_and_lena_under_their_parts(monkeypatch, run):
+    run.actions = SimpleNamespace(visible=lambda: [
+        (np.array([10, 10, 30, 90]), "Orestes"), (np.array([40, 10, 60, 90]), "Körper 5"),
+        (np.array([70, 10, 90, 90]), "Elektra")])
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
+    drawn = []
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
+                        lambda frame, rated, slots, labels, rows=None, widest=None:
+                        drawn.append((rated, slots, rows)) or frame)
+    controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
+        roles={"Lena": "Elektra", "Alex": "Orestes"},
+        values_per_person={"Orestes": ["aggression"]})))
+    controller.session = run
+
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, sides=True)
+
+    ((rated, slots, rows),) = drawn
+    assert [(name, len(values)) for _, name, values in rated] == [
+        ("Orestes", 1), ("Körper 5", 0), ("Elektra", 3)]
+    assert slots == {"Orestes": 0, "Elektra": 1}
+    assert rows == 3
+
+
+def test_a_body_in_view_is_offered_the_parts_of_the_scene(run):
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
+    controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
+        roles={"Lena": ["Elektra", "Klytaimestra"], "Alex": "Orestes"})))
+    controller.session = run
+    quelle = controller.snapshot()["quelle"]
+    assert quelle["besetzung"] == ["Alex", "Lena"]
+    assert quelle["namen"] == ["Elektra", "Klytaimestra", "Orestes"]
+
+
 def test_nothing_is_named_while_no_run_is_live(client):
     assert not client.post("/api/sitrep/assign", json={"body": 1, "name": "Lena"}).json()["assigned"]
 

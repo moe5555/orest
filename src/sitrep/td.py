@@ -79,6 +79,7 @@ and `gefahr` are -1 for a stretch the model could not summarise:
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 
 from osc import Message, Sender  # noqa: F401  (Sender is re-exported)
@@ -241,10 +242,14 @@ class RosterStream:
     """
 
     def __init__(self, sender: Sender, tracker: presence.PresenceTracker, *,
-                 interval: float = ROSTER_INTERVAL):
+                 interval: float = ROSTER_INTERVAL,
+                 role: Callable[[str], str | None] | None = None):
         self._sender = sender
         self._tracker = tracker
         self._interval = interval
+        # The name the scene in force shows a cast member under
+        # (scenes.Current.role); by default their own.
+        self._role = role or (lambda name: name)
         self._stop = threading.Event()
         self._thread = None
         self.ticks = 0
@@ -263,8 +268,8 @@ class RosterStream:
     def publish(self):
         """Send one reading. Public, so a caller can step the stream by hand."""
         self.ticks += 1
-        self._sender.send_all(
-            roster_messages(self._tracker.roster(), self.ticks, datetime.now()))
+        self._sender.send_all(roster_messages(
+            presence.shown(self._tracker.roster(), self._role), self.ticks, datetime.now()))
 
     def close(self):
         self._stop.set()

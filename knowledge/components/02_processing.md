@@ -25,7 +25,7 @@ Overview: components/pipeline.md
 - the system should be able to understand when it is spoken to. If the system is directly spoken to, e.g. via "System" or "Apollon", it should be able to react. 
 - hand gun detection. The system should recognize whether someone is holding a handgun. TBD how this effects the scene. 
 - per scene config. 
-- cast vs character names. Alex plays Orest, Lena plays Elektra and Clytamnestra. Default recognition should be Alex and Lena, but when I select 
+- cast vs character names. Alex plays Orestes, Lena plays Wächter, Elektra and Klytaimestra. Recognition is always of Alex and Lena; each scene shows them under the part they play there (see Scenes below). With no scene selected (Standard), they go by their own names. A cast member a scene gives no part is not named there. The cast is Alex and Lena only.
 
 #### Calculating Values
 How do we calculate the values the system comes up with? 
@@ -84,20 +84,24 @@ Settings:
 
 Scenes: 
 - **Scene 1**: 
+  - Names: Lena is "Wächter". No other cast member is named.
   - On/Off Podest: Risiko increases by one when person leaves Podest. Risiko cannot go below 2 when person is not on Podest. Risiko drops by one if person enters podest. 
   - The line around the Podest on the picture is shown when the scene is selected. Press "L" to hide it, and again to show it. The Podest rule keeps counting either way. 
   - Manual Interference: press "T" opens a stroboscope page: the screen flashes in fire colours (a glow from the bottom, yellow through orange to deep red) twice in quick succession, stays black for 3 seconds, and repeats until closed with "T" or "X". The second flash is the same fire dying down, moved a little to one side, so it flickers; every cycle is a slightly different fire, and the flash lengths vary a little. 
   - Track up to 30 people at the same time by default. Press "P" to reduce this number to 3. 
   - No auto Einschreiten Interference. 
 - **Scene 1.2**: 
+  - Names: Lena is Elektra, Alex is Orestes.
   - A pre-recorded video will be played within SITREP. Link TBD
   - No auto Einschreiten Interference. 
 - **Scene 2.3**: 
+  - Names: Lena is Elektra, Alex is Orestes.
   - **SITREP Values**: We only track Aggression for Alex. Lena has the standard values. Aggression is not calculated but manually set by the operator. 
   - **Manual SITREP Value**: Aggression. Press "W" for increase of 1 point. Press "S" for decrease of 1 point. 
   - **Manual Interference**: Press "M" and page opens that reads "Maximales Aggressionspotenzial erreicht." 
   - No auto Einschreiten Interference. 
 - **Scene 3**:
+  - Names: Alex is Orestes. Lena begins as Elektra; the operator renames her Klytaimestra during the scene (Im Bild on the SITREP page), after which Elektra is no longer offered.
   - default settings
   - Press "C" and live-feed is swamped for a pre-recorded clip TBD.
   - No auto Einschreiten Interference. 

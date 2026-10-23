@@ -16,11 +16,16 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     assert eins.keys["t"].action == "strobe"
     assert eins.keys["l"].action == "outline"
     assert eins.keys["p"].tracked == 3
+    assert eins.roles == {"Lena": ["Wächter"]}
     zwei_drei = loaded["Szene 2.3"]
-    assert zwei_drei.values_of("Alex") == ["aggression"]
-    assert zwei_drei.values_of("Lena") == ["risiko", "menschlichkeit", "berechenbarkeit"]
+    assert zwei_drei.roles == {"Lena": ["Elektra"], "Alex": ["Orestes"]}
+    assert zwei_drei.values_of("Orestes") == ["aggression"]
+    assert zwei_drei.values_of("Elektra") == ["risiko", "menschlichkeit", "berechenbarkeit"]
+    assert zwei_drei.keys["w"].person == "Orestes"
     assert loaded["Szene 1.2"].prerecorded
+    assert loaded["Szene 1.2"].roles == zwei_drei.roles
     assert loaded["Szene 3"].keys["c"].swap
+    assert loaded["Szene 3"].roles == {"Lena": ["Elektra", "Klytaimestra"], "Alex": ["Orestes"]}
     assert [name for name, scene in loaded.items() if scene.interference] == [scenes.DEFAULT_NAME]
 
 
@@ -31,6 +36,7 @@ def test_without_a_scene_the_defaults_apply():
     assert standard.tracked == 4
     assert standard.values == ["risiko", "menschlichkeit", "berechenbarkeit"]
     assert not standard.prerecorded and standard.video is None and not standard.keys
+    assert not standard.roles
 
 
 def write(tmp_path, text) -> pathlib.Path:
@@ -48,6 +54,11 @@ def write(tmp_path, text) -> pathlib.Path:
     '["A"]\nkeys.w = { person = "Alex", value = "risiko", step = 1 }\n',  # measured, not manual
     '["A"]\nkeys.w = { person = "Alex", value = "aggression" }\n',        # no step
     '["A"]\nkeys.T = { screen = "x" }\n',                       # upper case
+    '["A"]\nroles = { Lena = [] }\n',                           # no part
+    '["A"]\nroles = { Lena = "Elektra", Alex = "Elektra" }\n',  # one part twice
+    '["A"]\nroles = { Lena = "Elektra" }\nvalues_per_person.Lena = ["risiko"]\n',  # not by part
+    '["A"]\nroles = { Alex = "Orestes" }\n'
+    'keys.w = { person = "Alex", value = "aggression", step = 1 }\n',  # not by part
     '["A"]\nvalues = ["wut"]\n',                                # unknown value
     '["A"]\ntempo = 3\n',                                       # unknown setting
     '["Standard"]\ntracked = 3\n',                              # the defaults' name
@@ -200,3 +211,52 @@ def test_the_page_is_told_the_keys_and_what_they_do():
                     "m": {"action": "screen",
                           "label": "„Maximales Aggressionspotenzial erreicht.“"},
                     "t": {"action": "strobe", "label": "Stroboskop"}}
+
+
+# Cast and character names --------------------------------------------------
+
+CAST = ["Alex", "Lena"]
+
+
+def test_without_parts_everyone_goes_by_their_own_name():
+    current = scenes.Current()
+    assert current.role("Alex") == "Alex" and current.shown() is None
+    assert current.offered(CAST) == CAST
+    assert current.give("Lena", CAST) == "Lena"
+    with pytest.raises(ValueError, match="Besetzung"):
+        current.give("Orestes", CAST)
+
+
+def test_a_cast_member_is_shown_under_their_part_and_one_without_a_part_not_at_all():
+    current = scenes.Current(scenes.Scene(roles={"Lena": "Wächter"}))
+    assert (current.role("Lena"), current.role("Alex")) == ("Wächter", None)
+    assert current.shown() == {"Wächter"}
+    assert current.offered(CAST) == ["Wächter"]
+    assert current.snapshot()["roles"] == {"Lena": "Wächter"}
+    with pytest.raises(ValueError):
+        current.give("Alex", CAST)
+
+
+def test_naming_a_body_as_a_later_part_moves_its_cast_member_on_until_the_scene_is_selected():
+    scene = scenes.Scene(roles={"Lena": ["Elektra", "Klytaimestra"], "Alex": "Orestes"})
+    current = scenes.Current(scene)
+    assert current.offered(CAST) == ["Elektra", "Klytaimestra", "Orestes"]
+    assert current.give("Elektra", CAST) == "Lena" and current.role("Lena") == "Elektra"
+
+    assert current.give("Klytaimestra", CAST) == "Lena"
+    assert current.role("Lena") == "Klytaimestra"
+    assert current.offered(CAST) == ["Klytaimestra", "Orestes"]
+    assert current.shown() == {"Klytaimestra", "Orestes"}
+    assert current.member("Elektra") == "Lena"
+    with pytest.raises(ValueError):
+        current.give("Elektra", CAST)
+
+    current.select(scene)
+    assert current.role("Lena") == "Elektra"
+
+
+def test_a_part_whose_cast_member_is_not_enrolled_is_not_offered():
+    current = scenes.Current(scenes.Scene(roles={"Lena": "Elektra", "Alex": "Orestes"}))
+    assert current.offered(["Lena"]) == ["Elektra"]
+    with pytest.raises(ValueError):
+        current.give("Orestes", ["Lena"])

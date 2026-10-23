@@ -142,8 +142,9 @@ ZEILEN_SHOWN = 12
 # to 4, with the names the page gives them.
 RATING_LABELS = scenes.LABELS
 
-# The people whose values Prototype 4 shows, one to each side of the picture
-# (knowledge/components/03_render.md, "Prototype 4").
+# The cast members whose values Prototype 4 shows, one to each side of the
+# picture (knowledge/components/03_render.md, "Prototype 4"), under the parts
+# the scene in force gives them.
 SIDE_PEOPLE = ("Alex", "Lena")
 
 
@@ -340,8 +341,8 @@ class LiveSitrep:
 
     def assign(self, body: int, name: str | None) -> bool:
         """Name a body in view by hand, or release it with None
-        (session.Session.assign). False while no run is live; a name outside
-        the cast raises ValueError."""
+        (session.Session.assign). False while no run is live; a name the
+        scene does not offer raises ValueError."""
         run = self.session
         if run is None or self.status != RUNNING:
             return False
@@ -405,6 +406,7 @@ class LiveSitrep:
             run = self.session
             quelle = None
             if run is not None:
+                cast = list(run.tracker.cast.names) if run.tracker.cast else []
                 quelle = {
                     "kamera": run.stream.device.name,
                     "mikrofon": run.audio.name,
@@ -412,7 +414,9 @@ class LiveSitrep:
                     "fenster_s": run.options.window,
                     "aktionen": run.actions is not None,
                     "auto_empfehlung": run.auto_empfehlung,
-                    "besetzung": list(run.tracker.cast.names) if run.tracker.cast else [],
+                    "besetzung": cast,
+                    # The names a body in view can be given by hand.
+                    "namen": self.scene.offered(cast),
                 }
             return {
                 "status": self.status,
@@ -459,7 +463,7 @@ class LiveSitrep:
         the picture, each tied to its box by a line (Prototype 3). With
         `sides` instead, only SIDE_PEOPLE's values are shown, in a band to
         each side of the picture, tied to their boxes in the same way
-        (Prototype 4).
+        (Prototype 4). People are named by the parts the scene gives them.
         """
         run = self.session
         if run is None:
@@ -469,8 +473,11 @@ class LiveSitrep:
         frame = run.outline_podest(frame)
         with self._lock:
             live = {person["name"]: person for person in (self.werte or {}).get("personen", [])}
-        cast = set(run.tracker.cast.names) if run.tracker.cast else set()
-        shown = cast & set(SIDE_PEOPLE) if sides else cast
+        members = run.tracker.cast.names if run.tracker.cast else []
+        cast = {self.scene.role(member) for member in members} - {None}
+        side = [name for name in (self.scene.role(member) for member in SIDE_PEOPLE
+                                  if member in members) if name is not None]
+        shown = set(side) if sides else cast
         scene = self.scene.scene
         rated = []
         for box, name in run.actions.visible():
@@ -488,11 +495,12 @@ class LiveSitrep:
             # among the values SIDE_PEOPLE can have, and the cards as tall as
             # the most values either has, so the picture keeps its size as
             # people come and go.
-            values = {value for name in SIDE_PEOPLE for value in scene.values_of(name)}
+            values = {value for name in side for value in scene.values_of(name)}
             return annotate.draw_ratings_sides(
                 frame, rated, self.sides.assign(placed, time.monotonic()),
                 [RATING_LABELS[value] for value in scenes.VALUES if value in values],
-                rows=max(len(scene.values_of(name)) for name in SIDE_PEOPLE),
+                rows=max((len(scene.values_of(name)) for name in side),
+                         default=len(scene.values)),
                 widest=max(map(scenes.extent, values), default=annotate.PIPS))
         slots = self.slots.assign(placed, time.monotonic())
         # The strip is as tall as the most values anyone in the scene has, and

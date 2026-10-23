@@ -313,3 +313,30 @@ def test_whether_each_body_in_view_stands_on_the_podest_is_read_from_the_frames(
     without.recognizer.image_shape = (1080, 1920)
     without.recognizer.tracker.update(np.stack([upright]), scores[:1], 0.0)
     assert without.podest_stance() == {}
+
+
+# Parts ----------------------------------------------------------------------
+
+def test_a_body_is_shown_and_rated_under_its_cast_members_part():
+    subject = actions.ActionRatings(source=None, faces=None, mapping=MAPPING,
+                                    role={"Klara": "Elektra"}.get)
+    subject.name(tracking.Frame(0.0, {1: body(100, 100), 2: body(400, 100)}),
+                 [face(100, 100, "Klara"), face(400, 100, "Jakob")])
+    subject.record([reading(1, kicking_other_person=1.0), reading(2, kicking_other_person=1.0)],
+                   T0)
+    assert subject.names() == {1: "Elektra"}
+    assert [seen.who for seen in subject.latest] == [("Elektra",), ("Körper 2",)]
+    [elektra] = subject.between(EARLIER, T0)
+    assert elektra.name == "Elektra" and elektra.risiko == 5
+    assert subject.carried(EARLIER, T0) == ["Elektra"]
+
+
+def test_a_body_named_by_hand_is_learned_under_its_cast_name_whatever_its_part():
+    learned = []
+    subject = actions.ActionRatings(source=None, faces=None, mapping=MAPPING,
+                                    on_learn=lambda *face: learned.append(face),
+                                    role={"Klara": "Elektra"}.get)
+    subject.assign(1, "Klara")
+    assert set(names_after(subject, ["#3"] * 5)) == {"Elektra"}
+    assert subject.pinned(1) == "Klara"
+    assert learned == [(1, "#3", "Klara")]

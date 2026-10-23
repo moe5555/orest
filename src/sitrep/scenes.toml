@@ -11,6 +11,15 @@
 #   podest = { step = 1, floor = 2 }   the Podest count; off unless given
 #   video = "data/scenes/clip.mp4"     pre-recorded video, from the repository root
 #   prerecorded = false          play the video from the start of the scene
+#   roles = { Lena = "Elektra" }       the part a cast member plays, by the name
+#                                      they are enrolled under (data/cast)
+#   roles = { Lena = ["Elektra", "Klytaimestra"] }   several parts in order: the
+#                                first, then a later one once a body is named so
+#                                on the SITREP page (Im Bild)
+#
+# With roles, people are shown, rated and reported under their part, and
+# values_per_person and keys name them by it; a cast member given no part is
+# shown as an unnamed body. Without roles, everyone goes by their own name.
 #
 # Keys, one lower-case letter or digit each (R, E and X are taken):
 #
@@ -18,13 +27,14 @@
 #   keys.t = { strobe = true }                              open/close the stroboscope page
 #   keys.l = { outline = true }                             hide/show the line around the Podest (needs podest)
 #   keys.p = { tracked = 3 }                                switch to 3 people tracked and back
-#   keys.w = { person = "Alex", value = "aggression", step = 1 }   raise a manual value
+#   keys.w = { person = "Orestes", value = "aggression", step = 1 }   raise a manual value
 #   keys.c = { swap = true }                                live feed <-> video
 #
 # The page must be restarted (apollon-ui) to read changes to this file.
 
 ["Szene 1"]
 interference = false
+roles = { Lena = "Wächter" }
 podest = { step = 1, floor = 2 }
 tracked = 30
 keys.t = { strobe = true }
@@ -33,17 +43,20 @@ keys.p = { tracked = 3 }
 
 ["Szene 1.2"]
 interference = false
+roles = { Lena = "Elektra", Alex = "Orestes" }
 prerecorded = true
 # video = "data/scenes/szene_1_2.mp4"
 
 ["Szene 2.3"]
 interference = false
-values_per_person.Alex = ["aggression"]
-keys.w = { person = "Alex", value = "aggression", step = 1 }
-keys.s = { person = "Alex", value = "aggression", step = -1 }
+roles = { Lena = "Elektra", Alex = "Orestes" }
+values_per_person.Orestes = ["aggression"]
+keys.w = { person = "Orestes", value = "aggression", step = 1 }
+keys.s = { person = "Orestes", value = "aggression", step = -1 }
 keys.m = { screen = "Maximales Aggressionspotenzial erreicht." }
 
 ["Szene 3"]
 interference = false
+roles = { Lena = ["Elektra", "Klytaimestra"], Alex = "Orestes" }
 keys.c = { swap = true }
 # video = "data/scenes/szene_3.mp4"

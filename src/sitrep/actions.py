@@ -44,6 +44,12 @@ rated under that name on everything it did, including before. A face seen on
 it in LEARN_SIGHTINGS namings in a row is passed to `on_learn` under that
 name, so the face tracker can learn the person while the name holds.
 
+Parts. Votes, the operator's names and what is learned are cast names
+throughout. The part the scene in force gives each cast member (`role`,
+scenes.Current.role) is applied where names leave: the labels, the names
+readings are rated under and the names carried. A cast member the scene gives
+no part is labelled and rated as an unnamed body.
+
 Evidence. A reading's 120 class probabilities are weighed with the
 Action-to-SITREP table (action/sitrep_map.csv): the evidence for a rating is
 sum over classes of P(class) x table value, its expected value under the
@@ -278,8 +284,12 @@ class ActionRatings:
                  on_learn: Callable[[int, str, str], None] | None = None,
                  appearances: appearance.Appearances | None = None,
                  reference: predictability.Reference | None = None,
-                 podest_polygon: Sequence[tuple[float, float]] | None = None):
+                 podest_polygon: Sequence[tuple[float, float]] | None = None,
+                 role: Callable[[str], str | None] | None = None):
         self.mapping = mapping or sitrep_map.load()
+        # The name a cast member is shown under, or None where the scene in
+        # force gives them no part; by default their own.
+        self._role = role or (lambda name: name)
         # The Podest's top surface in the image (podest.POLYGON); None turns
         # the Podest rule off.
         self.podest_polygon = podest_polygon
@@ -354,9 +364,16 @@ class ActionRatings:
         return self.recognizer.error
 
     def names(self) -> dict[int, str]:
-        """The name each body carries, by track id."""
+        """The name each body carries, by track id, as the scene shows it."""
         with self._lock:
-            return dict(self._names)
+            names = dict(self._names)
+        return self._shown(names)
+
+    def _shown(self, names: dict[int, str]) -> dict[int, str]:
+        """Body names under the parts the scene gives them, without the
+        bodies whose cast member plays none."""
+        shown = {track: self._role(name) for track, name in names.items()}
+        return {track: name for track, name in shown.items() if name is not None}
 
     def visible(self) -> list[tuple[np.ndarray, str]]:
         """Box and label of the `tracked` tallest bodies in the latest tracked frame.
@@ -377,8 +394,9 @@ class ActionRatings:
         frame = frames[-1]
         with self._lock:
             names, pinned = dict(self._names), set(self._pinned)
+        names = self._shown(names)
         return [(track, frame.bodies[track].box, names.get(track, f"Körper {track}"),
-                 track in pinned)
+                 track in pinned and track in names)
                 for track in recognizer.tallest(frame, self.tracked)]
 
     def podest_stance(self) -> dict[int, bool]:
@@ -431,15 +449,17 @@ class ActionRatings:
             return self._pinned.get(track)
 
     def carried(self, since: datetime, until: datetime) -> list[str]:
-        """Cast names carried by bodies in view or with readings in a stretch,
-        however they were named: by face, by appearance or by hand."""
+        """Names carried by bodies in view or with readings in a stretch,
+        however they were named: by face, by appearance or by hand; under the
+        parts the scene gives them."""
         frames = self.recognizer.tracker.frames
         in_view = set(frames[-1].bodies) if frames else set()
         with self._lock:
             active = {member for record in self._records if since < record.at <= until
                       for member in record.members}
-            return sorted({name for track, name in self._names.items()
-                           if track in active or track in in_view})
+            carried = {track: name for track, name in self._names.items()
+                       if track in active or track in in_view}
+        return sorted(set(self._shown(carried).values()))
 
     def _on_readings(self, readings: list[recognizer.Reading]):
         # Runs on the recogniser's thread between two of its frames, so its
@@ -628,6 +648,7 @@ class ActionRatings:
         scores = scores or {}
         with self._lock:
             names = dict(self._names)
+        names = self._shown(names)
         kept, seen = [], []
         for reading in readings:
             values, causes = weigh(reading.probabilities, self.mapping)
@@ -670,9 +691,11 @@ class ActionRatings:
         """The readings after `since` (up to `until`), and the name each body carries now.
 
         Names are resolved when asked for, so a body named at any point is
-        rated on everything it did while it was kept.
+        rated on everything it did while it was kept, under the part its cast
+        member plays now.
         """
         with self._lock:
-            return ([record for record in self._records
-                     if record.at > since and (until is None or record.at <= until)],
-                    dict(self._names))
+            records = [record for record in self._records
+                       if record.at > since and (until is None or record.at <= until)]
+            names = dict(self._names)
+        return records, self._shown(names)

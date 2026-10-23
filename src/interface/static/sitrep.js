@@ -86,6 +86,13 @@ const clock = (iso) => (iso ? iso.slice(11, 19) : "");
 
 const ago = (iso) => (iso ? `vor ${Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000))} s` : "");
 
+// The part each cast member plays in the scene in force, or null in a scene
+// without parts.
+const rolesText = (roles) => {
+  const entries = Object.entries(roles ?? {});
+  return entries.length ? `Rollen: ${entries.map(([member, part]) => `${member} als ${part}`).join(", ")}` : null;
+};
+
 // Evidence, signed, one decimal.
 const signed = (value) => (value > 0 ? `+${value.toFixed(1)}` : value < 0 ? `−${(-value).toFixed(1)}` : "0");
 
@@ -487,12 +494,13 @@ function renderAktionen(aktionen, status) {
 
 // ---- People in view: naming by hand ----------------------------------------
 
-// Each body in view, left to right as in the picture, with the cast names it
-// can be given. A name given here holds until "Automatisch" releases it
-// (session.Session.assign).
+// Each body in view, left to right as in the picture, with the names it can
+// be given: the cast, or in a scene with parts, the parts on offer
+// (scenes.Current.offered). A name given here holds until "Automatisch"
+// releases it (session.Session.assign).
 function renderInView(snapshot) {
   const list = $("in-view");
-  const cast = snapshot.quelle?.besetzung ?? [];
+  const cast = snapshot.quelle?.namen ?? [];
   const bodies = snapshot.in_view ?? [];
   list.replaceChildren(...bodies.map((body) => {
     const row = el("div", "in-view-row");
@@ -562,6 +570,7 @@ function render(snapshot) {
        quelle.auto_empfehlung ? "Empfehlung bei Alarm" : "Empfehlung nur auf E",
        quelle.besetzung.length ? `Besetzung: ${quelle.besetzung.join(", ")}`
                                : "ohne Besetzung, niemand erkannt",
+       rolesText(scene?.roles),
        ...Object.entries(scene?.keys ?? {})
          .map(([key, bound]) => `${key.toUpperCase()}: ${bound.label}`),
        ...(scene?.warnings ?? [])].filter(Boolean).join(" \\ ")
@@ -598,7 +607,7 @@ function render(snapshot) {
   }
   // Not redrawn while one of its menus is in use, which would close it.
   if (!$("in-view").contains(document.activeElement)
-      && changed("in-view", [snapshot.status, snapshot.in_view, snapshot.quelle?.besetzung,
+      && changed("in-view", [snapshot.status, snapshot.in_view, snapshot.quelle?.namen,
                              snapshot.quelle?.aktionen])) {
     renderInView(snapshot);
   }

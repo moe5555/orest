@@ -178,12 +178,15 @@ function sceneNotice(text, error = false) {
   $("scene-notice").classList.toggle("error", error);
 }
 
-// The keys the scene answers to on the SITREP page, and what keeps it from
-// running as configured.
+// The parts the cast plays, the keys the scene answers to on the SITREP page,
+// and what keeps it from running as configured.
 function describeScene(selected) {
   const keys = Object.entries(selected.keys)
     .map(([key, bound]) => `${key.toUpperCase()}: ${bound.label}`);
+  const roles = Object.entries(selected.roles ?? {})
+    .map(([member, part]) => `${member} als ${part}`);
   const parts = [
+    ...(roles.length ? [roles.join(", ")] : []),
     selected.interference ? "Einschreiten an" : "Einschreiten aus",
     `${selected.tracked} Personen verfolgt`,
     ...(selected.podest ? ["Podest-Regel an"] : []),

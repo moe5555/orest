@@ -6,6 +6,51 @@ referenced below.
 
 ---
 
+## 2026-10-22 — Live SITREP: the cast under their parts, per scene
+
+Requested by Moe. This finishes the "cast vs character names" note in
+`02_processing.md` (Realtime-SITREP requirements), for the scene
+configurations of the RENDER step's Live SITREP in `pipeline.md`.
+Alex and Lena are still recognised as themselves, from their own photos and
+voices. Each scene shows them under the part they play there:
+
+| Scene | Lena | Alex |
+|---|---|---|
+| Standard | Lena | Alex |
+| Szene 1 | Wächter | not named |
+| Szene 1.2, Szene 2.3 | Elektra | Orestes |
+| Szene 3 | Elektra, then Klytaimestra | Orestes |
+
+- **Config** (`scenes.toml`, `scenes.Scene.roles`). A cast member can have
+  one part or a list of parts in order. In a scene with parts,
+  `values_per_person` and the keys name people by their part: Szene 2.3's
+  W/S now raise and lower Orestes's Aggression.
+- **Where it applies.** Votes, names given by hand and learned faces stay on
+  the cast names. The part is applied where names leave recognition
+  (`actions.ActionRatings`, `role`). That covers the boxes and Prototypes 1–4,
+  the live values, lines named by voice or lips, the model's stills, the
+  report's roster, and TouchDesigner's roster (`td.RosterStream`). A cast
+  member the scene gives no part, such as Alex in Szene 1, shows as
+  `Körper <id>` and is not rated.
+- **Klytaimestra.** In Szene 3, Lena's row in Im Bild offers Elektra and
+  Klytaimestra. Choosing Klytaimestra names that body as Lena and moves her
+  on to Klytaimestra for the rest of the scene; Elektra is then no longer
+  offered (`scenes.Current.give`). The model is not told "Elektra ist
+  Klytaimestra": a new part is not a correction of the old one. Live values
+  of a part since left are dropped (`lage.Lage.jetzt`). Selecting the scene
+  again starts her as Elektra.
+- **Page.** The Im Bild menu offers the scene's names (`quelle.namen`), and
+  the SITREP header and the operator page show who plays which part.
+- **Cast.** Alessa and Nils moved from `data/cast` to `data/cast_inactive`
+  and are no longer recognised.
+- **Run sheet** (`PERFORMANCE.md`). A second SITREP tab stays on Übersicht,
+  off the wall, for naming by hand, since Prototype 3 hides Im Bild.
+
+776 tests pass. Not yet checked live; `apollon-ui` must be restarted to read
+`scenes.toml`.
+
+---
+
 ## 2026-10-20 — Unattended extraction of new rehearsals (VSH-ARLT-5090)
 
 Moe asked to embed the new rehearsal recordings into `hitl_database` without

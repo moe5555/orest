@@ -33,18 +33,30 @@ The spec's settings, and where each takes effect:
 - Record-Feed Transition: keys with `swap`, which switch between the live
   feed and `video`, the video from its start each time.
 
+Cast and character names (Realtime-SITREP requirements): `roles`, the part
+each cast member plays in the scene, by the name they are enrolled under
+(data/cast). People are recognised as themselves and shown, rated and
+reported under their part (`Current.role`); a cast member the scene gives no
+part is shown as an unnamed body. A cast member with several parts plays the
+first until the operator names a body as a later one (`Current.give`), and
+the earlier ones are offered no more. The scene's values and keys name people
+by their part. Without `roles`, as in Standard, everyone goes by their own
+name.
+
 What the operator changes in a scene (`Current`): the number tracked, the
-manual values, the screen or stroboscope open, whether the Podest is outlined
-and whether the video plays. It lasts until a scene is selected, across runs
-started meanwhile.
+manual values, the screen or stroboscope open, whether the Podest is outlined,
+whether the video plays and the part each cast member plays. It lasts until a
+scene is selected, across runs started meanwhile.
 """
 
 import pathlib
 import threading
 import tomllib
+from collections.abc import Sequence
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (BaseModel, ConfigDict, Field, ValidationError, field_validator,
+                      model_validator)
 
 from . import report
 
@@ -177,12 +189,35 @@ class Scene(BaseModel):
     video: pathlib.Path | None = None
     prerecorded: bool = False
     keys: dict[str, Key] = Field(default_factory=dict)
+    # The parts the cast plays, by cast member, in the order the scene goes
+    # through them; given as one name or a list.
+    roles: dict[str, list[str]] = Field(default_factory=dict)
+
+    @field_validator("roles", mode="before")
+    @classmethod
+    def _one_or_several(cls, roles):
+        if not isinstance(roles, dict):
+            return roles
+        return {member: [parts] if isinstance(parts, str) else parts
+                for member, parts in roles.items()}
 
     @model_validator(mode="after")
     def _check(self) -> "Scene":
         _check_values(self.values)
         for values in self.values_per_person.values():
             _check_values(values)
+        parts = self.parts()
+        if any(not played for played in self.roles.values()):
+            raise ValueError("a cast member in roles plays at least one part")
+        if len(set(parts)) != len(parts):
+            raise ValueError("each part in roles is played by one cast member, once")
+        if self.roles:
+            people = set(self.values_per_person).union(
+                bound.person for bound in self.keys.values() if bound.person is not None)
+            unknown = sorted(people - set(parts))
+            if unknown:
+                raise ValueError(f"{unknown} play no part in roles; values_per_person "
+                                 "and keys name people by their part")
         for key in self.keys:
             if len(key) != 1 or key != key.lower() or not key.isalnum():
                 raise ValueError(f"a key is one lower-case letter or digit, not {key!r}")
@@ -197,6 +232,10 @@ class Scene(BaseModel):
     def values_of(self, name: str) -> list[str]:
         """The values a person is shown with."""
         return self.values_per_person.get(name, self.values)
+
+    def parts(self) -> list[str]:
+        """Every part the scene gives the cast, in the order of `roles`."""
+        return [part for played in self.roles.values() for part in played]
 
     def all_values(self) -> list[str]:
         """Every value anyone in the scene is shown with, in VALUES order."""
@@ -259,6 +298,9 @@ class Current:
             # A problem the run met in carrying out the scene, e.g. a video
             # that does not open.
             self.problem: str | None = None
+            # Per cast member with several parts, the one they play now, as
+            # its place in `roles`.
+            self._playing: dict[str, int] = {}
             # Rises with every selection, so the live values know to start
             # the scene's Podest count afresh.
             self.generation += 1
@@ -303,6 +345,62 @@ class Current:
     def values_of(self, name: str) -> list[str]:
         return self.scene.values_of(name)
 
+    def role(self, name: str) -> str | None:
+        """The name a cast member is shown under: the part they play now, or
+        None where the scene gives them none. Without roles, their own."""
+        with self._lock:
+            return self._role(name)
+
+    def _role(self, name: str) -> str | None:
+        roles = self.scene.roles
+        if not roles:
+            return name
+        if name not in roles:
+            return None
+        return roles[name][self._playing.get(name, 0)]
+
+    def shown(self) -> set[str] | None:
+        """The names the scene shows people under now, or None without roles,
+        where everyone goes by their own name."""
+        with self._lock:
+            if not self.scene.roles:
+                return None
+            return {self._role(member) for member in self.scene.roles}
+
+    def offered(self, cast: Sequence[str]) -> list[str]:
+        """The names a body can be given by hand, for the cast enrolled: each
+        member's part now and the parts after it. Without roles, the cast."""
+        with self._lock:
+            roles = self.scene.roles
+            if not roles:
+                return list(cast)
+            return [part for member, parts in roles.items() if member in cast
+                    for part in parts[self._playing.get(member, 0):]]
+
+    def give(self, name: str, cast: Sequence[str]) -> str:
+        """The cast member a name offered for a body stands for. A later part
+        moves its cast member on to it for the rest of the scene. A name not
+        offered raises ValueError."""
+        with self._lock:
+            roles = self.scene.roles
+            if not roles and name in cast:
+                return name
+            for member, parts in roles.items():
+                if member in cast and name in parts[self._playing.get(member, 0):]:
+                    self._playing[member] = parts.index(name)
+                    return member
+            raise ValueError(f"{name!r} gehört nicht zur Besetzung von {self.scene.name}.")
+
+    def member(self, name: str) -> str | None:
+        """The cast member a shown name stands for, by any of their parts in
+        the scene; None for a name that is none of them. Without roles, the
+        name itself."""
+        with self._lock:
+            roles = self.scene.roles
+            if not roles:
+                return name
+            return next((member for member, parts in roles.items() if name in parts), None)
+
     def manual(self) -> dict[str, dict[str, tuple[int, datetime]]]:
         """The values set by hand, by person and value, with when each was last set."""
         with self._lock:
@@ -337,5 +435,6 @@ class Current:
                                       for name, values in scene.values_per_person.items()},
                 "manual": {name: {value: wert for value, (wert, _) in values.items()}
                            for name, values in self._manual.items()},
+                "roles": {member: self._role(member) for member in scene.roles},
                 "warnings": scene.warnings() + ([self.problem] if self.problem else []),
             }

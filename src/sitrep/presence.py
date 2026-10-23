@@ -43,7 +43,8 @@ import pathlib
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 import cv2
@@ -182,6 +183,21 @@ class Presence:
     @property
     def known(self) -> bool:
         return self.name is not None
+
+
+def shown(roster: list[Presence], role: Callable[[str], str | None]) -> list[Presence]:
+    """A roster with each recognised cast member under the name the scene
+    shows them by (scenes.Current.role), and without those it gives no part.
+    Unrecognised people stay as they are."""
+    people = []
+    for person in roster:
+        if not person.known:
+            people.append(person)
+            continue
+        name = role(person.name)
+        if name is not None:
+            people.append(replace(person, label=name, name=name))
+    return people
 
 
 class PresenceTracker:

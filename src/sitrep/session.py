@@ -380,11 +380,13 @@ class Session:
                                                  on_learn=self._learn,
                                                  appearances=appearances,
                                                  reference=self.reference,
-                                                 podest_polygon=self.options.podest).start()
+                                                 podest_polygon=self.options.podest,
+                                                 role=self.scene.role).start()
 
         if self.options.send_td:
             self.sender = td.Sender()
-            self.roster = td.RosterStream(self.sender, self.tracker).start()
+            self.roster = td.RosterStream(self.sender, self.tracker,
+                                          role=self.scene.role).start()
 
     # The live part ----------------------------------------------------------
 
@@ -569,30 +571,33 @@ class Session:
     def assign(self, body: int, name: str | None):
         """Name a body in view by hand, or release it to the automatic naming.
 
-        The name is absolute for that body (actions.ActionRatings.assign). If
+        `name` is one the scene offers (scenes.Current.give): a cast member,
+        or in a scene with parts, a part, which names the body as the cast
+        member playing it. The name is absolute for that body
+        (actions.ActionRatings.assign). If
         a face was seen on the body, its face track takes the name too and
         its faces are learned for the rest of the run
         (presence.PresenceTracker.teach), so the person is recognised after
         leaving the picture. Faces seen on the body later are learned as they
         appear (`_learn`). Releasing takes every lesson of the body back. The
         model is told which earlier label now means whom, since the Chronik
-        already written still uses it.
+        already written still uses it; a cast member moving on to their next
+        part is not such a correction.
         """
         if self.actions is None:
             raise ValueError("Ohne Aktionserkennung werden keine Körper verfolgt.")
-        cast = self.tracker.cast
-        if name is not None and (cast is None or name not in cast.names):
-            raise ValueError(f"{name!r} gehört nicht zur Besetzung.")
+        cast = self.tracker.cast.names if self.tracker.cast else []
         with self._assigning:
             before = self.actions.names().get(body, f"Körper {body}")
-            face = self.actions.assign(body, name)
+            member = self.scene.give(name, cast) if name is not None else None
+            face = self.actions.assign(body, member)
             for lesson in self._lessons.pop(body, []):
                 self.tracker.unteach(lesson)
             first, _ = self._umbenannt.pop(body, (before, None))
-            if name is not None:
-                if face is not None and face != name:
-                    self._teach(body, face, name)
-                if first != name:
+            if member is not None:
+                if face is not None and face != member:
+                    self._teach(body, face, member)
+                if first != name and self.scene.member(first) != member:
                     self._umbenannt[body] = (first, name)
             if self.chronik is not None:
                 self.chronik.zuordnen(self._zuordnungen())
@@ -619,8 +624,10 @@ class Session:
     def _roster(self, since: datetime, until: datetime) -> list[presence.Presence]:
         """Who was present: the cast faces recognised, and cast members named
         on a body without a face recognised, by appearance or by hand, so the
-        report may name them. Unrecognised people are reported as Unbekannt."""
-        roster = [person for person in self.tracker.roster(since, until) if person.known]
+        report may name them; under the parts the scene gives them.
+        Unrecognised people are reported as Unbekannt."""
+        roster = [person for person in presence.shown(self.tracker.roster(since, until),
+                                                      self.scene.role) if person.known]
         if self.actions is not None:
             present = {person.label for person in roster}
             roster += [presence.Presence(name, name, 1.0, 0, since, until)
@@ -732,8 +739,12 @@ class Session:
                      for segment in segmente]
         if self.voices:
             verdicts = self.voices.attribute(segmente, sound, self._samplerate)
-            lines = [line.model_copy(update={"name": verdict.name}) if verdict.name else line
-                     for line, verdict in zip(lines, verdicts)]
+            # A voice names its cast member's part; one of a cast member the
+            # scene gives no part leaves the line to the lips.
+            voiced = [self.scene.role(verdict.name) if verdict.name else None
+                      for verdict in verdicts]
+            lines = [line.model_copy(update={"name": name}) if name else line
+                     for line, name in zip(lines, voiced)]
         return lines
 
     def overlay(self, frame):
@@ -761,7 +772,9 @@ class Session:
         return annotate.draw_region(frame, podest.pixels(self.options.podest, frame.shape[:2]))
 
     def _name_faces(self, frame):
-        """The model's copy of a frame, with the tracker's name on each face.
+        """The model's copy of a frame, with the tracker's name on each face,
+        under the part the scene gives it; a cast member given none is left
+        unmarked.
 
         A failed naming pass yields the frame unmarked, and the model names
         the people in it "Unbekannt". This runs inside the stills' sampling
@@ -772,7 +785,8 @@ class Session:
         except Exception as error:
             print(f"naming pass failed, frame sent unmarked: {error!r}", file=sys.stderr)
             return frame
-        return annotate.draw_names(frame, named)
+        shown = [(box, self.scene.role(name)) for box, name in named]
+        return annotate.draw_names(frame, [(box, name) for box, name in shown if name])
 
     def close(self):
         """Stop every reader, delete what they hold, then release the camera.

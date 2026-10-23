@@ -29,6 +29,9 @@ what is shown:
 - Values set by hand (scenes.MANUAL) stand as set, until set again.
 - Each person keeps only the values the scene shows them with. A Risiko not
   shown is not read by the alarm either.
+- Where the scene gives the cast parts (scenes.Scene.roles), only the parts
+  played now are shown: a line said under a part since left, or under a
+  previous scene's part, counts for no one.
 
 Alarm. The alarm is raised by rule, not by the model: when a person's live
 Risiko, or the decayed Risiko of a line whose speaker is unknown, reaches
@@ -330,4 +333,7 @@ class Lage:
                 counts = self._counter.update(stance, measured, now)
             with_podest(personen, counts)
         with_manual(personen, self._scene.manual())
+        shown = self._scene.shown()
+        if shown is not None:
+            personen = {name: werte for name, werte in personen.items() if name in shown}
         return judge(now, restricted(personen, scene.values_of), unklar)

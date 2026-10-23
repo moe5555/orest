@@ -270,6 +270,14 @@ def test_roster_ticks_increase():
     assert ticks == [1, 2]
 
 
+def test_the_roster_names_the_cast_by_the_parts_the_scene_gives_them():
+    sender = RecordingSender()
+    roster = [person("Alex", "Alex"), person("Lena", "Lena"), person("#4", None)]
+    sitrep_td.RosterStream(sender, StubTracker(roster), role={"Lena": "Wächter"}.get).publish()
+    assert [arguments[2:4] for address, arguments in sender.sent
+            if address == sitrep_td.PRESENCE_PERSON] == [["Wächter", "Wächter"]]
+
+
 def test_an_empty_room_still_sends_a_reading():
     """Silence has to be distinguishable from the stream having stopped."""
     sender = RecordingSender()

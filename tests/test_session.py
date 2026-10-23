@@ -305,7 +305,22 @@ def test_the_models_frames_are_marked_with_the_trackers_names(monkeypatch, room,
         live.tracker.name_faces = lambda frame: named
         live._name_faces(np.zeros((4, 4, 3), dtype=np.uint8))
 
-    assert drawn["faces"] is named
+    [(box, name)] = drawn["faces"]
+    assert box is named[0][0] and name == "klara"
+
+
+def test_the_models_frames_name_the_cast_by_their_parts(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    named = [(np.array([0, 0, 10, 10]), "Alex"), (np.array([20, 0, 30, 10]), "Lena")]
+    drawn = {}
+    monkeypatch.setattr(session.annotate, "draw_names",
+                        lambda frame, faces: drawn.update(faces=faces) or frame)
+    scene = scenes.Current(scenes.Scene(roles={"Lena": "Wächter"}))
+    with session.Session(video, audio, scene=scene) as live:
+        live.tracker.name_faces = lambda frame: named
+        live._name_faces(np.zeros((4, 4, 3), dtype=np.uint8))
+
+    assert [name for _, name in drawn["faces"]] == ["Wächter"]
 
 
 def test_a_failed_naming_pass_sends_the_frame_unmarked(room, readers):
@@ -672,11 +687,13 @@ class FakeNaming:
         self.cast = SimpleNamespace(names=["Alex", "Lena"])
         self.face = face
         self.given = {}
+        # The names bodies carry, as the scene shows them.
+        self.shown = {}
         self.taught, self.untaught = [], []
 
     # actions.ActionRatings
     def names(self):
-        return {}
+        return dict(self.shown)
 
     def assign(self, body, name):
         self.given[body] = name
@@ -701,10 +718,11 @@ class FakeNaming:
                 presence.Presence("#4", None, 0.0, 2, since, until)]
 
 
-def naming_session(face="#3"):
+def naming_session(face="#3", scene=None):
     """A session reduced to what naming by hand reads, with a real Chronik."""
     naming = FakeNaming(face)
     run = object.__new__(session.Session)
+    run.scene = scenes.Current(scene)
     run.actions = run.tracker = naming
     run.chronik = chronik.Chronik(laenge=30.0)
     run._lessons, run._umbenannt = {}, {}
@@ -754,6 +772,47 @@ def test_a_name_given_by_hand_may_appear_in_the_report_and_an_unrecognised_face_
     now = datetime.now()
     assert [person.name for person in run._anwesend(now - timedelta(seconds=30), now)] == [
         "Alex", "Lena"]
+
+
+def test_a_body_named_by_its_part_is_given_the_cast_member_playing_it():
+    run, naming = naming_session(scene=scenes.Scene(
+        roles={"Lena": ["Elektra", "Klytaimestra"], "Alex": "Orestes"}))
+    run.assign(20, "Orestes")
+    assert naming.given[20] == "Alex" and naming.taught == [("#3", "Alex")]
+    assert "Körper 20 ist Orestes" in run.chronik.kontext()
+    with pytest.raises(ValueError, match="Besetzung"):
+        run.assign(21, "Alex")
+
+
+def test_a_cast_member_moving_on_to_their_next_part_is_no_reassignment():
+    run, naming = naming_session(face=None, scene=scenes.Scene(
+        roles={"Lena": ["Elektra", "Klytaimestra"]}))
+    naming.shown[20] = "Elektra"
+    run.assign(20, "Klytaimestra")
+    assert naming.given[20] == "Lena"
+    assert run.scene.role("Lena") == "Klytaimestra"
+    assert run._zuordnungen() == []
+
+
+def test_the_report_names_the_cast_by_their_parts_and_leaves_out_those_without():
+    now = datetime.now()
+    run, _ = naming_session(scene=scenes.Scene(roles={"Alex": "Orestes"}))
+    assert [person.name for person in run._anwesend(now - timedelta(seconds=30), now)] == [
+        "Orestes"]
+    run, _ = naming_session(scene=scenes.Scene(roles={"Lena": "Wächter"}))
+    assert run._anwesend(now - timedelta(seconds=30), now) == []
+
+
+def test_a_line_named_by_voice_goes_to_the_part_its_cast_member_plays():
+    run = object.__new__(session.Session)
+    run.scene = scenes.Current(scenes.Scene(roles={"Alex": "Orestes"}))
+    run.speakers, run._samplerate = None, 16000
+    run.voices = SimpleNamespace(attribute=lambda segmente, sound, rate: [
+        SimpleNamespace(name="Alex"), SimpleNamespace(name="Lena")])
+    segmente = [SimpleNamespace(text="Ich bin es.", start=0.0, end=1.0),
+                SimpleNamespace(text="Wer?", start=1.0, end=2.0)]
+    lines = run._sprecher(segmente, datetime.now(), None)
+    assert [line.name for line in lines] == ["Orestes", None]
 
 
 def test_a_face_seen_later_on_a_named_body_is_learned():
@@ -900,7 +959,7 @@ def test_a_line_is_named_by_its_voice_first_and_by_the_lips_otherwise():
     heard = SimpleNamespace(attribute=lambda segments, sound, rate: [
         session.voices.Verdict(name, 0.0, 0.0) for name in ("Lena", None, None)])
     run = SimpleNamespace(speakers=lips, voices=heard, _samplerate=48000,
-                          actions=SimpleNamespace(names=lambda: {}))
+                          actions=SimpleNamespace(names=lambda: {}), scene=scenes.Current())
 
     lines = session.Session._sprecher(run, segmente, begins, np.zeros(3 * 48000, np.float32))
     assert [line.name for line in lines] == ["Lena", "Klara", None]
@@ -911,7 +970,8 @@ def test_without_lips_a_line_is_named_by_its_voice_alone():
     segmente = [session.transcribe.Segment(0.5, 1.5, "Vater.")]
     heard = SimpleNamespace(attribute=lambda segments, sound, rate: [
         session.voices.Verdict("Alex", 0.0, 0.0)])
-    run = SimpleNamespace(speakers=None, voices=heard, _samplerate=16000)
+    run = SimpleNamespace(speakers=None, voices=heard, _samplerate=16000,
+                          scene=scenes.Current())
 
     [line] = session.Session._sprecher(run, segmente, begins, np.zeros(32000, np.float32))
     assert (line.name, line.text, line.beginn) == ("Alex", "Vater.", begins + timedelta(seconds=0.5))
