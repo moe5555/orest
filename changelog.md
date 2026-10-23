@@ -91,6 +91,30 @@ the header is hidden on the prototypes. The terminal's `KEIN TON` line and the
 
 ---
 
+## 2026-10-22 — Pixelated per-person values on Prototypes 3 and 4: the run still reads 640×480
+
+Pointed out by Moe. Concerns the Live SITREP of the RENDER step in
+`pipeline.md` (`03_render.md`, Prototypes 3 and 4). Same cause as the entry
+of 2026-10-07 ("Names lost in the live SITREP"); its fix never reached the
+launch commands (`README.md`, `PERFORMANCE.md`).
+
+**Measured** on the running `apollon-ui --video "OBS Virtual Camera"` (port
+9680, no `--width`/`--height`):
+- **The camera picture is 640×480**, OBS's 1920×1080 squeezed to 4:3.
+  Prototype 4's frame is 1004×480, Prototype 3's 640×552.
+- **The values are drawn into that frame** (`annotate.draw_ratings_sides`,
+  `draw_ratings_strip`), and the page stretches it: on a 1920×1080 window
+  about 1.9× for Prototype 4 (to 1888 px wide) and 1.7× for Prototype 3.
+  The text, pips and lines are upscaled with the picture, and Prototype 4's
+  values, the largest text, show it most.
+- **OBS Virtual Camera delivers 1920×1080 when asked** (probe of the same
+  device beside the running show).
+
+**Next:** start `apollon-ui` with `--width 1920 --height 1080`; the frames
+are then larger than the window and the browser shrinks them instead.
+
+---
+
 ## 2026-10-22 — Athene live: a 9:1 strip and the 16:9 wall, two NDI streams from one performance
 
 Moe asked for two simultaneous outputs, 4K 16:9 and 4K 9:1 (3840 × 427).
@@ -132,6 +156,22 @@ strip while its 272 small videos start). Screens of both views per scene
 match: the wall is the strip's middle section. Not yet checked: OBS (that
 its Browser Sources reach each other over the BroadcastChannel, frame rate
 there, the dedicated outputs' resolution) and QLab.
+
+---
+
+## 2026-10-22 — PERFORMANCE.md: the commands and keys for each cue of the play
+
+At Moe's request, `PERFORMANCE.md` is a run sheet for the performance. It
+goes scene by scene through the play text of 22 October
+(`knowledge/HITLText_2210.pdf`), following Moe's cues (the green text), and
+gives the terminal commands and keys of the live SITREP, the body search wall
+and Athene for each one. This is "Playback on stage" in the RENDER step of
+`pipeline.md`, as the operator runs it. It is a first draft for Moe to go
+through. Open points are marked in it:
+- Szene 1.2 and Szene 3 have no video yet, and no SITREP scene plays the
+  chase video of Szenario 5.
+- Athene's voice (4) plays in "back to two axes", where the text asks for
+  clusters with war footage.
 
 ---
 
