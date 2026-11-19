@@ -26,9 +26,9 @@
                       are white metal and glow with a strobe of their own,
                       rare for long and crowding in at the end (S: the full
                       strobe); some flashes light the plane two or three
-                      axes span. E ends it: the network explodes in a
-                      flickering strobe until it fills the wall with white
-                      light, which holds (X: black at once).
+                      axes span. While E is held the whole view flips
+                      between itself and its negative, black lines and core
+                      on a white wall; X cuts to black.
 
    Keys: N next scene, B previous scene, Space restart the scene, P play the
    scene's next voice clip (or stop the one playing), H show or hide the
@@ -160,7 +160,7 @@ const LIVE = {
   // Growth scene: bolts on their own per second, and a pulse of the glow in
   // Hz with its depth, from the start to the full schedule; the motion
   // speeds up to 1 + `hectic` times at full size.
-  boltRate: [0.15, 8], pulseRate: [0.2, 3.5], pulseDepth: [0, 0.9], hectic: 1.5,
+  boltRate: [0.15, 8], pulseRate: [0.2, 3.5], pulseDepth: [0, 0], hectic: 1.5,
   // Ending: for `explode` seconds the network explodes, the strobe on and
   // `explodeBolts` bolts per second, its growth sped up to `explodeGrowth`
   // times and its size rising to `explodeSize` times.
@@ -178,7 +178,12 @@ const LIVE = {
   // time.
   explode: 6, explodeBolts: 14, explodeGrowth: 25, explodeSize: 2.2,
   explodeWash: 3, washBlur: 14,
-  whiteRise: 1.5, finale: "white", finaleSpan: 20,
+  // "invert" (the default) has no explosion: while E is held, the whole
+  // view flips between itself and its negative, `invertRate` cycles a
+  // second (half of each negative, first), so the lines and the core turn
+  // black on a white wall and back; the network grows on beneath it. X cuts
+  // to black.
+  whiteRise: 1.5, finale: "invert", invertRate: 5.5, finaleSpan: 20,
   finaleWhite: [[0.8, 2.5], [0.03, 0.1]], finaleBlack: [[0.04, 0.1], [0.8, 2.5]],
   // Strobe: flashes of the glow at irregular gaps (s), of random strength,
   // each fading with a time constant (s); between flashes the glow sinks to
@@ -192,13 +197,46 @@ const LIVE = {
   // schedule's share to the power 1 / `lineCurve`, each within `lineLife`
   // seconds (the first to the last), flashing while it shoots out. An axis
   // is `lineLength` of AXES.radius long and drifts up to `lineDrift` radians;
-  // every axis reaches out to 1 + `outward` × share² times its length, so by
-  // full size most run beyond the wall. Their tubes are `lineWidth` of the
+  // every axis reaches out to 1 + `outward` × share ^ `outwardCurve` times
+  // its length (the share at most `outwardCap`), so by full size most run
+  // beyond the wall; the lower the curve, the earlier they reach out. Their
+  // tubes are `lineWidth` of the
   // network's and lit at `lineAlpha`.
   lookFade: 1.5,
   lines: 300, lineFirst: 0.05, lineLast: 1.1, lineCurve: 0.5, lineLife: [4, 0.25],
   lineLength: [0.35, 1.1], lineDrift: 0.12, lineDriftRate: [0.03, 0.12],
-  outward: 2.5, outwardCap: 1.6, lineWidth: 0.5, lineAlpha: [0.35, 1],
+  outward: 2.5, outwardCurve: 1, outwardCap: 1.6, lineWidth: 0.5, lineAlpha: [0.35, 1],
+  // The growth (`growth`, or ?growth=): "radial" grows the further axes
+  // through the centre above; "layers" grows the network out of the centre
+  // into generations of child cores, mirrored to both sides. Once further
+  // axes join, `genCores[0]` cores a side sprout from the tips of the axes
+  // nearest them and move out to the first generation; each core of a later
+  // generation sprouts from the nearest of the one before (`genCores[g]`
+  // cores a side). Generation g stands `genFirst` + g × `genGap` px from the
+  // centre, its cores spread over the height inside `genMargin` px. Each
+  // core wanders up to `wander` px (x, y) at `wanderRate` radians a second
+  // of the motion, carrying `inherit` of its parent's wandering. Generation
+  // g is born from `genBirth` + g × `genStep` of the schedule, within
+  // `genSpan` of it, each core shooting out within a line's `lineLife`.
+  // A core links to the cores of the next generation (`linkShare` of the
+  // pairs) and of the one after (`skipShare`), the links joining from both
+  // cores' birth until `linkLast` of the schedule, crowding towards the end
+  // (a share to the power `linkCurve`). The lines to the cores are
+  // `sproutWidth` and the links `linkWidth` of the network's tubes, lit at
+  // `lineAlpha` and `linkAlpha`. A core lights up as lines leave it (each
+  // counted as far as it has grown), in full once `childLines` do: then it
+  // glows `childCore` px at `childGlow`, with a halo of `childHalo` px at
+  // `childHaloAlpha` (from the start to full size). The centre's core and
+  // halo shrink to `centreKeep` of their size by `centreFade` of the
+  // schedule.
+  growth: "layers",
+  genCores: [3, 4, 5, 6, 6, 5, 4], genFirst: 1400, genGap: 1300, genMargin: 260,
+  wander: [220, 160], wanderRate: [0.08, 0.25], inherit: 0.5,
+  genBirth: 0.08, genStep: 0.1, genSpan: 0.25,
+  linkShare: 0.6, skipShare: 0.15, linkLast: 1.05, linkCurve: 0.7,
+  sproutWidth: 0.7, linkWidth: 0.4, linkAlpha: [0.2, 0.6],
+  childLines: 5, childCore: [60, 320], childGlow: [0.5, 1], childHalo: [250, 1100], childHaloAlpha: [0.12, 0.35],
+  centreKeep: 0.3, centreFade: 0.5,
   // Glow by strobe: in the growth scene the glow rests at `strobeRest`
   // (from the start to full size, as the strobe takes over) and blazes with
   // each flash of a strobe that runs on its own,
@@ -219,7 +257,7 @@ const LIVE = {
   // voice (`coreVoice`) and the strobe (`coreFlash`). Around it a halo
   // lights the wall out to `haloRadius` px at `haloAlpha` from the start to
   // full size, brightening by `haloFlash` with the strobe.
-  coreRadius: [0, 900], coreCurve: 1.2, coreGlow: [0, 1], coreVoice: 0.12, coreFlash: 0.15,
+  coreRadius: [0, 900], coreCurve: 1.2, coreGlow: [0, 1], coreVoice: 0, coreFlash: 0,
   haloRadius: [0, 2200], haloAlpha: [0, 0.45], haloFlash: 0.25,
   // Heart: within the radius where the lines' widths at the centre add up
   // to its circumference (their summed width / 2π, times `heartSpread`)
@@ -232,13 +270,25 @@ const LIVE = {
   // `lineGlow` times.
   glowWidth: [1, 2.5], lineGlow: [1.2, 3],
   // Planes: a flash lights the plane two axes span from the centre (the
-  // parallelogram), or three (`planeTriple` of the time, a hexagon), filled
-  // at `planeAlpha` of its strength and glowing at `planeGlow` of that. The
-  // axes of a plane are at least `planeApart` (the sine of their angle)
-  // apart. `autoPlane` of the strobe's own flashes light one plane; with
-  // S, each flash lights `planesPerFlash`.
+  // parallelogram), filled at `planeAlpha` of its strength and glowing at
+  // `planeGlow` of that, or `planeTriple` of the time the space three axes
+  // span: a box of glass with a corner at the centre and its edges along
+  // them. Its pairs of opposite faces take `boxFaces` of the plane's light
+  // each, added where they lie over each other, and its twelve edges are
+  // lit at `boxEdge`, `boxEdgeWidth` px wide. The axes of a plane are at
+  // least `planeApart` (the sine of their angle) apart. `autoPlane` of the
+  // strobe's own flashes light one plane; with S, each flash lights
+  // `planesPerFlash`.
   planeTriple: 0.25, planeAlpha: 0.16, planeGlow: 0.25, planeApart: 0.25,
+  boxFaces: [0.75, 0.45, 0.25], boxEdge: 0.7, boxEdgeWidth: 4,
   autoPlane: 0.5, planesPerFlash: [1, 3],
+  // Film: the planes are filled like oil on water, with the colours a thin
+  // film reflects (red, green and blue at 650, 530 and 450 nm, refractive
+  // index 1.45), tinted `filmTint` of the way from white to them. The
+  // film's thickness swirls between `filmThickness` nm across a seamless
+  // tile `filmScale` px wide, which drifts `filmFlow` px a second and turns
+  // `filmTurn` degrees a second about the centre. Their glow stays white.
+  filmTint: 0.35, filmThickness: [250, 750], filmScale: 2600, filmFlow: [18, -11], filmTurn: 0.6,
   // Cascades: `cascadeShare` of the strikes become a cascade of quick
   // strikes, `cascadeGap` seconds apart, each lighting the plane between one
   // axis that stays and a different axis each time. A cascade has from
@@ -351,7 +401,7 @@ function thrust(x, rise, fall) {
 
 // ---- The space -------------------------------------------------------------------
 
-const space = { planes: [], joins: [], joinLives: [], roots: [], lines: [] };
+const space = { planes: [], joins: [], joinLives: [], roots: [], lines: [], cores: [], links: [] };
 
 // The cluster clips ({url, group} played as videos, or {sheet, group} drawn
 // from a frame sheet: {image, frames, fps, cell, columns}) in the order the
@@ -408,6 +458,54 @@ function buildSpace() {
       reach: wave(random, AXES.reachRate),
     });
   }
+  // The layered growth's cores, generation by generation (parents before
+  // their children), with their places relative to the centre, and the
+  // links between generations.
+  space.cores = [];
+  space.links = [];
+  const lifeAt = (join) => LIVE.lineLife[0] + (LIVE.lineLife[1] - LIVE.lineLife[0]) * Math.min(1, join / span);
+  let id = 3e6;
+  const byGen = LIVE.genCores.map((count, g) => [1, -1].map((side) => {
+    const slot = (H - 2 * LIVE.genMargin) / count;
+    return Array.from({ length: count }, (_, k) => ({
+      id: id++, gen: g, side,
+      x: side * (LIVE.genFirst + g * LIVE.genGap),
+      y: LIVE.genMargin + slot * (k + 0.25 + 0.5 * random()) - H / 2,
+      born: (LIVE.genBirth + g * LIVE.genStep + LIVE.genSpan * random()) * span,
+      wx: wave(random, between(random, LIVE.wanderRate)),
+      wy: wave(random, between(random, LIVE.wanderRate)),
+      alpha: between(random, LIVE.lineAlpha),
+      parent: null,
+    }));
+  }));
+  byGen.forEach((sides, g) => sides.forEach((cores, s) => {
+    for (const core of cores) {
+      if (g > 0) {
+        // The parent: one of the two cores of the generation before nearest
+        // in height, born before it.
+        const near = [...byGen[g - 1][s]].sort((a, b) => Math.abs(a.y - core.y) - Math.abs(b.y - core.y));
+        core.parent = near[Math.min(near.length - 1, Math.floor(2 * random()))];
+        core.born = Math.max(core.born, core.parent.born + core.parent.life);
+      }
+      core.life = lifeAt(core.born);
+      space.cores.push(core);
+    }
+  }));
+  const end = LIVE.linkLast * span;
+  byGen.forEach((sides, g) => sides.forEach((cores, s) => {
+    for (const to of cores) {
+      const sources = [
+        ...(g > 0 ? byGen[g - 1][s].filter((c) => c !== to.parent).map((c) => [c, LIVE.linkShare]) : []),
+        ...(g > 1 ? byGen[g - 2][s].map((c) => [c, LIVE.skipShare]) : []),
+      ];
+      for (const [from, share] of sources) {
+        if (random() >= share) continue;
+        const start = Math.max(from.born + from.life, to.born + to.life);
+        const join = start + Math.max(0, end - start) * random() ** LIVE.linkCurve;
+        space.links.push({ id: id++, from, to, join, life: lifeAt(join), alpha: between(random, LIVE.linkAlpha) });
+      }
+    }
+  }));
 }
 
 // The plane two or three axes span from the centre, as the polygon of all
@@ -449,6 +547,10 @@ const live = {
   regrow: tween(1),     // the network growing back out of the centre after the ending
   endAt: null,          // the clock when E was pressed
   black: false,         // the finale cut to black (X)
+  film: true,           // the planes in the oil film's colours (F), or white
+  layered: (params.get("growth") || LIVE.growth) === "layers", // the growth scene grows in generations of cores
+  inverting: false,     // E is held: the view flips to its negative and back (finale "invert")
+  invertAt: null,       // the clock when E was pressed, the inversion's phase
   finale: null,         // the finale's blinks on the clock, if it blinks: {blinks: [{dark, on}], end (black from then on)}
   strobe: false,
   flashes: [],          // the strobe's flashes: {start, strength, fade}
@@ -497,6 +599,7 @@ function enter(k) {
   }
   live.endAt = null;
   live.black = false;
+  live.inverting = false;
   live.finale = null;
   live.strobe = false;
   live.planes = [];
@@ -642,7 +745,7 @@ function stopVideo(video) {
 function endScene() {
   if (!sceneOf().growing || live.endAt !== null) return;
   live.endAt = live.clock;
-  live.finale = (params.get("finale") || LIVE.finale) === "blinks" ? finaleBlinks(live.clock + LIVE.explode) : null;
+  live.finale = finaleKind() === "blinks" ? finaleBlinks(live.clock + LIVE.explode) : null;
   live.strobe = true;
   live.flashes = [];
   live.nextFlash = live.clock;
@@ -671,11 +774,41 @@ function finaleBlinks(start) {
   return { blinks, end: t };
 }
 
+// Skips the growth scene to its full network: the growth clock moves to
+// where the schedule has every line and link in (LIVE.lineLast or
+// LIVE.linkLast of the span, plus the longest time a line takes to shoot
+// out), and runs on from there.
+function growFull() {
+  if (!sceneOf().growing || live.endAt !== null) return;
+  const schedule = Math.max(LIVE.lineLast, LIVE.linkLast) * AXES.growthSpan + LIVE.lineLife[0];
+  live.growth = Math.max(live.growth, AXES.growthSpan * (schedule / AXES.growthSpan) ** (1 / AXES.accelerate));
+  live.growthMode = "run";
+}
+
 // Cuts the ending to black, from the explosion or the finale's strobe.
 function cutToBlack() {
-  if (!sceneOf().growing || live.endAt === null || live.black) return;
+  if (!sceneOf().growing || live.black) return;
+  if (live.endAt === null && finaleKind() !== "invert") return;
   live.black = true;
+  live.inverting = false;
   showHint();
+}
+
+// The growth scene's finale: LIVE.finale, or ?finale=.
+function finaleKind() {
+  return params.get("finale") || LIVE.finale;
+}
+
+// E: with the inversion, it flips the view while held; otherwise it begins
+// the ending.
+function pressE() {
+  if (finaleKind() !== "invert") {
+    endScene();
+    return;
+  }
+  if (!sceneOf().growing || live.black || live.inverting) return;
+  live.inverting = true;
+  live.invertAt = live.clock;
 }
 
 // The rays a plane can be spanned by.
@@ -683,16 +816,23 @@ function planeRays() {
   return live.rays.filter((r) => r.root && r.length > 20);
 }
 
+// Whether ray `r` is well apart in angle from all of `others`.
+function apart(r, others) {
+  return others.every((c) => Math.abs(Math.sin(r.angle - c.angle)) > LIVE.planeApart);
+}
+
 // A strike: the plane two or three axes span lights up, the axes picked at
-// random among those well apart in angle; or, `cascadeShare` of the time,
-// a cascade of strikes from one axis begins.
+// random among those leaving the same point (the centre, or a core) well
+// apart in angle; or, `cascadeShare` of the time, a cascade of strikes from
+// one axis begins.
 function planeFlash(strength, fade) {
   const rays = planeRays();
   if (rays.length < 2) return;
+  const anchor = rays[Math.floor(Math.random() * rays.length)];
+  const mates = rays.filter((r) => r.origin === anchor.origin && r !== anchor);
   if (live.cascades.length < LIVE.cascadeMax && Math.random() < LIVE.cascadeShare) {
-    const anchor = rays[Math.floor(Math.random() * rays.length)];
     // The planes this axis can span with the axes present: its most strikes.
-    const planes = rays.filter((r) => Math.abs(Math.sin(r.angle - anchor.angle)) > LIVE.planeApart).length;
+    const planes = mates.filter((r) => apart(r, [anchor])).length;
     const least = Math.min(LIVE.cascadeMin, planes);
     live.cascades.push({
       anchor: anchor.id,
@@ -702,11 +842,12 @@ function planeFlash(strength, fade) {
     });
     return;
   }
-  const count = rays.length > 2 && Math.random() < LIVE.planeTriple ? 3 : 2;
-  const chosen = [];
+  if (!mates.length) return;
+  const count = mates.length > 1 && Math.random() < LIVE.planeTriple ? 3 : 2;
+  const chosen = [anchor];
   for (let tries = 0; tries < 20 && chosen.length < count; tries++) {
-    const r = rays[Math.floor(Math.random() * rays.length)];
-    if (chosen.every((c) => Math.abs(Math.sin(r.angle - c.angle)) > LIVE.planeApart)) chosen.push(r);
+    const r = mates[Math.floor(Math.random() * mates.length)];
+    if (apart(r, chosen)) chosen.push(r);
   }
   if (chosen.length < 2) return;
   live.planes.push({ start: live.clock, strength, fade, rays: chosen.map((r) => r.id) });
@@ -721,7 +862,7 @@ function strikeCascades() {
     while (c.left > 0 && c.next <= live.clock) {
       const anchor = rays.find((r) => r.id === c.anchor);
       const free = anchor ? rays.filter((r) => !c.used.has(r.id)
-        && Math.abs(Math.sin(r.angle - anchor.angle)) > LIVE.planeApart) : [];
+        && r.origin === anchor.origin && apart(r, [anchor])) : [];
       if (!free.length) {
         c.left = 0;
         break;
@@ -745,7 +886,9 @@ function strikeCascades() {
 // the clock and reach followers with the state, so every view blinks in
 // step.
 function endingOf(clock) {
-  if (live.endAt === null) return { explode: 0, white: 0, over: false, black: false };
+  // The inversion's phase follows the clock, so every view flips in step.
+  const inverted = live.inverting && !live.black && ((clock - live.invertAt) * LIVE.invertRate) % 1 < 0.5;
+  if (live.endAt === null) return { explode: 0, white: 0, over: live.black, black: live.black, inverted };
   const x = clock - live.endAt;
   const finale = x >= LIVE.explode;
   const blinks = live.finale;
@@ -758,6 +901,7 @@ function endingOf(clock) {
     white: black ? 0 : white,
     over: finale || black,
     black,
+    inverted: false,
   };
 }
 
@@ -777,7 +921,7 @@ function onKey(e) {
     Space: () => enter(live.scene),
     KeyP: playVoice,
     KeyC: deathCluster,
-    KeyE: endScene,
+    KeyE: pressE,
     KeyL: () => {
       if (!sceneOf().growing) return;
       live.manual = !live.manual;
@@ -791,6 +935,7 @@ function onKey(e) {
       live.nextStrike = live.clock;
     },
     KeyX: cutToBlack,
+    KeyM: growFull,
     KeyS: () => {
       if (!sceneOf().growing) return;
       live.strobe = !live.strobe;
@@ -798,6 +943,7 @@ function onKey(e) {
       live.nextFlash = live.clock;
       showHint();
     },
+    KeyF: () => { live.film = !live.film; showHint(); },
     KeyH: () => { live.hint = !live.hint; showHint(); },
   };
   const code = keyCode(e);
@@ -818,10 +964,12 @@ function showHint() {
     parts.push(`C: CLUSTER (${clustersLeft() ? `NOCH ${clustersLeft()}` : "KEINE MEHR"})`);
   }
   if (scene.growing) {
-    parts.push("E: ENDE", `S: STROBO ${live.strobe ? "AN" : "AUS"}`,
+    const invert = finaleKind() === "invert";
+    parts.push(invert ? "E: NEGATIV (HALTEN)" : "E: ENDE", "M: VOLL GEWACHSEN", `S: STROBO ${live.strobe ? "AN" : "AUS"}`,
       `L: BLITZE ${live.manual ? "MANUELL" : "AUTOMATISCH"}`);
     if (live.manual) parts.push("T: BLITZ (HALTEN)");
-    if (live.endAt !== null) parts.push(live.black ? "SCHWARZ" : "X: SCHWARZ");
+    parts.push(`F: FLÄCHEN ${live.film ? "FARBIG" : "WEISS"}`);
+    if (invert || live.endAt !== null) parts.push(live.black ? "SCHWARZ" : "X: SCHWARZ");
   }
   parts.push("N: WEITER", "B: ZURÜCK", "LEERTASTE: NEUSTART", "H: HILFE");
   hint.textContent = parts.join(" \\ ");
@@ -839,7 +987,7 @@ function listen() {
 }
 
 function randomRay(rootsOnly) {
-  const rays = live.rays.filter((r) => r.length > 20 && (!rootsOnly || r.root));
+  const rays = live.rays.filter((r) => r.length > 20 && !r.back && (!rootsOnly || r.root));
   return rays.length ? rays[Math.floor(Math.random() * rays.length)].id : null;
 }
 
@@ -1039,20 +1187,24 @@ function figure() {
   const scale = AXES.radius * size / Math.max(mean, 0.05) ** AXES.normalise;
   const halves = ease((Math.min(1, share) - AXES.halvesFirst) / (AXES.halvesLast - AXES.halvesFirst));
   const [cx, cy] = AXES.centre;
-  // Every axis reaches outward with the growth.
-  const outward = 1 + LIVE.outward * Math.min(share, LIVE.outwardCap) ** 2;
+  // In the radial growth every axis reaches outward with the growth; in
+  // the layered one the generations reach out instead.
+  const outward = live.layered ? 1 : 1 + LIVE.outward * Math.min(share, LIVE.outwardCap) ** LIVE.outwardCurve;
   const edges = [], rays = [];
 
-  // An edge out of the centre, grown `g` of the way and lit by the bolts
-  // running along it.
-  const add = (angle, length, alpha, g, id) => {
+  // An edge out of (x, y) at `angle`, grown `g` of the way and lit by the
+  // bolts running along it; `hub` marks the edges leaving the centre.
+  const addAt = (x, y, angle, length, alpha, g, id) => {
     const dx = Math.cos(angle), dy = Math.sin(angle);
     const lit = live.bolts.filter((b) => b.ray === id);
     const flash = lit.length ? flashOf(lit, clock, length / 2) : 0;
-    const e = { id, x: cx, y: cy, dx, dy, length, alpha, feed: g, flash };
+    const e = { id, x, y, dx, dy, length, alpha, feed: g, flash, hub: x === cx && y === cy };
     edges.push(e);
     return e;
   };
+  // An edge out of the centre.
+  const add = (angle, length, alpha, g, id) => addAt(cx, cy, angle, length, alpha, g, id);
+  const centre = { origin: "centre", ox: cx, oy: cy };
 
   for (let i = 0; i < n; i++) {
     if (grown[i] <= 0) continue;
@@ -1068,13 +1220,13 @@ function figure() {
       const nominal = scale * mean * stretch * half;
       const length = nominal * ((projected / mean) ** AXES.foreshorten + pokedAt(root.id, clock)) * breath(root.breathe) * outward;
       add(angle, length, alpha, half, root.id);
-      rays.push({ id: root.id, angle, length, root: true });
+      rays.push({ id: root.id, angle, length, root: true, ...centre });
     }
   }
 
   // The growth scene's further axes: straight lines through the centre,
   // shooting out as they join and reaching outward with the growth.
-  for (const line of space.lines) {
+  for (const line of live.layered ? [] : space.lines) {
     const g = ease((growth - line.join) / line.life);
     if (g <= 0) continue;
     const angle = line.angle + LIVE.lineDrift * line.drift(now);
@@ -1085,8 +1237,68 @@ function figure() {
       const e = add(a, AXES.radius * line.halves[half] * stretch, line.alpha, g, id);
       e.widthScale = LIVE.lineWidth;
       if (g < 1) e.flash += AXES.shootFlash * (1 - g);
-      rays.push({ id, angle: a, length: e.length, root: true });
+      rays.push({ id, angle: a, length: e.length, root: true, ...centre });
     }
+  }
+
+  // The layered growth: the cores of the generations, each on the line it
+  // sprouted on, and the links between them.
+  const cores = [];
+  if (live.layered) {
+    // The lines leaving each core so far, by core, each counted as far as
+    // it has grown.
+    const leaving = new Map();
+    // An edge from (x0, y0) to (x1, y1), and a ray for the planes at each
+    // end: one along it at its start (for the bolts too), one back along
+    // it at its end.
+    const join = (x0, y0, from, x1, y1, to, alpha, g, id, width) => {
+      leaving.set(from, (leaving.get(from) || 0) + g);
+      const length = Math.hypot(x1 - x0, y1 - y0);
+      if (length < 1) return null;
+      const angle = Math.atan2(y1 - y0, x1 - x0);
+      const e = addAt(x0, y0, angle, length, alpha, g, id);
+      e.widthScale = width;
+      if (g < 1) e.flash += AXES.shootFlash * (1 - g);
+      rays.push({ id, angle, length, root: true, origin: from, ox: x0, oy: y0 });
+      rays.push({ id: -id, angle: angle + Math.PI, length, root: true, back: true, origin: to, ox: x1, oy: y1 });
+      return e;
+    };
+    const placed = new Map();
+    for (const core of space.cores) {
+      const g = ease((growth - core.born) / core.life);
+      if (g <= 0) {
+        sprouts.delete(core.id);
+        continue;
+      }
+      const parent = core.parent && placed.get(core.parent.id);
+      if (core.parent && !parent) continue;
+      // Its home: its place in the generation, wandering, with some of its
+      // parent's wandering.
+      let wx = LIVE.wander[0] * core.wx(now), wy = LIVE.wander[1] * core.wy(now);
+      if (parent) {
+        wx += LIVE.inherit * parent.wx;
+        wy += LIVE.inherit * parent.wy;
+      }
+      const hx = cx + core.x + wx, hy = cy + core.y + wy;
+      // It sprouts from its parent, or in the first generation from the tip
+      // of the axis nearest its home when it is born, and moves out home.
+      if (!parent && !sprouts.has(core.id)) sprouts.set(core.id, nearestTip(rays, hx, hy));
+      const [sx, sy] = parent ? [parent.x, parent.y] : sprouts.get(core.id);
+      const x = sx + (hx - sx) * g, y = sy + (hy - sy) * g;
+      placed.set(core.id, { x, y, wx, wy });
+      const [ox, oy, from] = parent ? [parent.x, parent.y, core.parent.id] : [cx, cy, "centre"];
+      join(ox, oy, from, x, y, core.id, core.alpha, g, core.id, LIVE.sproutWidth);
+      cores.push({ id: core.id, x, y, lit: 0 });
+    }
+    for (const link of space.links) {
+      const g = ease((growth - link.join) / link.life);
+      const a = placed.get(link.from.id), b = placed.get(link.to.id);
+      if (g <= 0 || !a || !b) continue;
+      join(a.x, a.y, link.from.id, a.x + (b.x - a.x) * g, a.y + (b.y - a.y) * g, link.to.id,
+        link.alpha, g, link.id, LIVE.linkWidth);
+    }
+    // A core lights up with the lines leaving it.
+    for (const c of cores) c.lit = ease((leaving.get(c.id) || 0) / LIVE.childLines);
   }
 
   // The death scene's axes: straight lines through the centre, the longer
@@ -1098,11 +1310,28 @@ function figure() {
     for (const [half, angle, share] of [[0, d.angle, 1], [1, d.angle + Math.PI, LIVE.deathBack]]) {
       const id = d.id + half / 2;
       const e = add(angle, d.length * share * g * breath(breathing(d.breathe)) * (1 + pokedAt(id, clock)), 1, g, id);
-      rays.push({ id, angle, length: e.length, root: false });
+      rays.push({ id, angle, length: e.length, root: false, ...centre });
     }
   }
   live.rays = rays;
-  return { edges, size: Math.min(1, size) };
+  return { edges, size: Math.min(1, size), cores };
+}
+
+// Where the layered growth's first-generation cores sprouted, by core: the
+// tip of the axis they grew from, kept while they stand.
+const sprouts = new Map();
+
+// The tip of the axis out of the centre nearest (x, y), or the centre.
+function nearestTip(rays, x, y) {
+  const [cx, cy] = AXES.centre;
+  let best = [cx, cy], dist = Infinity;
+  for (const r of rays) {
+    if (r.origin !== "centre" || !r.root || r.length < 20) continue;
+    const tx = cx + r.length * Math.cos(r.angle), ty = cy + r.length * Math.sin(r.angle);
+    const d = Math.hypot(tx - x, ty - y);
+    if (d < dist) [best, dist] = [[tx, ty], d];
+  }
+  return best;
 }
 
 // ---- Drawing -----------------------------------------------------------------------------
@@ -1271,6 +1500,89 @@ function drawClusters() {
   }
 }
 
+// The space three axes span (`vectors`, from the point `origin` they leave,
+// in world px) on the context `l`, in its fill style, at the plane's light
+// `alpha`: the box with a corner there and its edges along them, as glass. Each
+// pair of opposite faces is filled at its share LIVE.boxFaces of the light,
+// added where faces lie over each other, so that the box shows its depth;
+// its twelve edges are stroked in `edgeStyle`.
+function drawBox(l, origin, vectors, alpha, edgeStyle) {
+  const at = (...vs) => vs.reduce(([x, y], [vx, vy]) => [x + vx, y + vy], origin);
+  const [a, b, c] = vectors;
+  l.save();
+  l.globalCompositeOperation = "lighter";
+  [[a, b, c], [b, c, a], [a, c, b]].forEach(([u, v, w], k) => {
+    l.globalAlpha = Math.min(1, alpha * LIVE.boxFaces[k]);
+    for (const shift of [[], [w]]) {
+      const corners = [at(...shift), at(...shift, u), at(...shift, u, v), at(...shift, v)];
+      l.beginPath();
+      corners.forEach(([x, y], n) => (n ? l.lineTo(x, y) : l.moveTo(x, y)));
+      l.closePath();
+      l.fill();
+    }
+  });
+  // Each edge runs along one axis from a corner the other two span.
+  l.globalAlpha = Math.min(1, alpha * LIVE.boxEdge / LIVE.planeAlpha);
+  l.strokeStyle = edgeStyle;
+  l.lineWidth = LIVE.boxEdgeWidth;
+  l.beginPath();
+  for (const [d, u, v] of [[a, b, c], [b, a, c], [c, a, b]]) {
+    for (const from of [[], [u], [v], [u, v]]) {
+      const [x0, y0] = at(...from), [x1, y1] = at(...from, d);
+      l.moveTo(x0, y0);
+      l.lineTo(x1, y1);
+    }
+  }
+  l.stroke();
+  l.restore();
+}
+
+// The oil film the planes are filled with, as a repeating pattern.
+let filmPattern = null;
+
+// A seamless tile of the film's colours: its thickness is a sum of waves
+// that each fit a whole number of times across the tile, warped by more
+// such waves into swirls, and turned into the colour a thin film reflects.
+// Fixed phases make every view draw the same film.
+function filmTile() {
+  const N = 256, TAU = 2 * Math.PI;
+  const tile = document.createElement("canvas");
+  tile.width = tile.height = N;
+  const g = tile.getContext("2d"), image = g.createImageData(N, N);
+  const [thin, thick] = LIVE.filmThickness;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N;
+      const wu = u + 0.12 * Math.sin(TAU * (u + 2 * v) + 1.3);
+      const wv = v + 0.12 * Math.sin(TAU * (2 * u - v) + 4.1);
+      const h = 0.5 * Math.sin(TAU * (wu + wv) + 0.7) + 0.3 * Math.sin(TAU * (2 * wu - wv) + 2.9)
+        + 0.2 * Math.sin(TAU * (3 * wv - wu) + 5.2);
+      const d = thin + (thick - thin) * (0.5 + 0.5 * h);
+      const i = 4 * (y * N + x);
+      [650, 530, 450].forEach((lambda, c) => {
+        const film = 0.5 + 0.5 * Math.cos(4 * Math.PI * 1.45 * d / lambda);
+        image.data[i + c] = Math.round(255 * (1 - LIVE.filmTint * (1 - film)));
+      });
+      image.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(image, 0, 0);
+  return tile;
+}
+
+// The film at the live clock, in world coordinates, for the context `c`.
+function filmAt(c, clock) {
+  if (!filmPattern) filmPattern = c.createPattern(filmTile(), "repeat");
+  const [cx, cy] = AXES.centre;
+  const s = LIVE.filmScale / 256;
+  filmPattern.setTransform(new DOMMatrix()
+    .translateSelf(cx + LIVE.filmFlow[0] * clock, cy + LIVE.filmFlow[1] * clock)
+    .rotateSelf(LIVE.filmTurn * clock)
+    .translateSelf(-cx, -cy)
+    .scaleSelf(s, s));
+  return filmPattern;
+}
+
 function drawLive({ level, share }) {
   const clock = live.clock;
   const ending = endingOf(clock);
@@ -1283,7 +1595,7 @@ function drawLive({ level, share }) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     return;
   }
-  const { edges, size } = figure();
+  const { edges, size, cores } = figure();
   const [cx, cy] = AXES.centre;
   const phase = 2 * Math.PI * live.now / AXES.pulsePeriod;
   const pull = tweenAt(live.regrow, clock);
@@ -1342,7 +1654,7 @@ function drawLive({ level, share }) {
           g.fillStyle = fl.fillStyle = css(WHITE.map((v) => v * (1 - (1 - Math.min(1, lit)) * LIVE.chrome)));
         }
       }
-      hubWidth += w0;
+      if (e.hub) hubWidth += w0;
       if (sharp) {
         const thin = Math.min(1, (w0 + w1) / 2 / minLine);
         c.globalAlpha = thin;
@@ -1360,14 +1672,20 @@ function drawLive({ level, share }) {
     // The planes the flashes light, spanned by their axes as they stand now
     // and widened with the network in the ending.
     const raysById = new Map(live.rays.map((r) => [r.id, r]));
-    c.fillStyle = g.fillStyle = pl.fillStyle = base;
+    c.fillStyle = g.fillStyle = base;
+    pl.fillStyle = live.film ? filmAt(pl, clock) : base;
     for (const f of live.planes) {
       const alpha = Math.min(1, LIVE.planeAlpha * f.strength * Math.exp(-(clock - f.start) / f.fade));
       const rays = f.rays.map((id) => raysById.get(id)).filter(Boolean);
       if (alpha < 0.004 || rays.length < 2) continue;
-      const corners = spanned(rays.map((r) => [r.length * Math.cos(r.angle), r.length * Math.sin(r.angle)]))
-        .map(([x, y]) => [cx + x * fill, cy + y * fill]);
-      for (const [l, a] of [[pl, alpha], [g, alpha * LIVE.planeGlow]]) {
+      const vectors = rays.map((r) => [r.length * Math.cos(r.angle) * fill, r.length * Math.sin(r.angle) * fill]);
+      // The point its axes leave, widened with the network.
+      const ox = cx + (rays[0].ox - cx) * fill, oy = cy + (rays[0].oy - cy) * fill;
+      const corners = spanned(vectors).map(([x, y]) => [ox + x, oy + y]);
+      // A box is drawn as glass; its glow, like a plane's, fills its outline.
+      if (vectors.length === 3) drawBox(pl, [ox, oy], vectors, alpha, base);
+      const fills = vectors.length === 3 ? [[g, alpha * LIVE.planeGlow]] : [[pl, alpha], [g, alpha * LIVE.planeGlow]];
+      for (const [l, a] of fills) {
         l.globalAlpha = a;
         l.beginPath();
         corners.forEach(([x, y], k) => (k ? l.lineTo(x, y) : l.moveTo(x, y)));
@@ -1443,25 +1761,37 @@ function drawLive({ level, share }) {
   // The growth scene's core: white light at the centre the axes grow out
   // of, fading without an edge, larger and brighter as the network grows,
   // with a wide halo lighting the wall, and the heart where the lines
-  // merge.
+  // merge. In the layered growth it gives way to the generations' cores,
+  // each glowing with a halo of its own.
   const core = metal * pull;
   if (core > 0.002) {
     const swell = 1 + LIVE.coreVoice * level + LIVE.coreFlash * Math.min(2, blaze);
-    const r = between(() => grownNow ** LIVE.coreCurve, LIVE.coreRadius) * fill * swell;
-    const halo = between(() => grownNow, LIVE.haloRadius) * fill * swell;
-    // A radial glow in white, its stops [t, alpha].
-    const glowAt = (radius, stops, alpha) => {
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    const keep = live.layered ? 1 - (1 - LIVE.centreKeep) * ease(share / LIVE.centreFade) : 1;
+    const r = between(() => grownNow ** LIVE.coreCurve, LIVE.coreRadius) * fill * swell * keep;
+    const halo = between(() => grownNow, LIVE.haloRadius) * fill * swell * keep;
+    // A radial glow in white about (x, y), its stops [t, alpha].
+    const glowAt = (x, y, radius, stops, alpha) => {
+      if (radius < 1 || x + radius < VIEW.x || x - radius > VIEW.x + VIEW.w) return;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
       for (const [t, a] of stops) grad.addColorStop(t, `rgba(255,255,255,${a})`);
       ctx.globalAlpha = Math.min(1, alpha);
       ctx.fillStyle = grad;
-      ctx.fillRect(cx - radius, cy - radius, 2 * radius, 2 * radius);
+      ctx.fillRect(x - radius, y - radius, 2 * radius, 2 * radius);
     };
+    const haloStops = [[0, 1], [0.25, 0.55], [0.6, 0.15], [1, 0]];
+    const coreStops = [[0, 0.8], [0.25, 0.55], [0.6, 0.18], [1, 0]];
+    const flashed = 1 + LIVE.haloFlash * Math.min(2, blaze);
     ctx.globalCompositeOperation = "lighter";
-    glowAt(halo, [[0, 1], [0.25, 0.55], [0.6, 0.15], [1, 0]],
-      between(() => grownNow, LIVE.haloAlpha) * (1 + LIVE.haloFlash * Math.min(2, blaze)) * core);
-    glowAt(r, [[0, 0.8], [0.25, 0.55], [0.6, 0.18], [1, 0]],
-      between(() => grownNow, LIVE.coreGlow) * core);
+    glowAt(cx, cy, halo, haloStops, between(() => grownNow, LIVE.haloAlpha) * flashed * core);
+    glowAt(cx, cy, r, coreStops, between(() => grownNow, LIVE.coreGlow) * core);
+    for (const c of cores) {
+      const x = cx + (c.x - cx) * fill, y = cy + (c.y - cy) * fill;
+      if (c.lit < 0.002) continue;
+      glowAt(x, y, between(() => grownNow, LIVE.childHalo) * fill * swell * c.lit, haloStops,
+        between(() => grownNow, LIVE.childHaloAlpha) * flashed * core * c.lit);
+      glowAt(x, y, between(() => grownNow, LIVE.childCore) * fill * swell * c.lit, coreStops,
+        between(() => grownNow, LIVE.childGlow) * core * c.lit);
+    }
     // The heart: out to the radius where the lines' widths fill the
     // circumference they cross, they overlap into one light. Its light
     // falls off as a bell curve with no rim.
@@ -1474,7 +1804,7 @@ function drawLive({ level, share }) {
         const x = t * reach / (LIVE.heartWidth * merged);
         stops.push([t, k === 12 ? 0 : Math.exp(-x * x)]);
       }
-      glowAt(reach, stops, core);
+      glowAt(cx, cy, reach, stops, core);
     }
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
@@ -1489,6 +1819,16 @@ function drawLive({ level, share }) {
     ctx.globalAlpha = 1;
   }
   drawClusters();
+  // The inversion's negative: every pixel turned to its opposite, white
+  // lines and core black, the black wall white.
+  if (ending.inverted) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = "difference";
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-over";
+  }
 }
 
 // ---- Loading and modes ---------------------------------------------------------------------
@@ -1600,9 +1940,12 @@ function runLive() {
     return;
   }
   addEventListener("keydown", onKey);
-  // Letting go of T ends the strikes, the cascade with them.
+  // Letting go of E ends the inversion; letting go of T ends the strikes,
+  // the cascade with them.
   addEventListener("keyup", (e) => {
-    if (keyCode(e) !== "KeyT" || !live.striking) return;
+    const code = keyCode(e);
+    if (code === "KeyE") live.inverting = false;
+    if (code !== "KeyT" || !live.striking) return;
     live.striking = false;
     live.cascades = [];
   });

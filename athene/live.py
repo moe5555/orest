@@ -15,13 +15,14 @@ STRIP_FPS frames a second): drawing from an image costs the browser far less
 than fetching a video's picture. Both are cut once into athene/out/live/clips/.
 
 Athene is drawn in a 9:1 world, in two views: the 16:9 wall, its middle
-section, and the 9:1 strip, all of it. The wall's page conducts the
-performance; the strip's page follows it in the same browser (?follow).
-Without --obs the wall opens in the default browser, and the strip's address
-is printed for a second window. With --obs no browser opens, and three
+section, and the 9:1 strip, all of it. One page conducts the performance;
+the others follow it in the same browser (?follow). Without --obs the strip
+conducts and opens in the default browser, and the wall's address is
+printed for a second window. With --obs no browser opens, and three
 addresses are printed for three OBS Browser Sources: the operator's page
-(Regie), which conducts with the help line shown and goes out nowhere, and
-the wall and the strip, which both follow it, each sent out by a DistroAV
+(Regie), which conducts with the whole 9:1 world and the help line shown
+and goes out nowhere, and the wall and the strip, which both follow it,
+each sent out by a DistroAV
 Dedicated NDI Output filter. With --rehearsal the world is the 16:9
 frame itself, as before the strip: one page, the wall, with the clusters
 across it.
@@ -234,25 +235,31 @@ def main():
     res = f"&res={args.res:g}" if args.res else ""
     wall = f"{url}&view=wall{res}"
     strip = f"{url}&view=strip&follow{res}"
-    # In OBS the operator's page (Regie) conducts: it shows the help line,
-    # takes the keys and plays the voices, and has no NDI output. The wall
-    # follows it like the strip, so neither output shows or takes anything
-    # of the operator's.
-    regie = f"{url}&view=wall"
-    if args.obs:
+    # In OBS the operator's page (Regie) conducts: it shows the whole 9:1
+    # world with the help line, takes the keys and plays the voices, and has
+    # no NDI output. The wall follows it like the strip, so neither output
+    # shows or takes anything of the operator's.
+    regie = f"{url}&view=strip"
+    # In rehearsal the strip conducts, so the whole 9:1 world is seen on one
+    # monitor; the wall follows it.
+    rehearsing = f"{url}&view=strip{res}"
+    if args.obs or not args.rehearsal:
         wall += "&follow"
     print(f"{len(voices)} voice clips, {len(clips)} cluster clips")
     if args.obs:
-        print(f"regie (16:9, 1280 x 720, conducts, no NDI): {regie}")
-    role = "follows" if args.obs else "conducts"
+        print(f"regie (9:1, 1920 x 213, conducts, no NDI): {regie}")
     if args.rehearsal:
+        role = "follows" if args.obs else "conducts"
         print(f"wall  (16:9, 3840 x 2160, the whole world, {role}): {wall}")
-    else:
-        print(f"wall  (16:9, 3840 x 2160, {role}): {wall}")
+    elif args.obs:
+        print(f"wall  (16:9, 3840 x 2160, follows): {wall}")
         print(f"strip (9:1, 3840 x 427, follows): {strip}")
+    else:
+        print(f"strip (9:1, 3840 x 427, conducts): {rehearsing}")
+        print(f"wall  (16:9, 3840 x 2160, follows): {wall}")
     print("Ctrl+C to stop")
     if not args.obs:
-        webbrowser.open(wall)
+        webbrowser.open(wall if args.rehearsal else rehearsing)
     try:
         while True:
             time.sleep(1)
