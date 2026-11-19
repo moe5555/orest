@@ -5,8 +5,8 @@ with the voice clips of the scenes and the clip groups of the clusters, and
 opens it in the browser. Each voice clip is analysed once (athene/analyse.py)
 and the analysis kept next to the others in athene/out/live/; it is redone
 when the clip is newer. Whisper finds the last "von null auf eins" a clip
-says, kept and redone the same way; the page blinks the growth scene's zero
-into a one on its words. The clusters play the clips of the clip groups
+says, kept and redone the same way; the page times the growth scene's ending
+so that its finale strobes from the "eins". The clusters play the clips of the clip groups
 (athene/render.py's CLIP_GROUPS: the death scene rehearsals and the end
 videos), mixed by the page, as small looping videos without sound, CLIP_WIDTH
 px wide. The strip, where hundreds of clips stand at once, each at most
@@ -18,9 +18,11 @@ Athene is drawn in a 9:1 world, in two views: the 16:9 wall, its middle
 section, and the 9:1 strip, all of it. The wall's page conducts the
 performance; the strip's page follows it in the same browser (?follow).
 Without --obs the wall opens in the default browser, and the strip's address
-is printed for a second window. With --obs no browser opens, and the two
-addresses are printed for two OBS Browser Sources, each sent out by a
-DistroAV Dedicated NDI Output filter. With --rehearsal the world is the 16:9
+is printed for a second window. With --obs no browser opens, and three
+addresses are printed for three OBS Browser Sources: the operator's page
+(Regie), which conducts with the help line shown and goes out nowhere, and
+the wall and the strip, which both follow it, each sent out by a DistroAV
+Dedicated NDI Output filter. With --rehearsal the world is the 16:9
 frame itself, as before the strip: one page, the wall, with the clusters
 across it.
 
@@ -32,8 +34,7 @@ across it.
 Keys on the page: N next scene, B previous, Space restart the scene, P play
 or stop the scene's next voice clip, C a cluster in the death scene, E the
 ending, S the strobe, L automatic or manual strikes and T (held) the manual
-strikes in the growth scene, 0 the zero turning into a one at its end, H the
-help line.
+strikes in the growth scene, X the cut to black at its end, H the help line.
 """
 
 import argparse
@@ -70,7 +71,7 @@ AUDIO = (".mp3", ".wav", ".flac", ".m4a")
 ZERO_TO_ONE = (("von",), ("null", "0"), ("auf",), ("eins", "1"))
 WHISPER = "large-v3-turbo"
 # Seconds within which a word's start moves to the voice's nearest syllable
-# onset (analyse.py), so that a blink falls on the word's audible attack.
+# onset (analyse.py), so that the finale's strobe starts on the word's audible attack.
 SNAP = 0.2
 
 
@@ -194,7 +195,7 @@ def main():
     parser.add_argument("--res", type=float, help="drawing resolution as a share of the view's full size (default: fitted to the screen)")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--obs", action="store_true",
-                        help="open no browser; print the addresses of the two OBS Browser Sources")
+                        help="open no browser; print the addresses of the three OBS Browser Sources (Regie, wall, strip)")
     parser.add_argument("--rehearsal", action="store_true",
                         help="the 16:9 world as before the strip: one page, the wall, no strip")
     args = parser.parse_args()
@@ -228,20 +229,27 @@ def main():
 
     server = render.serve(table, args.port)
     url = f"http://127.0.0.1:{server.server_address[1]}/?design={DESIGN}&mode=live"
-    if args.res:
-        url += f"&res={args.res:g}"
     if args.rehearsal:
         url += "&rehearsal"
-    # The wall conducts; in OBS its help line would go out to the wall, so it
-    # starts hidden there (H shows it).
-    wall = f"{url}&view=wall" + ("&hint=0" if args.obs else "")
-    strip = f"{url}&view=strip&follow"
+    res = f"&res={args.res:g}" if args.res else ""
+    wall = f"{url}&view=wall{res}"
+    strip = f"{url}&view=strip&follow{res}"
+    # In OBS the operator's page (Regie) conducts: it shows the help line,
+    # takes the keys and plays the voices, and has no NDI output. The wall
+    # follows it like the strip, so neither output shows or takes anything
+    # of the operator's.
+    regie = f"{url}&view=wall"
+    if args.obs:
+        wall += "&follow"
     print(f"{len(voices)} voice clips, {len(clips)} cluster clips")
+    if args.obs:
+        print(f"regie (16:9, 1280 x 720, conducts, no NDI): {regie}")
+    role = "follows" if args.obs else "conducts"
     if args.rehearsal:
-        print(f"wall  (16:9, 3840 x 2160, the whole world): {wall}")
+        print(f"wall  (16:9, 3840 x 2160, the whole world, {role}): {wall}")
     else:
-        print(f"wall  (16:9, 3840 x 2160, conducts): {wall}")
-        print(f"strip (9:1, 3840 x 427, follows):    {strip}")
+        print(f"wall  (16:9, 3840 x 2160, {role}): {wall}")
+        print(f"strip (9:1, 3840 x 427, follows): {strip}")
     print("Ctrl+C to stop")
     if not args.obs:
         webbrowser.open(wall)

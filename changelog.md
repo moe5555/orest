@@ -6,6 +6,54 @@ referenced below.
 
 ---
 
+## 2026-11-19 — Athene in OBS: a Regie page conducts, the keys work in Interact
+
+At Moe's request, concerning the show chain of Athene (PC → OBS → NDI →
+QLab, `athene/README.md`). Setting up `athene.live --obs`, the keys did
+nothing in OBS's Interact window: a key test page showed that the window
+sends `key="a"` with `code=""`, and the page matched keys by `code` only.
+The page now derives the code from the key's character when it is empty
+(`keyCode` in `athene/page/designs/rehearsal.js`), for all keys and T's
+release.
+
+So that the help line and the keys never reach an output, `--obs` now
+prints three addresses: Athene Regie (`view=wall`, 1280 × 720, help line
+shown, conducts, plays the voices, no NDI output), and the wall
+(`view=wall&follow`, 3840 × 2160) and the strip (`view=strip&follow`,
+3840 × 427), both following Regie, each with a Dedicated NDI Output. The
+wall no longer gets `&hint=0`; `--res` applies to the two outputs only.
+Without `--obs` nothing changes: the wall conducts in the default browser.
+
+Not yet checked in OBS: that the three sources reach each other over the
+BroadcastChannel, whether a source OBS does not show keeps drawing, and the
+resolution the dedicated outputs send.
+
+---
+
+## 2026-11-19 — Athene growth scene: a strobe finale and a cut to black in place of the zero → one
+
+At Moe's request, the growth scene no longer ends in a zero that blinks into
+a one. The explosion still runs its 6 s and rises to a white wall over its
+last 1.5 s; at that height the whole view strobes, all white and all black
+in turn, 12.5 cycles a second (`LIVE.finaleRate` in
+`athene/page/designs/rehearsal.js`; two frames white, two black at 50 fps),
+until the new key **X** cuts it to black. The network is not drawn and stops
+growing in the finale; Space, N or B grow it back out of the centre as
+before. The strobe's phase follows the performance's clock, so the strip
+strobes in step with the wall.
+
+Gone with it: the white hold, the collapse into the centre, the zero, its
+blinks and key 0. The last voice clip still ends the scene by itself: the
+ending now begins 6 s before the "Eins" of "Von Null auf Eins", so the
+strobe starts on the word (`athene/live.py` still finds the sentence).
+`athene/README.md`, `PERFORMANCE.md` and the help line (X: SCHWARZ) follow.
+
+Checked headless (Edge, wall and strip): from 6 s after E the wall
+alternates white and black every 2–3 frames at 60 fps, about 12.5 cycles a
+second; after X both views are black; Space regrows the network. No errors.
+
+---
+
 ## 2026-10-22 — Athene live: `--rehearsal`, the 16:9 Athene as before the strip
 
 At Moe's request, `python -m athene.live --rehearsal` brings back Athene as

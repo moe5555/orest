@@ -27,10 +27,8 @@
                       rare for long and crowding in at the end (S: the full
                       strobe); some flashes light the plane two or three
                       axes span. E ends it: the network explodes in a
-                      flickering strobe until it fills the wall, is sucked
-                      into the centre like a star into a black hole, and a
-                      zero opens out of it; 0 makes the zero blink four
-                      times and come back as a one.
+                      flickering strobe until it fills the wall with white
+                      light, which holds (X: black at once).
 
    Keys: N next scene, B previous scene, Space restart the scene, P play the
    scene's next voice clip (or stop the one playing), H show or hide the
@@ -165,20 +163,23 @@ const LIVE = {
   boltRate: [0.15, 8], pulseRate: [0.2, 3.5], pulseDepth: [0, 0.9], hectic: 1.5,
   // Ending: for `explode` seconds the network explodes, the strobe on and
   // `explodeBolts` bolts per second, its growth sped up to `explodeGrowth`
-  // times and its size rising to `explodeSize` times. Then within `collapse`
-  // seconds it is sucked into the centre, faster and faster, the parts near
-  // the centre first and turning up to `swirl` radians. The zero opens
-  // within `ringGrow` seconds as it vanishes.
+  // times and its size rising to `explodeSize` times.
   // While it explodes, the flickering glow floods the wall through a wide
   // wash (`explodeWash` times, blurred `washBlur` px at a sixteenth of the
   // resolution), and the sharp lines fade out, leaving the glow. Over its
-  // last `whiteRise` seconds the light rises to a white wall, which holds for
-  // `whiteHold` seconds before the collapse and fades over its first
-  // `whiteFade` seconds.
+  // last `whiteRise` seconds the light rises to a white wall. Then the
+  // finale takes the whole view (`finale`, or ?finale=): "white" holds the
+  // white wall; "blinks" breaks it with black blinks at irregular gaps, and
+  // black takes over within `finaleSpan` seconds. Each stretch of white and
+  // each blink lasts a random time in a range that moves from its first to
+  // its last value over the span (geometrically, so the middle is as long as
+  // the two ends' mean in proportion): the white from long to flickers, the
+  // blinks from an eye's blink to long darkness. X cuts to black at any
+  // time.
   explode: 6, explodeBolts: 14, explodeGrowth: 25, explodeSize: 2.2,
   explodeWash: 3, washBlur: 14,
-  whiteRise: 1.5, whiteHold: 4, whiteFade: 0.8,
-  collapse: 3.5, swirl: 4, ringGrow: 3,
+  whiteRise: 1.5, finale: "white", finaleSpan: 20,
+  finaleWhite: [[0.8, 2.5], [0.03, 0.1]], finaleBlack: [[0.04, 0.1], [0.8, 2.5]],
   // Strobe: flashes of the glow at irregular gaps (s), of random strength,
   // each fading with a time constant (s); between flashes the glow sinks to
   // `strobeBase` of its strength.
@@ -263,23 +264,6 @@ const LIVE = {
   bandLength: 520, bandWarp: 2.5, bandFlow: 0.15, bandDepth: 0.5,
   lightTurn: 0.04, glintAngle: 1.9, glintPower: [40, 80], glintSecond: 0.5, glintBase: 0.45,
   flashGlint: 0.8, metalStops: 12,
-  // The growth scene's ending opens a zero, drawn as a line like the
-  // network's, in the proportions of a sans-serif typeface: `digitHeight` px
-  // high, measured to the line's middle, and the line `digitWidth` px wide.
-  // The zero is a superellipse (exponent `digitRound`, between an ellipse
-  // and a rectangle) `digitAspect` of the height wide. The one is a stem as
-  // high whose flag reaches `digitFlag` of the height to the left and down.
-  // The digits stay crisp: they light the
-  // glow at only `digitGlow` of their strength. Key 0 makes the zero blink
-  // `blinks` times (`blinkOff` dark, `blinkOn` lit, in seconds); it comes
-  // back from the last blink as a one. A voice clip saying "von null auf
-  // eins" (found by athene/live.py) ends the scene by itself: the ending
-  // begins so that the zero has stood fully open for `zeroHold` seconds when
-  // the sentence comes, and the zero blinks on its four words: dark
-  // `blinkOff` before each word, at most `blinkGap` of the time since the
-  // word before, and lit again on the word, as a one on "eins".
-  digitHeight: 620, digitWidth: 46, digitAspect: 0.68, digitRound: 2.4, digitFlag: [0.3, 0.22], digitGlow: 0.1,
-  blinks: 4, blinkOff: 0.2, blinkOn: 0.35, blinkGap: 0.5, zeroHold: 2,
   // Manual strikes (from the start; L switches to automatic and back): the
   // strobe's own flashes and plane strikes stop, and holding T fires strikes `strikeGap` seconds
   // apart, each flashing the glow and lighting a plane (or beginning a
@@ -463,8 +447,9 @@ const live = {
   still: false,         // the death scene has come to rest
   nextClip: 0,          // the next clip to use in this run of the death scene
   regrow: tween(1),     // the network growing back out of the centre after the ending
-  ring: tween(0),
   endAt: null,          // the clock when E was pressed
+  black: false,         // the finale cut to black (X)
+  finale: null,         // the finale's blinks on the clock, if it blinks: {blinks: [{dark, on}], end (black from then on)}
   strobe: false,
   flashes: [],          // the strobe's flashes: {start, strength, fade}
   nextFlash: 0,
@@ -474,7 +459,6 @@ const live = {
   nextStrike: 0,        // the clock of the next strike while T is held
   planes: [],           // the planes lit: {start, strength, fade, rays}
   cascades: [],         // strikes in succession: {anchor, used, left, next}
-  blinks: null,         // the zero's blinks on the clock: [{dark, on}], the last lit again as a one
   queue: 0,             // the scene's next voice clip
   voice: null,          // {audio, analysis, last, zeroToOne}
   rays: [],             // the rays of the last frame: {id, angle, length, root}
@@ -507,13 +491,13 @@ function enter(k) {
   live.still = false;
   live.growthMode = scene.growing ? "restart" : "rewind";
   if (live.endAt !== null) {
-    // The network was sucked into the centre: it grows back out of it.
+    // The network ended in the finale: it grows back out of the centre.
     live.growth = 0;
     live.regrow = { from: 0, to: 1, start: live.clock, dur: 2 };
-    tweenTo(live.ring, 0, 1, live.clock);
   }
   live.endAt = null;
-  live.blinks = null;
+  live.black = false;
+  live.finale = null;
   live.strobe = false;
   live.planes = [];
   live.cascades = [];
@@ -655,50 +639,43 @@ function stopVideo(video) {
   video.load();
 }
 
-// Seconds from the start of the ending until the zero begins to open.
-function ringDelay() {
-  return LIVE.explode + LIVE.whiteHold + 0.85 * LIVE.collapse;
-}
-
 function endScene() {
   if (!sceneOf().growing || live.endAt !== null) return;
   live.endAt = live.clock;
+  live.finale = (params.get("finale") || LIVE.finale) === "blinks" ? finaleBlinks(live.clock + LIVE.explode) : null;
   live.strobe = true;
   live.flashes = [];
   live.nextFlash = live.clock;
-  tweenTo(live.ring, 1, LIVE.ringGrow, live.clock, ringDelay());
   showHint();
 }
 
-// The growth scene's zero starts to blink in its own rhythm, once it has
-// opened.
-function blinkDigit() {
-  if (!sceneOf().growing || live.blinks) return;
-  if (tweenAt(live.ring, live.clock) < 0.5) return;
-  const cycle = LIVE.blinkOff + LIVE.blinkOn;
-  live.blinks = Array.from({ length: LIVE.blinks }, (_, k) => ({
-    dark: live.clock + k * cycle,
-    on: live.clock + k * cycle + LIVE.blinkOff,
-  }));
+// The finale's blinks from `start` on the clock: white and black in turn,
+// the white shortening and the blinks lengthening over LIVE.finaleSpan
+// seconds, after which it stays black.
+function finaleBlinks(start) {
+  const length = ([first, last], p) =>
+    between(Math.random, [first[0] * (last[0] / first[0]) ** p, first[1] * (last[1] / first[1]) ** p]);
+  const blinks = [];
+  let t = start;
+  for (;;) {
+    t += length(LIVE.finaleWhite, Math.min(1, (t - start) / LIVE.finaleSpan));
+    if (t - start >= LIVE.finaleSpan) break;
+    const dark = t;
+    t += length(LIVE.finaleBlack, Math.min(1, (t - start) / LIVE.finaleSpan));
+    if (t - start >= LIVE.finaleSpan) {
+      t = dark;
+      break;
+    }
+    blinks.push({ dark, on: t });
+  }
+  return { blinks, end: t };
+}
+
+// Cuts the ending to black, from the explosion or the finale's strobe.
+function cutToBlack() {
+  if (!sceneOf().growing || live.endAt === null || live.black) return;
+  live.black = true;
   showHint();
-}
-
-// The zero blinks on the words of "von null auf eins", their starts on the
-// live clock.
-function blinkOnWords(words) {
-  live.blinks = words.map((on, k) => ({
-    dark: on - (k ? Math.min(LIVE.blinkOff, LIVE.blinkGap * (on - words[k - 1])) : LIVE.blinkOff),
-    on,
-  }));
-}
-
-// The digit the growth scene ends with at the live clock: "0", "1", or
-// null while it is dark in a blink.
-function digitAt(clock) {
-  if (!live.blinks) return "0";
-  const next = live.blinks.find((b) => clock < b.on);
-  if (!next) return "1";
-  return clock >= next.dark ? null : "0";
 }
 
 // The rays a plane can be spanned by.
@@ -762,20 +739,34 @@ function strikeCascades() {
   live.cascades = live.cascades.filter((c) => c.left > 0);
 }
 
-// The ending at the live clock: how far the explosion and the collapse have
-// come, each 0 to 1, and how white the wall is between them, 0 to 1.
+// The ending at the live clock: how far the explosion has come and how
+// white the wall is, each 0 to 1, and whether the finale has taken over the
+// view (`over`: white, blinking, or black). The finale's blinks stand on
+// the clock and reach followers with the state, so every view blinks in
+// step.
 function endingOf(clock) {
-  if (live.endAt === null) return { explode: 0, white: 0, collapse: 0 };
+  if (live.endAt === null) return { explode: 0, white: 0, over: false, black: false };
   const x = clock - live.endAt;
-  const collapseAt = LIVE.explode + LIVE.whiteHold;
-  const white = x < collapseAt
-    ? ease((x - (LIVE.explode - LIVE.whiteRise)) / LIVE.whiteRise)
-    : 1 - ease((x - collapseAt) / LIVE.whiteFade);
+  const finale = x >= LIVE.explode;
+  const blinks = live.finale;
+  const black = live.black || (finale && blinks !== null && clock >= blinks.end);
+  const white = finale
+    ? (blinks && blinks.blinks.some((b) => clock >= b.dark && clock < b.on) ? 0 : 1)
+    : ease((x - (LIVE.explode - LIVE.whiteRise)) / LIVE.whiteRise);
   return {
     explode: Math.min(1, x / LIVE.explode),
-    white,
-    collapse: Math.min(1, Math.max(0, (x - collapseAt) / LIVE.collapse)),
+    white: black ? 0 : white,
+    over: finale || black,
+    black,
   };
+}
+
+// The key's code, or where the browser leaves it empty (OBS's Interact
+// window does), the code derived from the key's character.
+function keyCode(e) {
+  if (e.code) return e.code;
+  if (e.key === " ") return "Space";
+  return /^[a-z]$/i.test(e.key) ? `Key${e.key.toUpperCase()}` : "";
 }
 
 function onKey(e) {
@@ -799,8 +790,7 @@ function onKey(e) {
       live.striking = true;
       live.nextStrike = live.clock;
     },
-    Digit0: blinkDigit,
-    Numpad0: blinkDigit,
+    KeyX: cutToBlack,
     KeyS: () => {
       if (!sceneOf().growing) return;
       live.strobe = !live.strobe;
@@ -810,9 +800,10 @@ function onKey(e) {
     },
     KeyH: () => { live.hint = !live.hint; showHint(); },
   };
-  if (keys[e.code]) {
+  const code = keyCode(e);
+  if (keys[code]) {
     e.preventDefault();
-    keys[e.code]();
+    keys[code]();
   }
 }
 
@@ -827,11 +818,10 @@ function showHint() {
     parts.push(`C: CLUSTER (${clustersLeft() ? `NOCH ${clustersLeft()}` : "KEINE MEHR"})`);
   }
   if (scene.growing) {
-    const voiceEnds = live.voice && live.voice.zeroToOne && live.endAt === null;
-    parts.push(voiceEnds ? "ENDE MIT DER STIMME (E: SOFORT)" : "E: ENDE", `S: STROBO ${live.strobe ? "AN" : "AUS"}`,
+    parts.push("E: ENDE", `S: STROBO ${live.strobe ? "AN" : "AUS"}`,
       `L: BLITZE ${live.manual ? "MANUELL" : "AUTOMATISCH"}`);
     if (live.manual) parts.push("T: BLITZ (HALTEN)");
-    if (live.endAt !== null) parts.push(live.voice && live.voice.zeroToOne ? "NULL ZU EINS MIT DER STIMME" : "0: NULL ZU EINS");
+    if (live.endAt !== null) parts.push(live.black ? "SCHWARZ" : "X: SCHWARZ");
   }
   parts.push("N: WEITER", "B: ZURÜCK", "LEERTASTE: NEUSTART", "H: HILFE");
   hint.textContent = parts.join(" \\ ");
@@ -862,8 +852,10 @@ function update(dt) {
   live.now += motion * dt * (scene.growing ? 1 + LIVE.hectic * grownSoFar ** 2 : 1);
 
   const ending = endingOf(live.clock);
-  if (live.growthMode === "run") live.growth += dt * (1 + (LIVE.explodeGrowth - 1) * ease(ending.explode));
-  else {
+  if (live.growthMode === "run") {
+    // The network is not drawn in the finale, and stops growing.
+    if (!ending.over) live.growth += dt * (1 + (LIVE.explodeGrowth - 1) * ease(ending.explode));
+  } else {
     live.growth *= Math.exp(-dt / LIVE.rewind);
     if (live.growth < 0.05) {
       live.growth = 0;
@@ -872,19 +864,6 @@ function update(dt) {
   }
 
   const heard = listen();
-  // A voice clip saying "von null auf eins" ends the scene: the ending
-  // begins in time for the zero to stand open `zeroHold` seconds before the
-  // first blink, and the zero blinks into a one on the words. E pressed
-  // earlier begins the ending then.
-  const words = live.voice && live.voice.zeroToOne;
-  if (words && scene.growing) {
-    const t = live.voice.audio.currentTime;
-    const first = words[0] - LIVE.blinkOff, last = words[words.length - 1];
-    if (live.endAt === null && t >= first - LIVE.zeroHold - ringDelay() - LIVE.ringGrow && t <= last) endScene();
-    if (live.endAt !== null && !live.blinks && t >= first && t <= last) {
-      blinkOnWords(words.map((w) => live.clock + w - t));
-    }
-  }
   for (const [, strength] of heard.syllables) {
     const ray = randomRay(false);
     if (ray !== null) live.bolts.push({ start: live.clock, strength, ray, seed: Math.random() * 1000 });
@@ -913,11 +892,11 @@ function update(dt) {
     live.nextProbe = live.clock + between(Math.random, LIVE.restProbeGap);
   }
   const share = Math.min(1, scheduled(live.growth) / AXES.growthSpan);
-  if (live.endAt !== null && ending.collapse >= 1 && live.strobe) {
+  if (ending.over && live.strobe) {
     live.strobe = false;
     showHint();
   }
-  if (scene.growing && ending.collapse < 1) {
+  if (scene.growing && !ending.over) {
     // The pace of the strikes: rare for long, then crowding in towards the end.
     const pace = share ** LIVE.strikeCurve;
     const rate = live.endAt !== null ? LIVE.explodeBolts : between(() => pace, LIVE.boltRate);
@@ -973,8 +952,8 @@ function update(dt) {
     }
   }
   live.flashes = live.flashes.filter((f) => live.clock - f.start < 6 * f.fade);
-  // Once the network has collapsed, no strike outlasts it.
-  if (live.endAt !== null && ending.collapse >= 1) {
+  // No strike outlasts the network into the finale.
+  if (ending.over) {
     live.cascades = [];
     live.striking = false;
   }
@@ -1211,36 +1190,14 @@ function edge(c, x, y, dx, dy, length, w0, w1) {
   c.fill();
 }
 
-// A point of the network at its place in the ending: widened `fill` times
-// about the centre, then drawn into it as the collapse comes on (k, 0 to 1).
-// Near the centre the collapse comes sooner and turns faster, like matter
-// falling into a black hole. Returns the point and its local scale.
-function sink(x, y, fill, k) {
+// The edges of the network at their places in the ending: widened `fill`
+// times about the centre.
+function widened(edges, fill) {
+  if (fill === 1) return;
   const [cx, cy] = AXES.centre;
-  const dx = (x - cx) * fill, dy = (y - cy) * fill;
-  if (k <= 0) return [cx + dx, cy + dy, fill];
-  const inner = 900 / (Math.hypot(dx, dy) + 900);
-  const p = Math.min(1, k * (1 + 0.8 * inner));
-  const shrink = 1 - p * p;
-  const turn = LIVE.swirl * p * p * (0.4 + inner);
-  const c = Math.cos(turn), s = Math.sin(turn);
-  return [cx + (dx * c - dy * s) * shrink, cy + (dx * s + dy * c) * shrink, fill * shrink];
-}
-
-// The edges of the network moved to their places in the ending.
-function sunk(edges, fill, k) {
-  if (fill === 1 && k <= 0) return;
   for (const e of edges) {
-    const [x0, y0] = sink(e.x, e.y, fill, k);
-    const [x1, y1, scale] = sink(e.x + e.dx * e.length, e.y + e.dy * e.length, fill, k);
-    const length = Math.hypot(x1 - x0, y1 - y0);
-    Object.assign(e, { x: x0, y: y0, dx: length > 1e-6 ? (x1 - x0) / length : e.dx, dy: length > 1e-6 ? (y1 - y0) / length : e.dy, length, widthScale: (e.widthScale || 1) * Math.max(0.15, Math.min(1, scale)) });
+    Object.assign(e, { x: cx + (e.x - cx) * fill, y: cy + (e.y - cy) * fill, length: e.length * fill });
   }
-}
-
-// Sets a layer's context to draw in world coordinates.
-function inWorld(l) {
-  l.ctx.setTransform(l.scale, 0, 0, l.scale, -l.scale * VIEW.x, -l.scale * VIEW.y);
 }
 
 // Clears a layer and sets it to draw in world coordinates, pulled towards
@@ -1262,38 +1219,6 @@ function blurInto(target, source, px) {
   target.ctx.filter = `blur(${px}px)`;
   target.ctx.drawImage(source.canvas, 0, 0, target.canvas.width, target.canvas.height);
   target.ctx.filter = "none";
-}
-
-// A digit centred on (cx, cy) at `scale` of its size, stroked in the
-// context's stroke style: the zero a superellipse, the one a stem with a
-// flag, centred on its width. Both stand LIVE.digitHeight px high, measured
-// to the line's middle.
-function drawDigit(c, digit, cx, cy, scale) {
-  const h = LIVE.digitHeight * scale / 2;
-  c.save();
-  c.lineWidth = LIVE.digitWidth * scale;
-  c.lineCap = "round";
-  c.lineJoin = "round";
-  c.beginPath();
-  if (digit === "0") {
-    const a = h * LIVE.digitAspect, power = 2 / LIVE.digitRound, steps = 180;
-    for (let k = 0; k < steps; k++) {
-      const t = 2 * Math.PI * k / steps, cos = Math.cos(t), sin = Math.sin(t);
-      const x = cx + a * Math.sign(cos) * Math.abs(cos) ** power;
-      const y = cy + h * Math.sign(sin) * Math.abs(sin) ** power;
-      if (k) c.lineTo(x, y);
-      else c.moveTo(x, y);
-    }
-    c.closePath();
-  } else {
-    const fx = 2 * h * LIVE.digitFlag[0], fy = 2 * h * LIVE.digitFlag[1];
-    const stem = cx + fx / 2;
-    c.moveTo(stem - fx, cy - h + fy);
-    c.lineTo(stem, cy - h);
-    c.lineTo(stem, cy + h);
-  }
-  c.stroke();
-  c.restore();
 }
 
 function drawClusters() {
@@ -1347,20 +1272,27 @@ function drawClusters() {
 }
 
 function drawLive({ level, share }) {
+  const clock = live.clock;
+  const ending = endingOf(clock);
+  // The finale: the whole view white or black, nothing else.
+  if (ending.over) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ending.white ? "#ffffff" : "#000000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
   const { edges, size } = figure();
   const [cx, cy] = AXES.centre;
-  const clock = live.clock;
   const phase = 2 * Math.PI * live.now / AXES.pulsePeriod;
   const pull = tweenAt(live.regrow, clock);
-  const ring = tweenAt(live.ring, clock);
-  const ending = endingOf(clock);
   const fill = 1 + (LIVE.explodeSize - 1) * ease(ending.explode);
-  sunk(edges, fill, ending.collapse);
+  widened(edges, fill);
   const hub = AXES.hub[0] + (AXES.hub[1] - AXES.hub[0]) * Math.max(0, (size - AXES.twoAxisSize) / (1 - AXES.twoAxisSize));
 
-  // How far the explosion floods the wall: all the way while it explodes,
-  // easing off as the collapse begins. The sharp lines fade out with it.
-  const flood = ease(ending.explode) * (1 - ease(2 * ending.collapse));
+  // How far the explosion floods the wall. The sharp lines fade out with it.
+  const flood = ease(ending.explode);
   const sharp = 1 - flood > 0.02;
   // How far the growth scene's look has come in: the glow shaded as metal,
   // the core in place of the hub's disc.
@@ -1384,7 +1316,7 @@ function drawLive({ level, share }) {
   // off as it moves; drawn at this width and dimmed in proportion it gives
   // the same light and moves smoothly.
   const minLine = LIVE.minLinePx / RES;
-  if (pull > 0.002 && ending.collapse < 1) {
+  if (pull > 0.002) {
     for (const e of edges) {
       const ws = e.widthScale || 1;
       const w0 = tube(e.feed) * ws, w1 = w0 * AXES.taperTip;
@@ -1426,7 +1358,7 @@ function drawLive({ level, share }) {
     }
     c.globalAlpha = 1;
     // The planes the flashes light, spanned by their axes as they stand now
-    // and moved with the network in the ending.
+    // and widened with the network in the ending.
     const raysById = new Map(live.rays.map((r) => [r.id, r]));
     c.fillStyle = g.fillStyle = pl.fillStyle = base;
     for (const f of live.planes) {
@@ -1434,7 +1366,7 @@ function drawLive({ level, share }) {
       const rays = f.rays.map((id) => raysById.get(id)).filter(Boolean);
       if (alpha < 0.004 || rays.length < 2) continue;
       const corners = spanned(rays.map((r) => [r.length * Math.cos(r.angle), r.length * Math.sin(r.angle)]))
-        .map(([x, y]) => sink(cx + x, cy + y, fill, ending.collapse));
+        .map(([x, y]) => [cx + x * fill, cy + y * fill]);
       for (const [l, a] of [[pl, alpha], [g, alpha * LIVE.planeGlow]]) {
         l.globalAlpha = a;
         l.beginPath();
@@ -1448,19 +1380,8 @@ function drawLive({ level, share }) {
       if (metal >= 1) break;
       l.globalAlpha = 1 - metal;
       l.beginPath();
-      l.arc(cx, cy, hub * fill * (1 - ending.collapse), 0, 2 * Math.PI);
+      l.arc(cx, cy, hub * fill, 0, 2 * Math.PI);
       l.fill();
-    }
-  }
-  // The zero opening out of the centre, which blinks into a one. The digits
-  // stay steady: they open with the ring and do not follow the voice.
-  const digit = digitAt(clock);
-  if (ring > 0.001 && digit) {
-    for (const l of [axesL, glowSourceL]) {
-      inWorld(l);
-      l.ctx.globalAlpha = Math.min(1, ring * 1.5) * (l === glowSourceL ? LIVE.digitGlow : 1);
-      l.ctx.strokeStyle = base;
-      drawDigit(l.ctx, digit, cx, cy, ring);
     }
   }
 
@@ -1470,24 +1391,18 @@ function drawLive({ level, share }) {
   if (flood > 0) blurInto(washL, bloomL, LIVE.washBlur * RES);
 
   // The glow strengthens as the network grows, rises with the voice, pulses
-  // ever faster in the growth scene and surges as the network explodes and
-  // is sucked into the centre.
+  // ever faster in the growth scene and surges as the network explodes.
   const grownShare = Math.min(1, share);
   const pulseDepth = sceneOf().growing ? between(() => grownShare, LIVE.pulseDepth) : 0;
-  const surge = 0.8 * ease(ending.explode) * (1 - ending.collapse) + 1.5 * Math.sin(Math.PI * ending.collapse);
+  const surge = 0.8 * ease(ending.explode);
   // The strobe flickers the glow; in the growth scene the glow rests low
   // and lives on its flashes.
   let flicker = live.strobe ? LIVE.strobeBase + blaze : 1;
   if (metal > 0) flicker += (between(() => grownNow, LIVE.strobeRest) + blaze - flicker) * metal;
   const flickering = live.strobe || metal > 0;
-  // Over the collapse the glow settles: it stops following the voice, the
-  // pulse and the strobe, so the light around the new shape is still.
-  const settle = ease(ending.collapse);
-  flicker += (1 - flicker) * settle;
-  const lift = (1 + AXES.levelGlow * level * (1 - settle))
-    * (1 + pulseDepth * (0.5 + 0.5 * Math.sin(live.pulsePhase)) * (1 - settle)) * (1 + surge) * flicker;
-  const strength = Math.max(grownShare, ring);
-  const lerp = ([a, b]) => a + (b - a) * strength;
+  const lift = (1 + AXES.levelGlow * level)
+    * (1 + pulseDepth * (0.5 + 0.5 * Math.sin(live.pulsePhase))) * (1 + surge) * flicker;
+  const lerp = ([a, b]) => a + (b - a) * grownShare;
   // A layer added `amount` times over, so the glow can rise beyond one
   // pass: brightened at its own size, then drawn onto the frame once.
   const addLayer = (l, amount) => {
@@ -1528,8 +1443,8 @@ function drawLive({ level, share }) {
   // The growth scene's core: white light at the centre the axes grow out
   // of, fading without an edge, larger and brighter as the network grows,
   // with a wide halo lighting the wall, and the heart where the lines
-  // merge. It sinks into the centre with the collapse.
-  const core = metal * (1 - ending.collapse) * pull;
+  // merge.
+  const core = metal * pull;
   if (core > 0.002) {
     const swell = 1 + LIVE.coreVoice * level + LIVE.coreFlash * Math.min(2, blaze);
     const r = between(() => grownNow ** LIVE.coreCurve, LIVE.coreRadius) * fill * swell;
@@ -1564,7 +1479,7 @@ function drawLive({ level, share }) {
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
   }
-  // The white wall between the explosion and the collapse.
+  // The white wall the explosion rises to.
   if (ending.white > 0.001) {
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = Math.min(1, ending.white);
@@ -1687,7 +1602,7 @@ function runLive() {
   addEventListener("keydown", onKey);
   // Letting go of T ends the strikes, the cascade with them.
   addEventListener("keyup", (e) => {
-    if (e.code !== "KeyT" || !live.striking) return;
+    if (keyCode(e) !== "KeyT" || !live.striking) return;
     live.striking = false;
     live.cascades = [];
   });

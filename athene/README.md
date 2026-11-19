@@ -47,23 +47,43 @@ browser, which draws its view of it. So both show the same moment, the
 strip about one frame behind. Each page plays only the cluster clips in its
 view; the strip draws them from frame sheets (128 × 72 px, 12.5 frames a second).
 
-For the show, both go out through OBS as two NDI streams:
+For the show, both go out through OBS as two NDI streams, conducted by a
+third page that goes out nowhere:
 
     python -m athene.live --obs
 
-opens no browser and prints the two addresses (the wall's with `&hint=0`,
-so its help line does not go out to the wall; H shows it). In OBS:
+opens no browser and prints three addresses:
 
-1. Two Browser Sources: the wall's address at 3840 × 2160 and the strip's
-   at 3840 × 427, both at OBS's frame rate. With "Control audio via OBS"
-   off, the wall's source plays the voices on the PC's audio output.
-2. On each source a DistroAV "Dedicated NDI Output" filter, named e.g.
-   "Athene Wand" and "Athene Band". QLab takes the two NDI sources.
-3. Keys go to the wall's source: right-click it, "Interact".
-4. Start `athene.live` before OBS, or refresh both sources after it starts.
+| Source | Address | Size | NDI |
+|--------|---------|------|-----|
+| Athene Regie, conducts | `...&view=wall` | 1280 × 720 | none |
+| Athene Wand, follows | `...&view=wall&follow` | 3840 × 2160 | Dedicated NDI Output |
+| Athene Band, follows | `...&view=strip&follow` | 3840 × 427 | Dedicated NDI Output |
 
-Not yet checked in OBS: that its two Browser Sources reach each other
-(both run in OBS's one browser), and the resolution of a dedicated output.
+Regie is the operator's page: it shows the help line, takes the keys and
+plays the voices. The wall and the strip follow it, hide the help line and
+take no keys, so nothing of the operator's reaches either output. Regie
+draws the wall's view at the size of its source (a ninth of the 4K wall's
+pixels at 1280 × 720); `--res` applies to the wall and the strip only. In OBS:
+
+1. Three Browser Sources at the sizes above, all at OBS's frame rate, each
+   with "Shutdown source when not visible" off. Width and height set the
+   resolution each page draws at, so the outputs need exactly 3840 × 2160
+   and 3840 × 427. With "Control audio via OBS" off, Regie plays the voices
+   on the PC's audio output.
+2. On the wall and the strip a DistroAV "Dedicated NDI Output" filter,
+   named e.g. "Athene Wand" and "Athene Band". QLab takes the two NDI
+   sources. Regie has no filter.
+3. Keys go to Regie: right-click it, "Interact", and click into the window.
+   The window shows Regie's page, help line included. OBS's Interact window
+   sends keys without their code; the page takes the key's character instead.
+4. Start `athene.live` before OBS, or refresh all three sources after it starts.
+5. Keep the three sources in one scene that OBS shows (in the program, the
+   preview or a projector), as a source OBS does not show may stop drawing.
+
+Not yet checked in OBS: that its Browser Sources reach each other (all run
+in OBS's one browser), whether a source must be shown to keep drawing, and
+the resolution of a dedicated output.
 In a browser, the strip can be opened in a second window from the printed
 address; a hidden window may stop drawing.
 
@@ -124,7 +144,7 @@ again (`athene/live.py` makes the small live copy on its next start):
 | S     | growth scene: the strobe                                    |
 | L     | growth scene: strikes manual (from the start) or automatic  |
 | T     | manual strikes: hold to fire strikes for as long as held    |
-| 0     | growth scene, after the ending: the zero blinks into a one (the last voice clip does it by itself; see below) |
+| X     | growth scene, in the ending: cut to black                   |
 | H     | show or hide the help line                                  |
 
 ### Scenes
@@ -146,14 +166,13 @@ where two slowly turning lights catch them.
    glow with a strobe that stays rare for long and crowds in towards the
    end; some flashes light the plane two or three axes span, often as a
    cascade of quick strikes from one axis to one after another. S switches
-   to the full strobe, and E ends in a white zero, which 0 turns into a one
-   after four blinks.
+   to the full strobe. E ends it: the network explodes for 6 s until its
+   light fills the wall white, and then the whole view strobes, all white
+   and all black in turn, 12.5 times a second (two frames white, two black
+   at 50 fps), until X cuts it to black. Both views strobe in step.
 
-   The last voice clip ends the scene by itself, so neither E nor 0 is
-   needed once P has started it. The ending begins 18 s before its closing
-   "Von Null auf Eins" (in `athene_6_new` at 18.8 s, on "effizient ausübt,
-   ohne Hürden"; the clip says the sentence once before, at 27.6 s, which
-   does not count), so the zero stands open for 2 s when the sentence
-   comes. It then blinks once on each word and comes back as a one on
-   "Eins". E pressed earlier begins the ending at once; the blinks still
-   follow the words.
+   The last voice clip ends the scene by itself, so E is not needed once P
+   has started it. The ending begins 6 s before the "Eins" of its closing
+   "Von Null auf Eins" (the clip says the sentence once before, which does
+   not count), so the strobe starts on "Eins". E pressed earlier begins the
+   ending at once. X is always pressed by hand.

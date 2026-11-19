@@ -115,12 +115,13 @@ back into the SITREP tab. Keys only reach the window in focus.
 | Athene (4) (p. 27) | **N** (back to two axes), **P** (?) |
 | Orestes: "Aber jemand muss doch Recht sprechen?" (p. 28) | **N** (growth, full network after 3 min) |
 | Athene (5) "Die Tat ist unstrittig." (p. 29) | **P** |
-| Athene (6) "Absofort wird diese neue Ordnung gelten." (p. 29) | **P**. Ends by itself: zero, one on "Eins". No E, no 0 |
+| Athene (6) "Absofort wird diese neue Ordnung gelten." (p. 29) | **P**. Ends by itself: explosion, white, strobe from "Eins". No E |
+| When the strobe should stop | **X** (cut to black) |
 | During the growth | Hold **T** for strikes. **S** full strobe (?) |
 
 ## End (p. 30–31)
 
-Athene holds the one. After the show: Ctrl+C in T4, T1.
+Athene stays black. After the show: Ctrl+C in T4, T1.
 
 ## Keys
 
@@ -132,4 +133,4 @@ Athene holds the one. After the show: Ctrl+C in T4, T1.
   digit = tiles (1, 4, 9) · Esc close
 - **Athene:** N / B scene · Space restart scene · P voice · C cluster ·
   T held strikes · L strikes manual ↔ auto · S strobe · E ending now ·
-  0 zero → one · H help line
+  X cut to black · H help line
