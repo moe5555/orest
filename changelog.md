@@ -20,6 +20,52 @@ front edge at y 762-780 px. The feet in `test_podest.py` and
 
 ---
 
+## 2026-11-19 — Body search walls rendered offline from WISE picks
+
+Requested by Moe: two more versions of the body search wall
+`bodysearch_2a_2210.mp4` (Desktop), the same length and style with other
+clips, each of a woman walking in the foreground. Concerns the body search
+results of the Smart Search (`02_processing.md`) and the wall they fill
+(`QB["BODY SEARCH"]` in the RENDER graph of `pipeline.md`), here as a video
+instead of the live TouchDesigner wall.
+
+The original is a 3 × 3 wall of 640 × 360 tiles, each playing three 4 s
+clips (12 s, 25 fps, no sound). `src/scripts/bodysearch_wall.py` renders
+such a wall from a picks file: the grid, the clip length and each tile's
+clips (recording, start, what it shows), cut from `HITL_Database` in one
+ffmpeg pass. The clips were found with WISE text queries over the 4 s
+segments of the `hitl_database` SigLIP2 index (`apollon-search query
+--segments`), then checked by eye. Clips with a man or someone
+indistinct in the foreground, clips where the woman leaves early, and three
+that match frames of the original were dropped. The picks are in
+`src/scripts/bodysearch_picks/walk_female_2b.json` and `_2c.json`, rendered
+to `bodysearch_2b_1911.mp4` and `bodysearch_2c_1911.mp4` on the Desktop.
+No recording is repeated within a tile or in neighbouring tiles at the same
+moment, and no clip appears twice across the two walls.
+
+Then three 4 × 4 walls of one gesture, a gun pointed at another performer's
+head: one 4 s clip per tile, looping, 48 different clips in all
+(`gun_head_a/b/c.json`, rendered to `bodysearch_gun_{a,b,c}_1911.mp4`).
+Text search alone found only a handful of these; the rest came from the
+body search's pose index (`apollon-search body --segments`, rtmo-s
+body7) seeded with confirmed takes, which finds the held pose reliably. 19
+of the 48 come from the death scene rehearsal of 7 October (11-52-05), which
+repeats the gesture; they are spread evenly over the three walls.
+
+Then three 4 × 4 walls each of a push (`push_*`), a hit (`hit_*`) and a
+strangling with the attacker kneeling over the other performer on the
+platform (`strangle_mount_*`), rendered to
+`bodysearch_{push,hit,strangle_mount}_{a,b,c}_1911.mp4`. The rehearsals hold
+fewer distinct takes of these than 48: 44 pushes, 31 hits (mostly slaps) and
+39 mounted strangles. Each wall still shows 16 different clips; the
+remainder repeats across walls, never within one. Text search ranks these
+fast, two-person moves poorly, and the pose search finds the held mount
+but not the push or the slap. Most takes came from motion bursts within the
+death scene runs (the stretch between a push and the mount), each one
+checked by eye on an eight-frame strip.
+
+---
+
 ## 2026-11-19 — Athene in OBS: a Regie page conducts, the keys work in Interact
 
 At Moe's request, concerning the show chain of Athene (PC → OBS → NDI →

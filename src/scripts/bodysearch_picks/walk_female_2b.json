@@ -1,0 +1,163 @@
+{
+ "grid": [
+  3,
+  3
+ ],
+ "clip_seconds": 4.0,
+ "query": "WISE text search (SigLIP2) for women walking in the foreground, checked by eye; no clip of bodysearch_2a_2210",
+ "tiles": [
+  [
+   {
+    "file": "2026-10-14 12-15-52_SM.mp4",
+    "start": 939.0,
+    "shows": "long-haired woman walks right, towards the screen"
+   },
+   {
+    "file": "2026-10-08 11-18-02_LAWS.mp4",
+    "start": 1502.5,
+    "shows": "woman walks past the platform"
+   },
+   {
+    "file": "2026-10-12 13-45-52_pause.mp4",
+    "start": 1188.5,
+    "shows": "long-haired woman walks left of the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 15-01-44_LAWS.mp4",
+    "start": 3387.5,
+    "shows": "woman walks towards the camera"
+   },
+   {
+    "file": "2026-10-15 11-30-10_SM.mp4",
+    "start": 1082.0,
+    "shows": "woman in a red top walks, another sits on the platform"
+   },
+   {
+    "file": "2026-10-08 11-18-02_LAWS.mp4",
+    "start": 4984.5,
+    "shows": "two women walk by the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-08 11-18-02_LAWS.mp4",
+    "start": 2406.0,
+    "shows": "woman walks on the platform"
+   },
+   {
+    "file": "2026-10-12 15-00-06_hundedrohne.mp4",
+    "start": 914.5,
+    "shows": "woman in a white top walks towards the camera and out right"
+   },
+   {
+    "file": "2026-10-15 15-01-44_LAWS.mp4",
+    "start": 3609.5,
+    "shows": "long-haired woman walks right"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-08 11-18-02_LAWS.mp4",
+    "start": 4441.5,
+    "shows": "woman in a white top walks past the platform"
+   },
+   {
+    "file": "2026-10-15 15-01-44_LAWS.mp4",
+    "start": 2774.5,
+    "shows": "woman in a red top walks with a script"
+   },
+   {
+    "file": "2026-10-07 14-22-14.mp4",
+    "start": 274.5,
+    "shows": "woman walks with a script, another sits on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-12-31_DeathScene.mp4",
+    "start": 1472.0,
+    "shows": "woman walks through the left foreground"
+   },
+   {
+    "file": "2026-10-08 11-18-02_LAWS.mp4",
+    "start": 1678.0,
+    "shows": "woman walks past a seated woman"
+   },
+   {
+    "file": "2026-10-12 13-45-52_pause.mp4",
+    "start": 629.0,
+    "shows": "woman walks away from the camera"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 15-01-44_LAWS.mp4",
+    "start": 330.5,
+    "shows": "woman in a white shirt walks away"
+   },
+   {
+    "file": "2026-10-06 15-08-27.mp4",
+    "start": 400.5,
+    "shows": "two women walk by the platform"
+   },
+   {
+    "file": "2026-10-15 10-55-46_WarmUp.mp4",
+    "start": 452.5,
+    "shows": "woman in a white shirt walks across"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-20 13-16-49_ende.mp4",
+    "start": 309.0,
+    "shows": "woman walks left of the platform"
+   },
+   {
+    "file": "2026-10-12 15-00-06_hundedrohne.mp4",
+    "start": 806.0,
+    "shows": "woman in a light blue shirt walks left, a second woman passes right"
+   },
+   {
+    "file": "2026-10-20 12-35-05_ende.mp4",
+    "start": 1569.5,
+    "shows": "long-haired woman walks right of the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-12 15-00-06_hundedrohne.mp4",
+    "start": 997.5,
+    "shows": "woman walks through the right foreground"
+   },
+   {
+    "file": "2026-10-14 10-59-36_Waechter.mp4",
+    "start": 2662.0,
+    "shows": "woman walks across the platform"
+   },
+   {
+    "file": "2026-10-06 15-03-42.mp4",
+    "start": 275.0,
+    "shows": "woman walks through the foreground"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 10-55-46_WarmUp.mp4",
+    "start": 231.5,
+    "shows": "long-haired woman walks left of the platform"
+   },
+   {
+    "file": "2026-09-30 13-42-59.mp4",
+    "start": 675.5,
+    "shows": "woman walks across the platform"
+   },
+   {
+    "file": "2026-10-08 11-18-02_LAWS.mp4",
+    "start": 4553.0,
+    "shows": "two women walk by the platform"
+   }
+  ]
+ ]
+}

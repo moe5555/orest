@@ -1,0 +1,122 @@
+{
+ "grid": [
+  4,
+  4
+ ],
+ "clip_seconds": 4.0,
+ "query": "WISE: SigLIP2 text search and pose search (rtmo-s body7) seeded from confirmed takes, plus motion bursts within the death scene runs; checked by eye",
+ "tiles": [
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1384.6,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 12-20-09_pylades_death.mp4",
+    "start": 739.0,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 13-16-03_DeathScene.mp4",
+    "start": 49.0,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 245.2,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 167.6,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2390.2,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-08 13-26-38_DeathandLAWS.mp4",
+    "start": 480.5,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 521.5,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 314.5,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 733.5,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1923.2,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 175.2,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 435.0,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2071.0,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 515.3,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 12-20-09_pylades_death.mp4",
+    "start": 750.4,
+    "shows": "pushes the other performer, who stumbles back"
+   }
+  ]
+ ]
+}

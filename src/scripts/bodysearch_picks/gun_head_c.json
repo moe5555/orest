@@ -1,0 +1,122 @@
+{
+ "grid": [
+  4,
+  4
+ ],
+ "clip_seconds": 4.0,
+ "query": "WISE: SigLIP2 text search for a gun pointed at a head, then pose search (rtmo-s body7) seeded from confirmed takes; checked by eye",
+ "tiles": [
+  [
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 512.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1278.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 705.5,
+    "shows": "aims a gun up at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-20 13-16-49_ende.mp4",
+    "start": 65.0,
+    "shows": "aims a gun up at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1510.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 12-20-09_pylades_death.mp4",
+    "start": 718.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1560.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 750.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 231.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2046.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-08 13-26-38_DeathandLAWS.mp4",
+    "start": 463.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-14 13-06-22_masturbation_Death.mp4",
+    "start": 870.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 666.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 16-38-50_deathScene.mp4",
+    "start": 124.5,
+    "shows": "aims a gun up at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1670.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 420.0,
+    "shows": "aims a gun at the head of the performer on the platform"
+   }
+  ]
+ ]
+}
