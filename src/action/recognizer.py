@@ -150,6 +150,7 @@ class ActionRecognizer:
     def __init__(self, source=None, *, fps: float = FPS, window: float = WINDOW,
                  step: float = STEP, on_readings: Callable[[list[Reading]], None] | None = None,
                  on_frame: Callable[[np.ndarray, tracking.Frame], None] | None = None,
+                 on_new_body: Callable[[int], None] | None = None,
                  prefer: Callable[[], Collection[int]] | None = None):
         self._source = source
         self._fps = fps
@@ -162,7 +163,9 @@ class ActionRecognizer:
         # Called with each camera frame and the bodies tracked in it, on this
         # thread, for measurements that need the picture as well as the pose.
         self._on_frame = on_frame
-        self.tracker = tracking.BodyTracker(history=max(tracking.HISTORY, 2 * window))
+        # `on_new_body` receives the id of each body the tracker starts following.
+        self.tracker = tracking.BodyTracker(history=max(tracking.HISTORY, 2 * window),
+                                            on_new=on_new_body)
         self.image_shape: tuple[int, int] | None = None
         self.readings: list[Reading] = []
         self.pose_seconds: list[float] = []

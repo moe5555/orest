@@ -142,6 +142,7 @@ def main(argv=None) -> int:
     options = session.Options(
         interval=args.interval, window=args.window, model=args.model, language=args.language,
         cast=args.cast, actions=not args.no_actions, send_td=args.send_td,
+        send_pulse=args.send_pulse,
         ndi=args.ndi_name if args.send_ndi else None, ndi_fps=args.ndi_fps,
         auto_empfehlung=not args.no_auto_empfehlung)
     bild = Bild(args.path, uhr)

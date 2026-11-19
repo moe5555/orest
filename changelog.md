@@ -6,6 +6,20 @@ referenced below.
 
 ---
 
+## 2026-11-19 — Podest region re-measured where the Podest stands today
+
+Pointed out by Moe on the live feed: the line around the Podest no longer
+matched it. Concerns the On/Off Podest rule of Scene 1 (`02_processing.md`).
+The Podest now stands nearer the camera than on 2026-10-12, so the old
+polygon covered the floor behind it and missed its front half.
+`podest.POLYGON` was re-measured on a frame of the running Live SITREP
+(1920x1080): top surface from x 500 to 1065 px, back edge at y 638-642 px,
+front edge at y 762-780 px. The feet in `test_podest.py` and
+`test_actions.py` were moved onto the middle of the new surface.
+`apollon-ui` reads the polygon at start and takes effect on restart.
+
+---
+
 ## 2026-11-19 — Athene in OBS: a Regie page conducts, the keys work in Interact
 
 At Moe's request, concerning the show chain of Athene (PC → OBS → NDI →
@@ -27,6 +41,135 @@ Without `--obs` nothing changes: the wall conducts in the default browser.
 Not yet checked in OBS: that the three sources reach each other over the
 BroadcastChannel, whether a source OBS does not show keeps drawing, and the
 resolution the dedicated outputs send.
+
+---
+
+## 2026-11-19 — On the Podest in any posture, and known 0.56 s sooner
+
+Pointed out by Moe: sitting or kneeling on the Podest should count as on it,
+and the system took about 2 s to notice a step. Concerns the On/Off Podest
+rule of Scene 1 (`02_processing.md`) and the Podest pulses (entry below);
+both read the same stance, so Risiko changes too.
+
+**On the Podest** (`podest.on_podest`, replacing `steht_auf`). On when the
+point between the ankles is on the top surface, in any posture, or when the
+hips are and the body is not standing (sitting on an edge, legs hanging
+off). The "not standing" keeps out people standing on the floor in front of
+the Podest, whose hips lie over its top in the camera image. The upright
+legs the earlier rule asked for (entry of 2026-10-12) are no longer needed.
+
+**Sooner** (`podest.Stance`, replacing `oben` and the 1 s majority). The
+stance is followed on every tracked frame, on the action recogniser's thread
+(`ActionRatings._observe_podest`), and changes once 4 judged frames in a row
+show it (`podest.HALTEN`, 0.16 s at 25 fps). Podest pulses are sent from the
+frame that completes the step (`ActionRatings(on_podest_step=...)`), no
+longer from the live values' 0.5 s read; the `Lage` step callback and
+`podest.Steps` are gone. Risiko still reads the stance with the live values.
+
+**Measured** on `HITL_Database/2026-11-19 16-00-44.mp4` (7 min, today's
+Podest position), poses and tracking as live:
+- From the frame the feet cross the edge, the old rule reported a step after
+  0.7 s (median, at most about 1 s): about 0.5 s for the majority to turn and
+  up to 0.5 s until the next read.
+- The new one reports the same steps 0.56 s earlier (median; 0.32-0.88 s),
+  and 23 steps against 33, the difference being flicker at the edge: of 28
+  steps, a 4-frame run reversed 1 within a second, the majority 3.
+- A person sitting on the back edge facing upstage (body 55) was off by the
+  old rule and is on by the new one; at 400 s she and a second person both sit
+  on the back of the Podest and both count as on. For people standing, the
+  two rules agree in every frame.
+
+The rest of the 2 s is not in the rule and was not measured here: the camera
+and OBS, the pose rate under the live load (the recogniser classifies on the
+same thread every second), and, for Risiko on the display, the 0.5 s read and
+the page's refresh.
+
+800 tests pass. Not yet checked live.
+
+---
+
+## 2026-11-19 — Podest pulses for every tracked body
+
+Requested by Moe. Rewrites the Podest pulses of the entry below
+("podestOff and podestOn"). podestOff and podestOn now fire for any tracked
+body that steps off or onto the Podest, named or not, instead of the steps
+of the Wächter's Risiko count. The steps are judged per track id from the
+stance the Podest rule already reads (`actions.podest_stance`), by
+`podest.Steps`, reset with the scene. `Counter.steps` is gone again; Risiko
+is still counted for the people the scene rates alone. A body keeps its last
+stance while briefly out of view, so a step taken meanwhile still pulses on
+its return. As for Risiko, a body not standing upright on the Podest
+(sitting, kneeling, legs unseen) counts as off it.
+
+799 tests pass. Not yet checked live.
+
+---
+
+## 2026-11-19 — Live SITREP: the stroboscope signals Max, zeichen and fackel
+
+Requested by Moe. Concerns the Manual Interference of Scene 1 (the T
+stroboscope, `02_processing.md`) and the pulses to Max (next two entries).
+
+With `--send-pulse`, while a scene's stroboscope is open, the new-body and
+Podest pulses are muted (`pulse.Pulse.muted`) and resume once it closes.
+Settled with Moe:
+- `/apollon/strobe/zeichen` is 1 as the stroboscope opens and 0 as it closes
+  (T again, X, or another scene), followed in `Session.apply`, which
+  closing the screen now also runs (`interface/live.py`).
+- `/apollon/strobe/fackel` is 1 while each flash of fire is lit, two pulses
+  a cycle. The page picks each cycle's flash lengths at random
+  (`sitrep.js`, `strobe`), so it announces them as the cycle begins
+  (`POST /api/sitrep/strobe/cycle`) and `pulse.Strobe` sends fackel on that
+  schedule. It sleeps with `time.sleep`: measured here, an event wait
+  overshoots by up to 13 ms, `time.sleep` by at most 0.5 ms, against flashes
+  of 30-60 ms. Only a Prototype tab draws the stroboscope, so the second tab
+  on Übersicht sends no cycles.
+
+797 tests pass (8 new; fackel's rises and falls land within 10 ms of the
+flashes). Not yet checked in a browser or against Max.
+
+---
+
+## 2026-11-19 — Live SITREP: Podest pulses to Max, podestOff and podestOn
+
+Requested by Moe, beside the new-body pulse (next entry). Concerns the
+Podest rule of Scene 1 (`02_processing.md`, SITREP Spatial Value Rules) and
+the Live SITREP's OSC channel (RENDER step in `pipeline.md`).
+
+With `--send-pulse`, every step the Podest count takes also pulses Max, 1
+then 0 after 100 ms: `/apollon/tracking/podestOff` for a step off the Podest,
+the step that raises Risiko, and `/apollon/tracking/podestOn` for a step back
+on. The steps are the ones `podest.Counter` counts, now recorded per update
+(`Counter.steps`) and handed out by `lage.Lage(on_step=...)`. They therefore
+come only in a scene with a Podest rule (Szene 1) and only for the people it
+rates (the Wächter). A person who returns into view with the other stance
+counts one step and pulses. Each pulse follows its step by about a second
+(`podest.FENSTER` plus `session.WERTE_TAKT`).
+
+789 tests pass (4 new). Not yet checked against Max on 192.168.10.3.
+
+---
+
+## 2026-11-19 — Live SITREP: an OSC pulse to Max for each new body
+
+Requested by Moe. Concerns the Live SITREP's OSC channel, the RENDER step in
+`pipeline.md` (`03_render.md`, "Control: OSC"), with a second receiver: Max
+on the machine across the show network's switch (192.168.10.3).
+
+With `--send-pulse` (apollon-sitrep, apollon-ui, sitrep.replay), each new id
+the body tracker hands out (`action/tracking.py`, `BodyTracker(on_new=...)`)
+sends `/apollon/tracking/new 1`, then `0` 100 ms later (`sitrep/pulse.py`).
+Settled with Moe: the body tracker, and no filtering, so a one-frame
+detection and a person re-found after more than `tracking.FORGET` (3 s) pulse
+too. A body arriving while the pulse is high gives a fresh 0 → 1 edge; the
+closing 0 is sent twice against UDP loss, and closing the run leaves Max at 0.
+`/apollon/body/` was taken by the live body search's start and stop, hence
+`/apollon/tracking/`. Target in `osc.PULSE_HOST` / `PULSE_PORT` (default
+7400, `APOLLON_PULSE_HOST` / `APOLLON_PULSE_PORT`). Needs the action
+recogniser; with `--no-actions` the run says so and sends nothing.
+
+785 tests pass (9 new, among them a loopback UDP round trip). Not yet checked
+against Max on 192.168.10.3.
 
 ---
 

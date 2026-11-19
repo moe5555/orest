@@ -373,9 +373,16 @@ class LiveSitrep:
         """Close the screen a scene's key opened. False when none is open."""
         closed = self.scene.close_screen()
         if closed:
-            with self._lock:
-                self.version += 1
+            self._apply()
         return closed
+
+    def strobe_cycle(self, flashes: list[tuple[float, float]]) -> bool:
+        """Signal one cycle of the stroboscope (session.Session.strobe_cycle).
+        False while no run is live."""
+        run = self.session
+        if run is None or self.status != RUNNING:
+            return False
+        return run.strobe_cycle(flashes)
 
     def _apply(self):
         run = self.session

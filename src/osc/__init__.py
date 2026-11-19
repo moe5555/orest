@@ -11,6 +11,10 @@ where to reach it. Addresses are namespaced by what sends them
 (`/apollon/results/`, `/apollon/sitrep/`, `/apollon/presence/`), which lets a single
 receiver in TouchDesigner route on the prefix.
 
+A second receiver, Max on another machine on the show network, takes a pulse
+each time the body tracker starts following someone (`/apollon/tracking/`,
+sitrep/pulse.py).
+
 Every location is overridable by environment variable: the machine that runs
 this in the Probebuehne is not the machine it was written on.
 """
@@ -27,6 +31,11 @@ TD_PORT = int(os.environ.get("APOLLON_TD_PORT", "10000"))
 # stop of a live body capture. The return channel beside TD_PORT.
 CONTROL_HOST = os.environ.get("APOLLON_CONTROL_HOST", "127.0.0.1")
 CONTROL_PORT = int(os.environ.get("APOLLON_CONTROL_PORT", "10001"))
+
+# Where Max listens for the new-body pulse: its [udpreceive] on the machine
+# across the show network's switch.
+PULSE_HOST = os.environ.get("APOLLON_PULSE_HOST", "192.168.10.3")
+PULSE_PORT = int(os.environ.get("APOLLON_PULSE_PORT", "7400"))
 
 # An address and its positional arguments, ready to send.
 Message = tuple[str, list]

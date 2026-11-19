@@ -13,7 +13,7 @@ import argparse
 
 import osc
 
-from . import feed, podest, scenes
+from . import feed, podest, pulse, scenes
 
 # Defaults for the command line only. The library functions take window and
 # interval as required arguments, because step 6 of
@@ -85,7 +85,7 @@ def chosen_scene(args) -> scenes.Scene:
 
 
 def touchdesigner() -> argparse.ArgumentParser:
-    """The two channels a run can open to TouchDesigner.
+    """The two channels a run can open to TouchDesigner, and the pulse to Max.
 
     Pixels and messages travel separately (knowledge/components/03_render.md),
     so each is turned on by its own flag. Host and port stay environment-only,
@@ -96,6 +96,11 @@ def touchdesigner() -> argparse.ArgumentParser:
     parser.add_argument("--send-td", action="store_true",
                         help=f"announce each SITREP and the roster over OSC to "
                              f"{osc.TD_HOST}:{osc.TD_PORT}")
+    parser.add_argument("--send-pulse", action="store_true",
+                        help=f"pulse Max at {osc.PULSE_HOST}:{osc.PULSE_PORT}: "
+                             f"{pulse.NEW_BODY} for each new body tracked, "
+                             f"{pulse.PODEST_OFF} and {pulse.PODEST_ON} for each "
+                             f"body stepping off and onto the Podest")
     parser.add_argument("--send-ndi", action="store_true",
                         help="publish the camera as an NDI source for TouchDesigner")
     parser.add_argument("--ndi-name", default=feed.NAME,

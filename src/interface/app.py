@@ -13,6 +13,8 @@
                                  automatic naming (name null)
     POST /api/sitrep/key/{key}   carry out a key of the scene in force
     POST /api/sitrep/screen/close  close the screen a scene's key opened (X)
+    POST /api/sitrep/strobe/cycle  the flashes of the stroboscope's next cycle, for
+                                 the OSC pulses to Max (sitrep/pulse.py)
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
     /api/sitrep/video        the camera as an MJPEG stream; ?ratings=1 sets each
@@ -91,6 +93,13 @@ class SceneChoice(BaseModel):
     """A scene, by its name in the scenes file."""
 
     name: str
+
+
+class StrobeCycle(BaseModel):
+    """One cycle of the stroboscope the page draws: each flash's start and
+    length, in ms from the cycle's start."""
+
+    flashes: list[tuple[float, float]]
 
 
 class Assignment(BaseModel):
@@ -173,6 +182,10 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
     def close_screen():
         closed = live.close_screen()
         return JSONResponse({"closed": closed, **live.snapshot()})
+
+    @app.post("/api/sitrep/strobe/cycle")
+    def strobe_cycle(cycle: StrobeCycle):
+        return JSONResponse({"signalled": live.strobe_cycle(cycle.flashes)})
 
     @app.get("/api/sitrep/state")
     def state():

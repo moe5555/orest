@@ -16,6 +16,7 @@ held, so a window can be cut out of them for any group of people.
 """
 
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -176,12 +177,14 @@ class BodyTracker:
     """Gives each body a stable id for as long as it keeps being detected."""
 
     def __init__(self, *, link: float = LINK, forget: float = FORGET,
-                 history: float = HISTORY):
+                 history: float = HISTORY, on_new: Callable[[int], None] | None = None):
         self._link = link
         self._forget = forget
         self._history = history
         self._last: dict[int, tuple[np.ndarray, float]] = {}   # id -> box, last seen
         self._next_id = 1
+        # Called with each new track id, on the thread that calls `update`.
+        self._on_new = on_new
         self.frames: deque[Frame] = deque()
 
     def update(self, keypoints: np.ndarray, scores: np.ndarray, at: float) -> Frame:
@@ -217,6 +220,8 @@ class BodyTracker:
             if track is None:
                 track = self._next_id
                 self._next_id += 1
+                if self._on_new is not None:
+                    self._on_new(track)
             self._last[track] = (body.box, at)
             frame.bodies[track] = body
 

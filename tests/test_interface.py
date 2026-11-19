@@ -82,6 +82,10 @@ class FakeSession:
         """Carry out the scene in force (session.Session.apply)."""
         self.applied += 1
 
+    def strobe_cycle(self, flashes):
+        self.asked.append(("strobe", flashes))
+        return True
+
     def emit(self, event):
         self._pending.append(event)
         self.gate.release()
@@ -705,6 +709,31 @@ def test_the_stroboscope_opens_with_its_key_and_closes_with_closing(run):
     assert client.post("/api/sitrep/key/z").json()["scene"]["strobe"] is True
     closed = client.post("/api/sitrep/screen/close").json()
     assert closed["closed"] and closed["scene"]["strobe"] is False
+
+
+def test_closing_the_stroboscope_carries_out_the_scene(run):
+    controller = scene_controller(run)
+    controller.select("Szene 1")
+    controller.start()
+    assert wait_for(lambda: controller.status == live_module.RUNNING)
+    client = TestClient(create_app(controller))
+    client.post("/api/sitrep/key/z")
+    applied = run.applied
+    client.post("/api/sitrep/screen/close")
+    assert run.applied == applied + 1
+    controller.stop()
+
+
+def test_a_stroboscope_cycle_reaches_the_run_under_way(run):
+    controller = scene_controller(run)
+    client = TestClient(create_app(controller))
+    cycle = {"flashes": [[0, 50], [150, 40]]}
+    assert client.post("/api/sitrep/strobe/cycle", json=cycle).json() == {"signalled": False}
+    controller.start()
+    assert wait_for(lambda: controller.status == live_module.RUNNING)
+    assert client.post("/api/sitrep/strobe/cycle", json=cycle).json() == {"signalled": True}
+    assert run.asked[-1] == ("strobe", [(0, 50), (150, 40)])
+    controller.stop()
 
 
 def test_on_the_strip_each_person_has_the_values_the_scene_shows_them_with(monkeypatch, run):

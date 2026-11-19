@@ -823,6 +823,12 @@ const strobe = {
     const gap = between(STROBE.gap);
     const second = between(STROBE.second);
     const total = first + gap + second + STROBE.dark;
+    // Announced as the cycle starts, so Apollon can pulse Max with each flash.
+    fetch("/api/sitrep/strobe/cycle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flashes: [[0, first], [first + gap, second]] }),
+    }).catch(() => {});
     this.playing = [
       flash(one, 0, first, total, between(STROBE.firstBrightness)),
       flash(two, first + gap, second, total, between(STROBE.secondBrightness)),

@@ -348,6 +348,64 @@ def test_the_roster_is_sent_whenever_touchdesigner_is(monkeypatch, room, readers
         assert live.roster is not None
 
 
+def test_new_bodies_pulse_max_when_asked_to(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    made = {}
+
+    def action_ratings(source, faces, on_new_body=None, **kwargs):
+        made["on_new_body"] = on_new_body
+        return FakeReader(source, [], "actions", faces)
+
+    monkeypatch.setattr(session.actions, "ActionRatings", action_ratings)
+    monkeypatch.setattr(session.pulse, "Sender", lambda host, port: RecordingSender())
+
+    with session.Session(video, audio) as live:
+        assert live.pulse is None
+        assert made["on_new_body"] is None
+
+    with session.Session(video, audio, session.Options(send_pulse=True)) as live:
+        made["on_new_body"](1)
+        assert live.pulse.sender.sent == [(session.pulse.NEW_BODY, [1])]
+    assert live.pulse.sender.sent[-1] == (session.pulse.NEW_BODY, [0])
+
+
+def test_steps_off_and_onto_the_podest_pulse_their_own_addresses(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.pulse, "Sender", lambda host, port: RecordingSender())
+    scene = session.scenes.Current(session.scenes.Scene(
+        name="Szene 1", podest=session.scenes.PodestRule(step=1, floor=2)))
+
+    with session.Session(video, audio, session.Options(send_pulse=True)) as live:
+        live._podest_step(7, False)
+        assert live.pulse.sender.sent == []
+
+    with session.Session(video, audio, session.Options(send_pulse=True), scene=scene) as live:
+        sent = live.pulse.sender.sent
+        live._podest_step(7, False)
+        live._podest_step(7, True)
+        assert sent == [(session.pulse.PODEST_OFF, [1]), (session.pulse.PODEST_ON, [1])]
+
+
+def test_the_stroboscope_mutes_the_pulses_and_signals_itself(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.pulse, "Sender", lambda host, port: RecordingSender())
+    scene = session.scenes.Current(session.scenes.Scene(
+        name="Szene 1", keys={"t": session.scenes.Key(strobe=True)}))
+
+    with session.Session(video, audio, session.Options(send_pulse=True), scene=scene) as live:
+        sent = live.pulse.sender.sent
+        scene.press("t")
+        live.apply()
+        live.pulse.fire(1)
+        live._podest_step(7, False)
+        assert sent == [(session.pulse.ZEICHEN, [1])]
+        scene.press("t")
+        live.apply()
+        assert sent[1:] == [(session.pulse.ZEICHEN, [0])] * 2
+        live.pulse.fire(1)
+        assert sent[-1] == (session.pulse.NEW_BODY, [1])
+
+
 def test_options_carry_the_command_line_through(tmp_path):
     class Args:
         interval, window = 5.0, 20.0

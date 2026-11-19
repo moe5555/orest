@@ -1,4 +1,4 @@
-"""Who stands on the Podest, judged from tracked poses against its polygon,
+"""Who is on the Podest, judged from tracked poses against its polygon,
 and the Risiko it counts for each person.
 
 Needs no model or camera: bodies are built by hand on a 1920x1080 image, the
@@ -17,10 +17,10 @@ SHAPE = (1080, 1920)
 REGION = podest.pixels(podest.POLYGON, SHAPE)
 
 # Feet on the top surface, on the floor in front of it, behind it and beside it.
-ON = (920.0, 650.0)
-IN_FRONT = (920.0, 790.0)
-BEHIND = (920.0, 575.0)
-BESIDE = (1150.0, 650.0)
+ON = (800.0, 700.0)
+IN_FRONT = (800.0, 820.0)
+BEHIND = (800.0, 610.0)
+BESIDE = (1150.0, 700.0)
 
 
 def body(foot: tuple[float, float], height: float = 400.0, thigh: float = 0.25,
@@ -45,39 +45,96 @@ def frames(*stances: dict[int, tracking.Body]) -> list[tracking.Frame]:
 
 
 def test_a_person_standing_on_the_top_surface_is_on_the_podest():
-    assert podest.steht_auf(body(ON), REGION) is True
+    assert podest.on_podest(body(ON), REGION) is True
 
 
 @pytest.mark.parametrize("foot", [IN_FRONT, BEHIND, BESIDE])
 def test_a_person_standing_on_the_floor_around_it_is_not(foot):
-    assert podest.steht_auf(body(foot), REGION) is False
+    assert podest.on_podest(body(foot), REGION) is False
 
 
 @pytest.mark.parametrize("thigh, shin", [(0.0, 0.25), (0.25, 0.0), (-0.3, 0.5)])
-def test_sitting_kneeling_or_lying_on_it_is_not_standing(thigh, shin):
-    assert podest.steht_auf(body(ON, thigh=thigh, shin=shin), REGION) is False
+def test_sitting_kneeling_or_lying_on_it_is_on_it(thigh, shin):
+    assert podest.on_podest(body(ON, thigh=thigh, shin=shin), REGION) is True
 
 
-def test_a_body_without_visible_legs_cannot_be_judged():
-    assert podest.steht_auf(body(ON, hidden=tuple(podest.ANKLES)), REGION) is None
-    assert podest.steht_auf(body(ON, hidden=tuple(podest.KNEES)), REGION) is None
+def test_sitting_on_its_edge_with_the_legs_hanging_off_is_on_it():
+    # Hips on the top surface, thighs level, feet on the floor in front.
+    sitting = body(IN_FRONT, height=300.0, thigh=0.0, shin=0.4)
+    assert podest._inside(REGION, sitting.keypoints[podest.HIPS].mean(axis=0))
+    assert podest.on_podest(sitting, REGION) is True
+
+
+def test_standing_in_front_of_it_with_the_hips_over_its_top_is_off_it():
+    # From the camera, the hips of someone standing in front lie over the top surface.
+    standing = body((800.0, 900.0), height=500.0)
+    assert podest._inside(REGION, standing.keypoints[podest.HIPS].mean(axis=0))
+    assert podest.on_podest(standing, REGION) is False
+
+
+def test_a_body_without_visible_ankles_is_judged_by_its_hips_or_not_at_all():
+    assert podest.on_podest(body(ON, hidden=tuple(podest.ANKLES)), REGION) is None
+    # Hips on the top surface, thighs level, the legs hidden below its front.
+    seated = body((800.0, 775.0), height=300.0, thigh=0.0, hidden=tuple(podest.ANKLES))
+    assert podest._inside(REGION, seated.keypoints[podest.HIPS].mean(axis=0))
+    assert podest.on_podest(seated, REGION) is True
 
 
 def test_the_polygon_is_relative_to_the_image():
     smaller = podest.pixels(podest.POLYGON, (720, 1280))
     foot = (ON[0] * 1280 / 1920, ON[1] * 720 / 1080)
-    assert podest.steht_auf(body(foot, height=270.0), smaller) is True
+    assert podest.on_podest(body(foot, height=270.0), smaller) is True
 
 
-def test_a_body_is_up_when_it_stood_there_in_half_the_judged_frames():
+def follow(*stances, stance=None):
+    """A Stance after the frames, and the steps each frame completed."""
+    stance = stance or podest.Stance()
+    return stance, [stance.observe(frame, SHAPE) for frame in frames(*stances)]
+
+
+def test_a_stance_is_taken_after_halten_frames_in_a_row():
+    up, down = body(ON), body(IN_FRONT)
+    stance, steps = follow(*[{1: up}] * podest.HALTEN, *[{1: down}] * podest.HALTEN)
+    assert [step for completed in steps for step in completed] == [(1, False)]
+    assert steps[2 * podest.HALTEN - 1] == [(1, False)]
+    assert stance.now() == {1: False}
+
+
+def test_a_single_frame_of_the_other_stance_is_no_step():
+    up, down = body(ON), body(IN_FRONT)
+    stance, steps = follow(*[{1: up}] * podest.HALTEN, {1: down}, *[{1: up}] * podest.HALTEN)
+    assert not any(steps)
+    assert stance.now() == {1: True}
+
+
+def test_frames_that_cannot_be_judged_neither_confirm_nor_break_a_run():
     up, down, unseen = body(ON), body(IN_FRONT), body(ON, hidden=tuple(podest.ANKLES))
-    assert podest.oben(frames({1: up}, {1: down}, {1: unseen}, {1: up}), SHAPE) == {1}
-    assert podest.oben(frames({1: up}, {1: down}, {1: down}), SHAPE) == set()
+    stance, steps = follow(*[{1: up}] * podest.HALTEN, *[{1: down}, {1: unseen}] * podest.HALTEN)
+    assert [step for completed in steps for step in completed] == [(1, False)]
 
 
-def test_a_body_out_of_view_is_not_up():
-    assert podest.oben(frames({1: body(ON)}, {1: body(ON)}, {2: body(IN_FRONT)}), SHAPE) == set()
-    assert podest.oben([], SHAPE) == set()
+def test_a_body_first_seen_is_off_until_it_takes_a_stance_and_that_is_no_step():
+    stance, _ = follow(*[{1: body(ON)}] * (podest.HALTEN - 1))
+    assert stance.now() == {1: False}
+    steps = stance.observe(tracking.Frame(1.0, {1: body(ON)}), SHAPE)
+    assert stance.now() == {1: True} and steps == []
+
+
+def test_a_body_keeps_its_stance_while_out_of_view_and_its_step_counts_on_return():
+    stance, _ = follow(*[{1: body(ON)}] * podest.HALTEN)
+    stance.observe(tracking.Frame(1.0, {}), SHAPE)
+    assert stance.now() == {}
+    steps = [stance.observe(tracking.Frame(1.5 + i / 25, {1: body(IN_FRONT)}), SHAPE)
+             for i in range(podest.HALTEN)]
+    assert steps[-1] == [(1, False)]
+
+
+def test_each_step_reaches_on_step():
+    seen = []
+    up, down = body(ON), body(IN_FRONT)
+    follow(*[{7: up}] * podest.HALTEN, *[{7: down}] * podest.HALTEN, *[{7: up}] * podest.HALTEN,
+           stance=podest.Stance(on_step=lambda track, up: seen.append((track, up))))
+    assert seen == [(7, False), (7, True)]
 
 
 def test_a_polygon_is_written_and_read_as_points():

@@ -44,7 +44,7 @@ from pydantic import BaseModel
 
 from . import (actions, annotate, capture, chronik, cli, devices, feed, lage, llm, loudness,
                ndi_audio, presence, report, speakers, speech, td, transcribe, utterances)
-from . import appearance, podest, predictability, recording, scenes, voices
+from . import appearance, podest, predictability, pulse, recording, scenes, voices
 
 
 def resolve_sources(args) -> tuple[devices.VideoDevice,
@@ -99,6 +99,12 @@ class Options(BaseModel):
     # roster when a tracker is running, over OSC.
     send_td: bool = False
 
+    # Pulse Max (pulse.py) each time the body tracker starts following
+    # someone, and each time any body steps off or onto the Podest in a scene
+    # with a Podest rule; while a scene's stroboscope is open, signal it
+    # instead. Needs the action recogniser, which runs the body tracker.
+    send_pulse: bool = False
+
     # Ask the model for a recommendation whenever the live values raise the
     # alarm. Off, a recommendation is made only when the operator asks.
     auto_empfehlung: bool = True
@@ -123,6 +129,7 @@ class Options(BaseModel):
             ndi=args.ndi_name if args.send_ndi else None,
             ndi_fps=args.ndi_fps,
             send_td=args.send_td,
+            send_pulse=getattr(args, "send_pulse", False),
             auto_empfehlung=not getattr(args, "no_auto_empfehlung", False),
             podest=(None if getattr(args, "no_podest", False)
                     else list(getattr(args, "podest", None) or podest.POLYGON)),
@@ -313,6 +320,9 @@ class Session:
         self.laut = loudness.Calibration()
         self.sender = None
         self.roster = None
+        self.pulse = None
+        self.podest_pulses = None
+        self.strobe = None
         self.missing_enrolment: list[pathlib.Path] = []
         # Bodies the operator named: the face lessons each one taught, and the
         # label it carried before, which the model is told it now means.
@@ -358,6 +368,18 @@ class Session:
             print("voice model missing: lines are attributed by lips alone "
                   "(src/scripts/export_voice.py)", file=sys.stderr)
 
+        if self.options.send_pulse:
+            if self.options.actions:
+                self.pulse = pulse.Pulse()
+                # Off and on, by the stance stepped into.
+                self.podest_pulses = {
+                    False: pulse.Pulse(self.pulse.sender, address=pulse.PODEST_OFF),
+                    True: pulse.Pulse(self.pulse.sender, address=pulse.PODEST_ON)}
+                self.strobe = pulse.Strobe(self.pulse.sender)
+            else:
+                print("no action recogniser: no body tracker to pulse Max from",
+                      file=sys.stderr)
+
         if self.options.actions:
             # Speakers are told apart by the lips of the people the action
             # recogniser follows, on the frames it tracks.
@@ -381,7 +403,11 @@ class Session:
                                                  appearances=appearances,
                                                  reference=self.reference,
                                                  podest_polygon=self.options.podest,
-                                                 role=self.scene.role).start()
+                                                 role=self.scene.role,
+                                                 on_new_body=self.pulse.fire if self.pulse
+                                                 else None,
+                                                 on_podest_step=self._podest_step
+                                                 if self.podest_pulses else None).start()
 
         if self.options.send_td:
             self.sender = td.Sender()
@@ -524,6 +550,7 @@ class Session:
         scene reports why (scenes.Current.problem).
         """
         with self._applying:
+            self._signal_strobe()
             if self.actions is not None:
                 self.actions.tracked = self.scene.tracked
             wanted = self.scene.video()
@@ -758,6 +785,26 @@ class Session:
         return annotate.draw_names(self.outline_podest(frame), self.actions.visible(),
                                    annotate.DISPLAY)
 
+    def _signal_strobe(self):
+        """Signal Max as the scene's stroboscope opens or closes, muting the
+        other pulses while it is open."""
+        if self.strobe is None or self.scene.strobe == self.strobe.on:
+            return
+        for muted in (self.pulse, *self.podest_pulses.values()):
+            muted.muted = self.scene.strobe
+        self.strobe.show(self.scene.strobe)
+
+    def strobe_cycle(self, flashes: list[tuple[float, float]]) -> bool:
+        """Signal one cycle of the stroboscope the page draws: each flash's
+        start and length in ms from now. False when nothing is signalled."""
+        return self.strobe.cycle(flashes) if self.strobe is not None else False
+
+    def _podest_step(self, track: int, up: bool):
+        """Pulse Max for a body's step off or onto the Podest, in a scene with
+        the Podest rule."""
+        if self.scene.scene.podest is not None:
+            self.podest_pulses[up].fire(track)
+
     def outline_podest(self, frame):
         """A copy of a frame with the Podest outlined, where the scene in
         force has the rule and the operator has not hidden the outline
@@ -805,9 +852,12 @@ class Session:
         self._closed = True
         self._stop_live()
         # The action recogniser reads the tracker's faces, so it stops first.
-        for reader in (self.roster, self.publisher, self.actions, self.tracker):
+        for reader in (self.roster, self.publisher, self.actions, self.tracker, self.pulse,
+                       *(self.podest_pulses or {}).values()):
             if reader:
                 reader.close()
+        if self.strobe:
+            self.strobe.show(False)
         for holder in (self.utterances, self.chronik, self.frames, self.actions,
                        self.speakers, self.voices, self.tracker, self.meter):
             if holder:
@@ -833,6 +883,10 @@ class Session:
             lines.append(f"ndi:    {self.options.ndi} @ {self.options.ndi_fps:g} fps")
         if self.sender:
             lines.append(f"osc:    {self.sender.host}:{self.sender.port}")
+        if self.pulse:
+            lines.append(f"pulse:  {pulse.NEW_BODY}, {pulse.PODEST_OFF}, {pulse.PODEST_ON}, "
+                         f"{pulse.ZEICHEN}, {pulse.FACKEL} to "
+                         f"{self.pulse.sender.host}:{self.pulse.sender.port}")
         if self.actions:
             lines.append(f"action: NTU120 ST-GCN on {actions.model.active_provider()}")
             if self.reference is not None:

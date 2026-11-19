@@ -69,8 +69,9 @@ the mean of those scores, not a peak: it describes how the person moved over
 the stretch, and a single window far from the corpus is as often a tracking
 slip as a new movement.
 
-Podest. Given the Podest's polygon, whether each body in view stands on it
-is read from the tracked frames when asked for (`podest_stance`, podest.py).
+Podest. Given the Podest's polygon, whether each body in view is on it is
+followed on every tracked frame (podest.Stance) and read when asked for
+(`podest_stance`); `on_podest_step` receives each step off or onto it.
 
 Tracked and classified. `tracked` bodies, the tallest in view, are boxed,
 labelled, offered for naming by hand and described for naming by appearance;
@@ -285,7 +286,9 @@ class ActionRatings:
                  appearances: appearance.Appearances | None = None,
                  reference: predictability.Reference | None = None,
                  podest_polygon: Sequence[tuple[float, float]] | None = None,
-                 role: Callable[[str], str | None] | None = None):
+                 role: Callable[[str], str | None] | None = None,
+                 on_new_body: Callable[[int], None] | None = None,
+                 on_podest_step: Callable[[int, bool], None] | None = None):
         self.mapping = mapping or sitrep_map.load()
         # The name a cast member is shown under, or None where the scene in
         # force gives them no part; by default their own.
@@ -293,6 +296,8 @@ class ActionRatings:
         # The Podest's top surface in the image (podest.POLYGON); None turns
         # the Podest rule off.
         self.podest_polygon = podest_polygon
+        self.podest = (podest.Stance(podest_polygon, on_step=on_podest_step)
+                       if podest_polygon is not None else None)
         # Bodies boxed, labelled and described, the tallest in view; set by
         # the scene in force.
         self.tracked = recognizer.MAX_PEOPLE
@@ -329,14 +334,17 @@ class ActionRatings:
         self.evaluations = 0
         # `on_frame` receives each camera frame with its tracked bodies, e.g.
         # for measuring mouths (speakers.py).
-        if self._latest is not None:
-            observers = [self._latest.observe] + ([on_frame] if on_frame else [])
+        observers = [observer for observer in (
+            self._latest.observe if self._latest is not None else None,
+            self._observe_podest if self.podest is not None else None,
+            on_frame) if observer is not None]
 
-            def on_frame(image, frame):
-                for observe in observers:
-                    observe(image, frame)
+        def observe(image, frame):
+            for observer in observers:
+                observer(image, frame)
         self.recognizer = recognizer.ActionRecognizer(source, on_readings=self._on_readings,
-                                                      on_frame=on_frame,
+                                                      on_frame=observe if observers else None,
+                                                      on_new_body=on_new_body,
                                                       prefer=lambda: set(self.names()))
 
     def start(self) -> "ActionRatings":
@@ -399,21 +407,19 @@ class ActionRatings:
                  track in pinned and track in names)
                 for track in recognizer.tallest(frame, self.tracked)]
 
+    def _observe_podest(self, image, frame: tracking.Frame):
+        self.podest.observe(frame, image.shape[:2])
+
     def podest_stance(self) -> dict[int, bool]:
         """Each body in the newest tracked frame, by track id, and whether it
-        stands on the Podest now (podest.py).
+        is on the Podest now (podest.Stance).
 
         Empty without a polygon, and once recognition has stopped, since its
         last frames would otherwise hold whoever was in view at that moment.
         """
-        shape = self.recognizer.image_shape
-        if self.podest_polygon is None or shape is None or self.error is not None:
+        if self.podest is None or self.error is not None:
             return {}
-        frames = self.recognizer.recent(podest.FENSTER)
-        if not frames:
-            return {}
-        up = podest.oben(frames, shape, self.podest_polygon)
-        return {track: track in up for track in sorted(frames[-1].bodies)}
+        return self.podest.now()
 
     def assign(self, track: int, name: str | None) -> str | None:
         """Name a body by hand, or release it to the automatic naming with None.
@@ -679,6 +685,8 @@ class ActionRatings:
             self._face_sure = {}
             self.latest = []
         self.recognizer.tracker.frames.clear()
+        if self.podest is not None:
+            self.podest.clear()
 
     def between(self, since: datetime, until: datetime,
                 gain: Gain | None = None) -> list[report.Handlung]:
