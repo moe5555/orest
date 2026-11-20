@@ -19,7 +19,8 @@ The spec's settings, and where each takes effect:
   sitrep.js). Einschreiten is the only kind. On by default.
 - Manual Interference: keys with `screen`, a page reading that text, or
   with `strobe`, a page flashing like a stroboscope; opened with the key and
-  closed with it or with X. One page is open at a time.
+  closed with it or with X. One page is open at a time. Keys with `black`
+  cut the open stroboscope to black: its flashes stop until it is closed.
 - Tracked Persons: `tracked`, the bodies boxed, named and judged on the
   Podest (actions.ActionRatings.tracked), and keys with `tracked`, which
   switch to another number and back. Four by default, the size of the cast.
@@ -44,9 +45,10 @@ by their part. Without `roles`, as in Standard, everyone goes by their own
 name.
 
 What the operator changes in a scene (`Current`): the number tracked, the
-manual values, the screen or stroboscope open, whether the Podest is outlined,
-whether the video plays and the part each cast member plays. It lasts until a
-scene is selected, across runs started meanwhile.
+manual values, the screen or stroboscope open and whether it is cut to black,
+whether the Podest is outlined, whether the video plays, the part each cast
+member plays, and in every scene whether new bodies pulse Max (NEW_BODY_KEY).
+It lasts until a scene is selected, across runs started meanwhile.
 """
 
 import pathlib
@@ -92,8 +94,13 @@ def extent(value: str) -> int:
 # Bodies tracked unless a scene says otherwise: as many as the cast.
 TRACKED = 4
 
-# Keys the SITREP page already uses: R report, E recommendation, X override.
-RESERVED = frozenset("rex")
+# Switches the new-body pulse to Max (pulse.NEW_BODY) off and on, in every
+# scene.
+NEW_BODY_KEY = "n"
+
+# Keys every scene shares: R report, E recommendation, X override, N the
+# new-body pulse.
+RESERVED = frozenset("rex" + NEW_BODY_KEY)
 
 
 class PodestRule(BaseModel):
@@ -108,7 +115,7 @@ class PodestRule(BaseModel):
 
 class Key(BaseModel):
     """What one key does in a scene: exactly one of opening a screen,
-    opening the stroboscope, hiding or showing the Podest's outline,
+    opening the stroboscope, cutting it to black, hiding or showing the Podest's outline,
     switching the number tracked, changing a manual value, or swapping the
     live feed for the video."""
 
@@ -121,6 +128,7 @@ class Key(BaseModel):
     step: int | None = None
     swap: bool = False
     strobe: bool = False
+    black: bool = False
     outline: bool = False
 
     @model_validator(mode="after")
@@ -128,10 +136,10 @@ class Key(BaseModel):
         adjust = (self.person, self.value, self.step)
         chosen = [self.screen is not None, self.tracked is not None,
                   any(part is not None for part in adjust), self.swap, self.strobe,
-                  self.outline]
+                  self.black, self.outline]
         if sum(chosen) != 1:
             raise ValueError("a key does exactly one of: screen, tracked, "
-                             "person/value/step, swap, strobe, outline")
+                             "person/value/step, swap, strobe, black, outline")
         if chosen[2]:
             if any(part is None for part in adjust):
                 raise ValueError("a manual value needs person, value and step")
@@ -141,11 +149,13 @@ class Key(BaseModel):
 
     @property
     def action(self) -> str:
-        """"screen", "strobe", "outline", "tracked", "adjust" or "swap"."""
+        """"screen", "strobe", "black", "outline", "tracked", "adjust" or "swap"."""
         if self.screen is not None:
             return "screen"
         if self.strobe:
             return "strobe"
+        if self.black:
+            return "black"
         if self.outline:
             return "outline"
         if self.tracked is not None:
@@ -158,6 +168,8 @@ class Key(BaseModel):
             return f"„{self.screen}“"
         if self.action == "strobe":
             return "Stroboskop"
+        if self.action == "black":
+            return "Stroboskop schwarz"
         if self.action == "outline":
             return "Podest-Linie aus/an"
         if self.action == "tracked":
@@ -222,9 +234,12 @@ class Scene(BaseModel):
             if len(key) != 1 or key != key.lower() or not key.isalnum():
                 raise ValueError(f"a key is one lower-case letter or digit, not {key!r}")
             if key in RESERVED:
-                raise ValueError(f"key {key!r} is taken by the SITREP page (R, E, X)")
+                raise ValueError(f"key {key!r} is taken by every scene (R, E, X, N)")
         if self.podest is None and any(bound.outline for bound in self.keys.values()):
             raise ValueError("a key with outline needs the scene's podest")
+        if (any(bound.black for bound in self.keys.values())
+                and not any(bound.strobe for bound in self.keys.values())):
+            raise ValueError("a key with black needs a key with strobe")
         if self.video is not None and not self.video.is_absolute():
             self.video = REPO_ROOT / self.video
         return self
@@ -290,10 +305,14 @@ class Current:
             self.tracked = scene.tracked
             self.screen: str | None = None
             self.strobe = False
+            # The open stroboscope cut to black; ends as it closes.
+            self.dark = False
             # The Podest's outline on the operator's picture, where the scene
             # has the rule.
             self.outline = True
             self.recorded = scene.prerecorded
+            # Whether a new body pulses Max (NEW_BODY_KEY).
+            self.new_body_pulse = True
             self._manual: dict[str, dict[str, tuple[int, datetime]]] = {}
             # A problem the run met in carrying out the scene, e.g. a video
             # that does not open.
@@ -309,6 +328,9 @@ class Current:
         """Carry out what a key does in this scene. Returns its action, or
         None when the key does nothing here."""
         with self._lock:
+            if key.lower() == NEW_BODY_KEY:
+                self.new_body_pulse = not self.new_body_pulse
+                return "new_body"
             bound = self.scene.keys.get(key.lower())
             if bound is None:
                 return None
@@ -317,9 +339,13 @@ class Current:
             if bound.action == "screen":
                 self.screen = None if self.screen == bound.screen else bound.screen
                 self.strobe = False
+                self.dark = False
             elif bound.action == "strobe":
                 self.strobe = not self.strobe
                 self.screen = None
+                self.dark = False
+            elif bound.action == "black":
+                self.dark = self.strobe
             elif bound.action == "outline":
                 self.outline = not self.outline
             elif bound.action == "tracked":
@@ -340,6 +366,7 @@ class Current:
                 return False
             self.screen = None
             self.strobe = False
+            self.dark = False
             return True
 
     def values_of(self, name: str) -> list[str]:
@@ -425,11 +452,15 @@ class Current:
                 "tracked": self.tracked,
                 "screen": self.screen,
                 "strobe": self.strobe,
+                "dark": self.dark,
                 "outline": self.outline,
                 "recorded": self.recorded and scene.video is not None,
                 "video": scene.video.name if scene.video else None,
-                "keys": {key: {"action": bound.action, "label": bound.label()}
-                         for key, bound in scene.keys.items()},
+                "new_body_pulse": self.new_body_pulse,
+                "keys": {**{key: {"action": bound.action, "label": bound.label()}
+                            for key, bound in scene.keys.items()},
+                         NEW_BODY_KEY: {"action": "new_body", "label": "Klick bei neuer Person: "
+                                        + ("an" if self.new_body_pulse else "aus")}},
                 "values": list(scene.values),
                 "values_per_person": {name: list(values)
                                       for name, values in scene.values_per_person.items()},

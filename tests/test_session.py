@@ -406,6 +406,52 @@ def test_the_stroboscope_mutes_the_pulses_and_signals_itself(monkeypatch, room, 
         assert sent[-1] == (session.pulse.NEW_BODY, [1])
 
 
+def test_n_mutes_the_new_body_pulse_alone_and_the_stroboscope_keeps_it_muted(
+        monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.pulse, "Sender", lambda host, port: RecordingSender())
+    scene = session.scenes.Current(session.scenes.Scene(
+        name="Szene 1", podest=session.scenes.PodestRule(),
+        keys={"t": session.scenes.Key(strobe=True)}))
+
+    with session.Session(video, audio, session.Options(send_pulse=True), scene=scene) as live:
+        sent = live.pulse.sender.sent
+        scene.press("n")
+        live.apply()
+        live.pulse.fire(1)
+        live._podest_step(7, True)
+        assert sent == [(session.pulse.PODEST_ON, [1])]
+        scene.press("t")
+        scene.press("t")
+        live.apply()
+        live.pulse.fire(1)
+        assert all(address != session.pulse.NEW_BODY for address, _ in sent)
+        scene.press("n")
+        live.apply()
+        live.pulse.fire(1)
+        assert sent[-1] == (session.pulse.NEW_BODY, [1])
+
+
+def test_the_stroboscope_cut_to_black_signals_no_flashes(monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    monkeypatch.setattr(session.pulse, "Sender", lambda host, port: RecordingSender())
+    scene = session.scenes.Current(session.scenes.Scene(
+        name="Szene 1", keys={"t": session.scenes.Key(strobe=True),
+                              "s": session.scenes.Key(black=True)}))
+
+    with session.Session(video, audio, session.Options(send_pulse=True), scene=scene) as live:
+        scene.press("t")
+        live.apply()
+        assert live.strobe_cycle([(0, 10)])
+        scene.press("s")
+        live.apply()
+        assert not live.strobe_cycle([(0, 10)])
+        scene.press("t")
+        scene.press("t")
+        live.apply()
+        assert live.strobe_cycle([(0, 10)])
+
+
 def test_options_carry_the_command_line_through(tmp_path):
     class Args:
         interval, window = 5.0, 20.0

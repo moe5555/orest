@@ -318,7 +318,9 @@ port `7400` receives a pulse: `/apollon/tracking/new 1`, then `0` 100 ms later
 (`src/sitrep/pulse.py`). Every new body id pulses, with no filtering: a
 detection seen for one frame, and a person lost for more than 3 s and picked
 up again, pulse too. A body arriving while the pulse is high drops it to 0 and
-raises it again, so each body is its own rising edge. In Max:
+raises it again, so each body is its own rising edge. N on the SITREP page
+switches this pulse off and on, in every scene; each scene starts with it on.
+In Max:
 
     [udpreceive 7400]
     -> [route /apollon/tracking/new /apollon/tracking/podestOff /apollon/tracking/podestOn
@@ -338,7 +340,8 @@ three are muted. Instead `/apollon/strobe/zeichen` is 1 from the moment it
 opens and 0 once it closes, and `/apollon/strobe/fackel` is 1 while each flash
 of fire is lit: two pulses a cycle, as long as the flashes (30-60 ms). The
 page drawing the stroboscope announces each cycle's flashes to Apollon, so
-fackel needs a Prototype tab showing it.
+fackel needs a Prototype tab showing it. S cuts the open stroboscope to
+black: the flashes and fackel stop, zeichen stays 1, until T or X closes it.
 
 Needs the action recogniser, which runs the body tracker; with `--no-actions`
 nothing is sent. Host and port come from `APOLLON_PULSE_HOST` and

@@ -619,7 +619,7 @@ function render(snapshot) {
   document.body.dataset.screen = fullPage.state(snapshot);
   renderIntervene(snapshot.empfehlung?.urteil);
   renderManualScreen(snapshot.scene?.screen ?? "");
-  strobe.update();
+  strobe.update(Boolean(snapshot.scene?.dark));
   for (const view of Object.values(ANSICHTEN)) view.render?.(snapshot);
 }
 
@@ -793,10 +793,11 @@ const strobe = {
   on: false,
   playing: [],
 
-  // Runs while the stroboscope is on screen, from a first flash each time it
-  // appears.
-  update() {
-    const shown = $("strobe").getClientRects().length > 0;
+  // Runs while the stroboscope is on screen and not cut to black, from a
+  // first flash each time it appears or flashes again. Cut to black, the
+  // flashes stop at once and the page stays black until it is closed.
+  update(dark) {
+    const shown = $("strobe").getClientRects().length > 0 && !dark;
     if (shown === this.on) return;
     this.on = shown;
     if (shown) this.cycle();

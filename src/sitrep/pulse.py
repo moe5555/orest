@@ -6,7 +6,8 @@
 
 New bodies (action/tracking.py) are not filtered, so a detection seen for a
 single frame pulses too, as does a person the tracker lost for longer than
-tracking.FORGET and picked up again.
+tracking.FORGET and picked up again. The operator switches them off and on
+with N in every scene (scenes.NEW_BODY_KEY); each scene starts with them on.
 
 The Podest pulses come in a scene with a Podest rule, which in scenes.toml is
 Szene 1, for every body tracked, named or not (podest.Stance); Risiko is still
@@ -115,12 +116,14 @@ class Strobe:
     (sitrep.js, `strobe`), and announces them as the cycle begins; `cycle`
     sends fackel on that schedule. The flashes last 30-60 ms, so the schedule
     sleeps with time.sleep, which keeps to the millisecond on Windows, where a
-    timer or an event wait rounds to the 15.6 ms system tick.
+    timer or an event wait rounds to the 15.6 ms system tick. Cut to black
+    (`black`), it sends no fackel while zeichen stays 1.
     """
 
     def __init__(self, sender: Sender):
         self.sender = sender
         self.on = False
+        self.dark = False
         self._lock = threading.Lock()
         # Set to end the cycle being sent.
         self._stop: threading.Event | None = None
@@ -132,6 +135,7 @@ class Strobe:
             if on == self.on:
                 return
             self.on = on
+            self.dark = False
             self._end_cycle()
             if on:
                 self.sender.send((ZEICHEN, [1]))
@@ -141,15 +145,23 @@ class Strobe:
 
     def cycle(self, flashes: list[tuple[float, float]]) -> bool:
         """Send fackel for one cycle's flashes, each as its start and length in
-        ms from now. False while the stroboscope is closed."""
+        ms from now. False while the stroboscope is closed or cut to black."""
         with self._lock:
-            if not self.on:
+            if not self.on or self.dark:
                 return False
             self._end_cycle()
             stop = self._stop = threading.Event()
         threading.Thread(target=self._send_cycle, args=(sorted(flashes), stop),
                          daemon=True).start()
         return True
+
+    def black(self, dark: bool):
+        """Cut the open stroboscope to black (True), any flash being sent cut
+        short, or let it flash again."""
+        with self._lock:
+            self.dark = dark and self.on
+            if self.dark:
+                self._end_cycle()
 
     def _end_cycle(self):
         if self._stop is not None:

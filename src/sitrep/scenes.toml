@@ -21,10 +21,12 @@
 # values_per_person and keys name them by it; a cast member given no part is
 # shown as an unnamed body. Without roles, everyone goes by their own name.
 #
-# Keys, one lower-case letter or digit each (R, E and X are taken):
+# Keys, one lower-case letter or digit each (R, E, X and N are taken; N
+# switches the new-body pulse to Max off and on in every scene):
 #
 #   keys.t = { screen = "TEXT" }                            open/close a page reading TEXT
 #   keys.t = { strobe = true }                              open/close the stroboscope page
+#   keys.s = { black = true }                               cut the open stroboscope to black (needs strobe)
 #   keys.l = { outline = true }                             hide/show the line around the Podest (needs podest)
 #   keys.p = { tracked = 3 }                                switch to 3 people tracked and back
 #   keys.w = { person = "Orestes", value = "aggression", step = 1 }   raise a manual value
@@ -38,6 +40,7 @@ roles = { Lena = "Wächter" }
 podest = { step = 1, floor = 2 }
 tracked = 30
 keys.t = { strobe = true }
+keys.s = { black = true }
 keys.l = { outline = true }
 keys.p = { tracked = 3 }
 

@@ -124,6 +124,22 @@ def test_closing_the_stroboscope_mid_flash_leaves_fackel_at_0():
     assert values(sender, pulse.FACKEL) == [1, 0, 0]
 
 
+def test_cut_to_black_ends_fackel_and_keeps_zeichen():
+    sender = RecordingSender()
+    strobe = pulse.Strobe(sender)
+    strobe.show(True)
+    strobe.cycle([(0, 200), (300, 50)])
+    settle(0.05)
+    strobe.black(True)
+    assert not strobe.cycle([(0, 50)])
+    settle(0.4)
+    assert values(sender, pulse.FACKEL) == [1, 0, 0]
+    assert values(sender, pulse.ZEICHEN) == [1]
+    strobe.show(False)
+    strobe.show(True)
+    assert strobe.cycle([(0, 10)])
+
+
 def test_the_tracker_reports_each_new_body_once():
     new = []
     tracker = tracking.BodyTracker(on_new=new.append)

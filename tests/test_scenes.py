@@ -14,6 +14,7 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     eins = loaded["Szene 1"]
     assert (eins.podest, eins.tracked) == (scenes.PodestRule(step=1, floor=2), 30)
     assert eins.keys["t"].action == "strobe"
+    assert eins.keys["s"].action == "black"
     assert eins.keys["l"].action == "outline"
     assert eins.keys["p"].tracked == 3
     assert eins.roles == {"Lena": ["Wächter"]}
@@ -47,10 +48,12 @@ def write(tmp_path, text) -> pathlib.Path:
 
 @pytest.mark.parametrize("text", [
     '["A"]\nkeys.r = { screen = "x" }\n',                      # taken by the page
+    '["A"]\nkeys.n = { screen = "x" }\n',                      # the new-body pulse
     '["A"]\nkeys.t = { screen = "x", tracked = 3 }\n',          # two things at once
     '["A"]\nkeys.t = { screen = "x", strobe = true }\n',        # two pages at once
     '["A"]\nkeys.t = {}\n',                                     # nothing
     '["A"]\nkeys.l = { outline = true }\n',                     # no Podest to outline
+    '["A"]\nkeys.s = { black = true }\n',                       # no stroboscope to cut
     '["A"]\nkeys.w = { person = "Alex", value = "risiko", step = 1 }\n',  # measured, not manual
     '["A"]\nkeys.w = { person = "Alex", value = "aggression" }\n',        # no step
     '["A"]\nkeys.T = { screen = "x" }\n',                       # upper case
@@ -117,6 +120,23 @@ def test_the_stroboscope_opens_and_closes_with_its_key_or_closing():
     assert not current.close_screen()
 
 
+def test_black_cuts_only_an_open_stroboscope_until_it_closes():
+    current = scenes.Current(scenes.Scene(keys={"t": scenes.Key(strobe=True),
+                                                "s": scenes.Key(black=True)}))
+    assert current.press("s") == "black"
+    assert current.snapshot()["dark"] is False
+    current.press("t")
+    current.press("s")
+    assert (current.snapshot()["strobe"], current.snapshot()["dark"]) == (True, True)
+    current.press("t")
+    assert current.snapshot()["dark"] is False
+    current.press("t")
+    assert current.snapshot()["dark"] is False
+    current.press("s")
+    assert current.close_screen()
+    assert current.snapshot()["dark"] is False
+
+
 def test_a_screen_and_the_stroboscope_are_never_open_together():
     current = scenes.Current(scenes.Scene(keys={"t": scenes.Key(strobe=True),
                                                 "m": scenes.Key(screen="TROJA IST GEFALLEN")}))
@@ -138,8 +158,8 @@ def test_the_podest_outline_is_shown_until_its_key_hides_it_and_again_after_a_se
     current.press("l")
     current.select(scene)
     assert current.snapshot()["outline"] is True
-    assert current.snapshot()["keys"] == {"l": {"action": "outline",
-                                                "label": "Podest-Linie aus/an"}}
+    assert current.snapshot()["keys"]["l"] == {"action": "outline",
+                                               "label": "Podest-Linie aus/an"}
 
 
 def test_a_key_switches_the_number_tracked_and_back():
@@ -210,7 +230,22 @@ def test_the_page_is_told_the_keys_and_what_they_do():
     assert keys == {"w": {"action": "adjust", "label": "Alex: Aggression +1"},
                     "m": {"action": "screen",
                           "label": "„Maximales Aggressionspotenzial erreicht.“"},
-                    "t": {"action": "strobe", "label": "Stroboskop"}}
+                    "t": {"action": "strobe", "label": "Stroboskop"},
+                    "n": {"action": "new_body", "label": "Klick bei neuer Person: an"}}
+
+
+def test_n_switches_the_new_body_pulse_in_every_scene_until_a_selection():
+    scene = scenes.Scene()
+    current = scenes.Current(scene)
+    assert current.snapshot()["new_body_pulse"] is True
+    assert current.press("N") == "new_body"
+    assert current.snapshot()["new_body_pulse"] is False
+    assert current.snapshot()["keys"]["n"]["label"] == "Klick bei neuer Person: aus"
+    current.press("n")
+    assert current.snapshot()["new_body_pulse"] is True
+    current.press("n")
+    current.select(scene)
+    assert current.snapshot()["new_body_pulse"] is True
 
 
 # Cast and character names --------------------------------------------------

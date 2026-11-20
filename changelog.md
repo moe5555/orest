@@ -6,6 +6,48 @@ referenced below.
 
 ---
 
+## 2026-11-20 — Live SITREP: N switches the new-body pulse to Max off and on
+
+Requested by Moe. Concerns the pulses to Max (2026-11-19 entries):
+`/apollon/tracking/new`, sent each time the body tracker starts following
+someone.
+
+- N toggles it in every scene (`scenes.NEW_BODY_KEY`, now reserved with
+  R, E, X, so no scene can bind it). C was considered and set aside, since it
+  swaps live feed and video in Szene 3.
+- `Current.new_body_pulse` holds the state. It starts on and is set on again
+  whenever a scene is selected. The scene's key list carries N with its state
+  ("Klick bei neuer Person: an/aus"), so the page sends the key and the
+  info line shows the state.
+- `Session._signal_pulses` (was `_signal_strobe`) mutes the new-body pulse
+  while it is switched off or the stroboscope is open. The Podest pulses
+  are untouched by N.
+
+807 tests pass (3 new). Not yet checked in a browser or against Max.
+
+---
+
+## 2026-11-20 — Live SITREP: S cuts the Fackel stroboscope to black
+
+Requested by Moe. Concerns the Manual Interference of Scene 1 (the T
+stroboscope, `02_processing.md`) and its signals to Max (2026-11-19).
+
+- A new key action `black` (`scenes.Key`, label "Stroboskop schwarz"),
+  bound to S in Szene 1 (`scenes.toml`). It needs a key with `strobe` in the
+  same scene.
+- While the stroboscope is open, S sets `Current.dark`. On the page
+  (`sitrep.js`, `strobe.update`) the running flashes are cancelled at once,
+  leaving the stroboscope's black, and no new cycle starts.
+- `pulse.Strobe.black` cuts a fackel already being sent short, leaving it at
+  0, and refuses further cycles. zeichen stays 1 and the other pulses stay
+  muted until the stroboscope closes.
+- S works one way: T or X closes the stroboscope as before, and the next T
+  opens it flashing. With the stroboscope closed, S does nothing.
+
+804 tests pass (3 new). Not yet checked in a browser or against Max.
+
+---
+
 ## 2026-11-19 — Podest region re-measured where the Podest stands today
 
 Pointed out by Moe on the live feed: the line around the Podest no longer

@@ -550,7 +550,7 @@ class Session:
         scene reports why (scenes.Current.problem).
         """
         with self._applying:
-            self._signal_strobe()
+            self._signal_pulses()
             if self.actions is not None:
                 self.actions.tracked = self.scene.tracked
             wanted = self.scene.video()
@@ -785,14 +785,19 @@ class Session:
         return annotate.draw_names(self.outline_podest(frame), self.actions.visible(),
                                    annotate.DISPLAY)
 
-    def _signal_strobe(self):
-        """Signal Max as the scene's stroboscope opens or closes, muting the
-        other pulses while it is open."""
-        if self.strobe is None or self.scene.strobe == self.strobe.on:
+    def _signal_pulses(self):
+        """Signal Max as the scene's stroboscope opens, closes or is cut to
+        black, muting the other pulses while it is open. The new-body pulse is
+        also muted while the operator has switched it off
+        (scenes.Current.new_body_pulse)."""
+        if self.strobe is None:
             return
-        for muted in (self.pulse, *self.podest_pulses.values()):
+        self.pulse.muted = self.scene.strobe or not self.scene.new_body_pulse
+        for muted in self.podest_pulses.values():
             muted.muted = self.scene.strobe
-        self.strobe.show(self.scene.strobe)
+        if self.scene.strobe != self.strobe.on:
+            self.strobe.show(self.scene.strobe)
+        self.strobe.black(self.scene.dark)
 
     def strobe_cycle(self, flashes: list[tuple[float, float]]) -> bool:
         """Signal one cycle of the stroboscope the page draws: each flash's
