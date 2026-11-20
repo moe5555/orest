@@ -6,6 +6,31 @@ referenced below.
 
 ---
 
+## 2026-11-20 — Szene 3: Lena is Klytaimestra from the start
+
+Requested by Moe. Concerns the names of Scene 3 (`02_processing.md`, updated).
+`scenes.toml` gives Lena the single part Klytaimestra in Szene 3, in place of
+Elektra followed by Klytaimestra. She is shown, rated and reported as
+Klytaimestra from the scene's selection, and Im Bild no longer offers
+Elektra. Multiple parts per cast member remain supported by `scenes.py`; no
+scene uses them now.
+
+---
+
+## 2026-11-20 — Live SITREP: the Seestone mark shows whether N's pulse is on
+
+Requested by Moe. The Seestone mark at the top centre of the Live SITREP
+page (`sitrep.html`, `#mark`) now shows only while the new-body pulse to Max
+is switched on, and hides when N switches it off. `sitrep.js` reads
+`scene.new_body_pulse` from the snapshot each time it renders. The mark stays
+visible when the snapshot has no scene, matching the pulse's default of on.
+While the stroboscope is open, which also mutes the pulse, the stroboscope
+covers the mark as before.
+
+Not yet checked in a browser.
+
+---
+
 ## 2026-11-20 — Live SITREP: N switches the new-body pulse to Max off and on
 
 Requested by Moe. Concerns the pulses to Max (2026-11-19 entries):

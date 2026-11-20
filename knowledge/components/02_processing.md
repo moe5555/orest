@@ -101,7 +101,7 @@ Scenes:
   - **Manual Interference**: Press "M" and page opens that reads "Maximales Aggressionspotenzial erreicht." 
   - No auto Einschreiten Interference. 
 - **Scene 3**:
-  - Names: Alex is Orestes. Lena begins as Elektra; the operator renames her Klytaimestra during the scene (Im Bild on the SITREP page), after which Elektra is no longer offered.
+  - Names: Alex is Orestes, Lena is Klytaimestra from the start.
   - default settings
   - Press "C" and live-feed is swamped for a pre-recorded clip TBD.
   - No auto Einschreiten Interference. 

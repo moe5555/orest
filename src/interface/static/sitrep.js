@@ -620,6 +620,7 @@ function render(snapshot) {
   renderIntervene(snapshot.empfehlung?.urteil);
   renderManualScreen(snapshot.scene?.screen ?? "");
   strobe.update(Boolean(snapshot.scene?.dark));
+  $("mark").hidden = snapshot.scene?.new_body_pulse === false;
   for (const view of Object.values(ANSICHTEN)) view.render?.(snapshot);
 }
 

@@ -26,7 +26,7 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     assert loaded["Szene 1.2"].prerecorded
     assert loaded["Szene 1.2"].roles == zwei_drei.roles
     assert loaded["Szene 3"].keys["c"].swap
-    assert loaded["Szene 3"].roles == {"Lena": ["Elektra", "Klytaimestra"], "Alex": ["Orestes"]}
+    assert loaded["Szene 3"].roles == {"Lena": ["Klytaimestra"], "Alex": ["Orestes"]}
     assert [name for name, scene in loaded.items() if scene.interference] == [scenes.DEFAULT_NAME]
 
 

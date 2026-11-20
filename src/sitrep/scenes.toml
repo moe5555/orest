@@ -60,6 +60,6 @@ keys.m = { screen = "Maximales Aggressionspotenzial erreicht." }
 
 ["Szene 3"]
 interference = false
-roles = { Lena = ["Elektra", "Klytaimestra"], Alex = "Orestes" }
+roles = { Lena = "Klytaimestra", Alex = "Orestes" }
 keys.c = { swap = true }
 # video = "data/scenes/szene_3.mp4"
