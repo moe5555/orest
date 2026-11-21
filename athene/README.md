@@ -101,6 +101,18 @@ Options:
     python -m athene.live --obs                 # no browser; the addresses of the two OBS Browser Sources
     python -m athene.live --rehearsal           # Athene as before the strip: one 16:9 page, the clusters across it
 
+### The cluster pulse to Max
+
+Each cluster C places sends `/athene/cluster 1` over
+OSC, then `0` 100 ms later, as Apollon's pulses do (`src/sitrep/pulse.py`):
+a C pressed while the pulse is still high gives a fresh 0 → 1 edge, and
+the closing 0 is sent twice against UDP loss. A C that places no cluster
+(outside the death scene, or with all clips shown) sends nothing. The
+target is Apollon's Max, `192.168.10.3:7400` (`APOLLON_PULSE_HOST`,
+`APOLLON_PULSE_PORT`). In Max:
+
+    [udpreceive 7400] -> [route /athene/cluster] -> [sel 1]
+
 The clusters take their clips from `data/clips/athene_deathscene` (the
 death scene rehearsals) and `data/clips/athene_endvideos` (the play's end
 videos), mixed. The voice clips play in name order, one per P.

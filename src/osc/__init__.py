@@ -13,7 +13,8 @@ receiver in TouchDesigner route on the prefix.
 
 A second receiver, Max on another machine on the show network, takes a pulse
 each time the body tracker starts following someone (`/apollon/tracking/`,
-sitrep/pulse.py).
+sitrep/pulse.py). Athene pulses it there too, for each cluster of the death
+scene (`/athene/cluster`, athene/live.py).
 
 Every location is overridable by environment variable: the machine that runs
 this in the Probebuehne is not the machine it was written on.

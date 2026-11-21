@@ -727,6 +727,8 @@ function deathCluster() {
     tilt: AXES.clipTilt * (2 * Math.random() - 1),
   }));
   live.clusters.push({ id: clustersMade++, x, y, appear: live.clock + 0.8 * LIVE.deathGrow, leaving: null, clips });
+  // The server pulses /athene/cluster to Max (athene/live.py).
+  fetch("/cluster", { method: "POST" }).catch(() => {});
   showHint();
 }
 let clustersMade = 0;

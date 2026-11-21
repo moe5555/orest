@@ -51,6 +51,8 @@ packages = ["src/sitrep", "src/smartsearch", "src/face", "src/osc", "src/interfa
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repo root, for the athene package, which is not installed.
+pythonpath = ["."]
 
 [tool.uv]
 # rtmlib asks for opencv-contrib-python, which ships its own cv2 and collides

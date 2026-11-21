@@ -6,6 +6,27 @@ referenced below.
 
 ---
 
+## 2026-11-21 — Athene death scene: an OSC pulse to Max for each cluster
+
+Requested by Moe. Concerns Athene's scene 2, the death scene, and the OSC
+channel of the RENDER step in `pipeline.md`, with the receiver of Apollon's
+Szene 1 pulses (2026-11-19 entries): Max at `osc.PULSE_HOST` /
+`PULSE_PORT`.
+
+- `python -m athene.live` always pulses, with no flag to switch it on or
+  off: each cluster C places sends
+  `/athene/cluster 1`, then `0` after 100 ms, through Apollon's
+  `pulse.Pulse`: a fresh edge per C even while high, the 0 sent twice.
+- The page announces each cluster it places (`POST /cluster`,
+  `deathCluster` in `rehearsal.js`); the server (`render.serve`, now with
+  POST routes) fires the pulse. A C that places no cluster sends nothing.
+  Only the conducting page takes keys, so the followers in OBS send none.
+- `athene/` is on pytest's path (`pyproject.toml`), for its first test.
+
+839 tests pass (2 new). Not yet checked in OBS or against Max.
+
+---
+
 ## 2026-11-21 — Body search walls timed on the death scene
 
 Requested by Moe: three 3 × 3 body search walls that follow the death scene

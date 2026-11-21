@@ -160,10 +160,21 @@ def routes(page, clip, analysis_path, sheets, sheet_list_path):
     return table
 
 
-def serve(table, port):
-    """Serve the table on 127.0.0.1 in a background thread; returns the server."""
+def serve(table, port, posts=None):
+    """Serve the table on 127.0.0.1 in a background thread; returns the server.
+    `posts` maps URL paths to functions of no arguments that a POST calls."""
+    posts = posts or {}
 
     class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            action = posts.get(self.path.split("?", 1)[0])
+            if action is None:
+                self.send_error(404)
+                return
+            action()
+            self.send_response(204)
+            self.end_headers()
+
         def do_GET(self):
             path = table.get(self.path.split("?", 1)[0])
             if path is None or not path.is_file():

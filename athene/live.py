@@ -36,6 +36,12 @@ Keys on the page: N next scene, B previous, Space restart the scene, P play
 or stop the scene's next voice clip, C a cluster in the death scene, E the
 ending, S the strobe, L automatic or manual strikes and T (held) the manual
 strikes in the growth scene, X the cut to black at its end, H the help line.
+
+Each cluster C places pulses Max over OSC: CLUSTER is
+sent 1, then 0 after pulse.WIDTH seconds, as Apollon's pulses are
+(src/sitrep/pulse.py), to osc.PULSE_HOST and osc.PULSE_PORT. The page
+announces each cluster to the server (POST /cluster); a C that places no
+cluster, outside the death scene or with all clips shown, sends nothing.
 """
 
 import argparse
@@ -46,6 +52,9 @@ import subprocess
 import time
 import webbrowser
 from pathlib import Path
+
+from osc import PULSE_HOST, PULSE_PORT
+from sitrep import pulse
 
 from . import analyse, render
 
@@ -74,6 +83,8 @@ WHISPER = "large-v3-turbo"
 # Seconds within which a word's start moves to the voice's nearest syllable
 # onset (analyse.py), so that the finale's strobe starts on the word's audible attack.
 SNAP = 0.2
+# The pulse to Max for each cluster placed.
+CLUSTER = "/athene/cluster"
 
 
 def analysed(voice):
@@ -228,7 +239,8 @@ def main():
         table[f"/clips/{k}.mp4"] = path
         table[f"/clips/{k}_sheet.jpg"] = sheet
 
-    server = render.serve(table, args.port)
+    cluster = pulse.Pulse(address=CLUSTER)
+    server = render.serve(table, args.port, {"/cluster": cluster.fire})
     url = f"http://127.0.0.1:{server.server_address[1]}/?design={DESIGN}&mode=live"
     if args.rehearsal:
         url += "&rehearsal"
@@ -246,6 +258,7 @@ def main():
     if args.obs or not args.rehearsal:
         wall += "&follow"
     print(f"{len(voices)} voice clips, {len(clips)} cluster clips")
+    print(f"pulse: {CLUSTER} to {PULSE_HOST}:{PULSE_PORT} for each cluster")
     if args.obs:
         print(f"regie (9:1, 1920 x 213, conducts, no NDI): {regie}")
     if args.rehearsal:
@@ -266,6 +279,7 @@ def main():
     except KeyboardInterrupt:
         pass
     server.shutdown()
+    cluster.close()
 
 
 if __name__ == "__main__":
