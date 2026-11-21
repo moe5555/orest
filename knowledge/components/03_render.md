@@ -4,6 +4,8 @@ Overview: pipeline.md
 ## Live SITREP 
 How will the live SITREP be displayed? Let's create a new tab on localhost for each prototype UI. 
 
+> Changed 21.11.26 (Moe): Prototype 4 is the only display. Prototypes 1 to 3 are removed from the code; their descriptions remain below because Prototype 4 is described in terms of them.
+
 ### Prototype 1
 Video feed displayed on the top third of the page, with bounding boxes and names of the characters attached top left on the bounding box. 
 
@@ -36,11 +38,24 @@ Press "R" once and the Reportbericht is displayed center of the page, no other e
 
 Same as #2, but the SITREP values are not moving next to the bounding boxes, but appear statically at the edges of the video, attached to the name of the person via a white line attached to the bounding box. This is meant to prevent the overlays occluding the scene and moving around hectically that makes it hard to read. 
 
+> Added 21.11.26 (Moe): in scenes that rate tracked bodies which are not characters (Scene 1), their values are placed above their heads, on a smaller card above the name.
+
 ### Prototype 4
 
 Same as #3, but the SITREP values are not displayed below the video, but larger to the left and to the right of the video. Make them about twice as big as #3. Only display Alex and Lena's values in this display. 
 
 > Changed 15.10.26 (Moe): Alex's and Lena's values larger still; the video may be slightly smaller for it. The values stand outside the video's frame rather than within it.
+
+> Changed 21.11.26 (Moe): in scenes that rate tracked bodies which are not characters (Scene 1), their values are placed above their heads on a smaller card, as in #3.
+
+### Operator UI (Regie)
+> Added 21.11.26 (Moe), first prototype.
+
+Run like Athene: an interactive page the operator controls (`/control`), and the display as a page of its own that is projected (`/sitrep?follow`, Prototype 4). The projection shows nothing of the operator's and takes no keys. Its content is 16:9 whatever the window: a frame as large as the window allows, centred, black around it. The control page has:
+
+1. **Scene text.** Paste the full text of the scene. Highlight a passage with the cursor and annotate which SITREP values are set when it is said. By default the values are calculated as usual; an annotated passage overwrites them in that moment, after which the system carries on as normal. Replacing the text with a new one keeps the annotations of passages that are unchanged in it.
+2. **SITREP.** Starting values for each of the scene's characters (default 0), and each SITREP value of each character can be set during the scene, even while the character is not detected.
+3. **Renaming.** As in "Im Bild" on the SITREP page: bodies in view named by hand.
 
 ---
 

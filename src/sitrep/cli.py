@@ -69,7 +69,7 @@ def scene() -> argparse.ArgumentParser:
     """The scene a run starts in (scenes.py)."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--scene", metavar="NAME",
-                        help=f'a scene of {scenes.SCENES_FILE.name}, e.g. "Szene 1" '
+                        help=f'a scene of {scenes.SCENES_FILE.name}, e.g. "Szene 1 - Waechter" '
                              f"(default: {scenes.DEFAULT_NAME})")
     return parser
 
@@ -100,7 +100,8 @@ def touchdesigner() -> argparse.ArgumentParser:
                         help=f"pulse Max at {osc.PULSE_HOST}:{osc.PULSE_PORT}: "
                              f"{pulse.NEW_BODY} for each new body tracked, "
                              f"{pulse.PODEST_OFF} and {pulse.PODEST_ON} for each "
-                             f"body stepping off and onto the Podest")
+                             f"body stepping off and onto the Podest, "
+                             f"{pulse.BODY_COUNT} with the number tracked as it changes")
     parser.add_argument("--send-ndi", action="store_true",
                         help="publish the camera as an NDI source for TouchDesigner")
     parser.add_argument("--ndi-name", default=feed.NAME,

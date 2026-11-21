@@ -25,7 +25,8 @@ lost track does not unname its earlier readings. Readings are kept
 under the body and named only when a report takes them, so a body named at
 any point before then is rated on all its readings, including those made
 before its face was seen. A body named neither by a face nor by its
-appearance is not rated.
+appearance is not rated in a report; the live values rate it under its label
+where the scene says so (lage.py, scenes.Scene.bodies).
 
 Appearance. Given a memory of appearances (appearance.Appearances), each
 naming also describes the bodies in view, and a description that matches a
@@ -145,6 +146,15 @@ RATING_MAX = 5
 # Seconds of readings kept: as long as the summary of the scene may ask about
 # (chronik.py), and the same as the loudness levels kept (loudness.KEEP).
 KEEP = 600.0
+
+
+# The label of a body that carries no name begins with this.
+KOERPER = "Körper"
+
+
+def koerper(track: int) -> str:
+    """The label of a body that carries no name."""
+    return f"{KOERPER} {track}"
 
 
 def head(body: tracking.Body) -> np.ndarray | None:
@@ -288,6 +298,7 @@ class ActionRatings:
                  podest_polygon: Sequence[tuple[float, float]] | None = None,
                  role: Callable[[str], str | None] | None = None,
                  on_new_body: Callable[[int], None] | None = None,
+                 on_body_count: Callable[[int], None] | None = None,
                  on_podest_step: Callable[[int, bool], None] | None = None):
         self.mapping = mapping or sitrep_map.load()
         # The name a cast member is shown under, or None where the scene in
@@ -345,6 +356,7 @@ class ActionRatings:
         self.recognizer = recognizer.ActionRecognizer(source, on_readings=self._on_readings,
                                                       on_frame=observe if observers else None,
                                                       on_new_body=on_new_body,
+                                                      on_body_count=on_body_count,
                                                       prefer=lambda: set(self.names()))
 
     def start(self) -> "ActionRatings":
@@ -403,7 +415,7 @@ class ActionRatings:
         with self._lock:
             names, pinned = dict(self._names), set(self._pinned)
         names = self._shown(names)
-        return [(track, frame.bodies[track].box, names.get(track, f"Körper {track}"),
+        return [(track, frame.bodies[track].box, names.get(track, koerper(track)),
                  track in pinned and track in names)
                 for track in recognizer.tallest(frame, self.tracked)]
 
@@ -662,7 +674,7 @@ class ActionRatings:
             kept.append(Evidence(at, reading.members, values, causes, scores.get(alone)))
             top = int(reading.probabilities.argmax())
             seen.append(Recognised(
-                tuple(names.get(member, f"Körper {member}") for member in reading.members),
+                tuple(names.get(member, koerper(member)) for member in reading.members),
                 self.mapping.names[top], float(reading.probabilities[top]), values))
         with self._lock:
             self._records.extend(kept)

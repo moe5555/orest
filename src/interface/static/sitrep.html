@@ -12,13 +12,10 @@
        body pulses Max (N). -->
   <img class="mark" id="mark" src="/static/seestone.png" alt="Seestone">
 
-  <!-- Views over the same run: the overview, and the display prototypes of
-       knowledge/components/03_render.md ("Live SITREP"). -->
+  <!-- Views over the same run: the overview, and the display of
+       knowledge/components/03_render.md ("Live SITREP", Prototype 4). -->
   <nav class="ansichten" aria-label="Ansicht">
     <button type="button" data-ansicht="uebersicht" aria-current="page">Übersicht</button>
-    <button type="button" data-ansicht="p1">Prototyp 1</button>
-    <button type="button" data-ansicht="p2">Prototyp 2</button>
-    <button type="button" data-ansicht="p3">Prototyp 3</button>
     <button type="button" data-ansicht="p4">Prototyp 4</button>
   </nav>
 
@@ -78,24 +75,15 @@
       </aside>
     </div>
 
-    <!-- Prototype 1: the people in view, in the order they stand from
-         left to right. -->
-    <div class="p1-only p1-seite">
-      <section class="p1-personen" id="p1-personen" aria-label="Personen im Bild"></section>
-      <section class="p1-alarm" id="p1-alarm" hidden>
-        <span class="p1-alarm-kopf" id="p1-alarm-kopf"></span>
-        <span class="p1-alarm-anlass" id="p1-alarm-anlass"></span>
-      </section>
-    </div>
-    <!-- Prototypes 2 to 4: beneath the picture, the scene as a whole. The
+    <!-- Prototype 4: beneath the picture, the scene as a whole. The
          people's values are drawn into the picture by the server. -->
-    <section class="p2-only p2-scene" aria-label="Szene">
-      <div class="p2-scene-meters" id="p2-scene-meters"></div>
-      <p class="p2-scene-source" id="p2-scene-source"></p>
+    <section class="display-only p4-scene" aria-label="Szene">
+      <div class="p4-scene-meters" id="p4-scene-meters"></div>
+      <p class="p4-scene-source" id="p4-scene-source"></p>
     </section>
 
-    <!-- All prototypes: a recommendation to intervene in place of
-         everything else. -->
+    <!-- Prototype 4: a recommendation to intervene in place of everything
+         else. -->
     <div class="display-only intervene" role="alert">
       <span class="intervene-word">Einschreiten</span>
       <div class="intervene-row" id="intervene-why-row">
@@ -109,13 +97,13 @@
       <button id="intervene-override" class="intervene-override" type="button" title="Empfehlung übergehen"><kbd>X</kbd> Override</button>
     </div>
 
-    <!-- All prototypes: a screen the operator opens with a key of the scene
+    <!-- Prototype 4: a screen the operator opens with a key of the scene
          (Manual Interference), in place of everything else. -->
     <div class="display-only manual-screen" role="alert">
       <span class="manual-screen-text" id="manual-screen-text"></span>
     </div>
 
-    <!-- All prototypes: the stroboscope a key of the scene opens (Manual
+    <!-- Prototype 4: the stroboscope a key of the scene opens (Manual
          Interference), over everything else. One layer per flash of a cycle,
          drawn and timed in sitrep.js (strobe). -->
     <div class="display-only strobe" id="strobe" aria-hidden="true">
@@ -197,9 +185,6 @@
   </main>
 
   <script src="/static/sitrep.js"></script>
-  <script src="/static/prototyp1.js"></script>
-  <script src="/static/prototyp2.js"></script>
-  <script src="/static/prototyp3.js"></script>
   <script src="/static/prototyp4.js"></script>
 </body>
 </html>

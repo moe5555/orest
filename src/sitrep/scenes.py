@@ -26,8 +26,13 @@ The spec's settings, and where each takes effect:
   switch to another number and back. Four by default, the size of the cast.
 - SITREP Values: `values`, and `values_per_person` for the people whose
   values differ. Only these are shown, sent and read by the alarm (lage.py).
+  With `bodies`, the bodies boxed that carry no character's name are rated
+  too, with `values`, and shown above their heads (lage.Stand.koerper); they
+  are not sent and the alarm does not read them. Off by default.
 - Manual SITREP Values: keys with `person`, `value` and `step`, which raise
   or lower a value that only the operator sets (MANUAL).
+- `body_count`, beside the spec's settings: the number of bodies the tracker
+  follows, sent to Max as it changes (pulse.Count). Off by default.
 - Pre-recorded: `video`, played in place of the camera from the scene's
   selection on when `prerecorded` (recording.py). It is analysed as the
   camera is, and its sound replaces the microphone's while it plays.
@@ -45,7 +50,7 @@ by their part. Without `roles`, as in Standard, everyone goes by their own
 name.
 
 What the operator changes in a scene (`Current`): the number tracked, the
-manual values, the screen or stroboscope open and whether it is cut to black,
+manual values, the values set at a moment (`Current.set_value`), the screen or stroboscope open and whether it is cut to black,
 whether the Podest is outlined, whether the video plays, the part each cast
 member plays, and in every scene whether new bodies pulse Max (NEW_BODY_KEY).
 It lasts until a scene is selected, across runs started meanwhile.
@@ -196,6 +201,9 @@ class Scene(BaseModel):
     podest: PodestRule | None = None
     interference: bool = True
     tracked: int = Field(default=TRACKED, ge=1)
+    bodies: bool = False
+    # Whether Max is sent the number of bodies tracked (pulse.Count).
+    body_count: bool = False
     values: list[str] = Field(default_factory=lambda: list(report.BEWERTUNGEN))
     values_per_person: dict[str, list[str]] = Field(default_factory=dict)
     video: pathlib.Path | None = None
@@ -314,6 +322,9 @@ class Current:
             # Whether a new body pulses Max (NEW_BODY_KEY).
             self.new_body_pulse = True
             self._manual: dict[str, dict[str, tuple[int, datetime]]] = {}
+            # Measured values set at a moment (`set_value`), by person and
+            # value: the value, when it was set, and why.
+            self._set: dict[str, dict[str, tuple[int, datetime, str]]] = {}
             # A problem the run met in carrying out the scene, e.g. a video
             # that does not open.
             self.problem: str | None = None
@@ -427,6 +438,43 @@ class Current:
             if not roles:
                 return name
             return next((member for member, parts in roles.items() if name in parts), None)
+
+    def set_value(self, name: str, value: str, wert: int, cause: str,
+                  at: datetime | None = None):
+        """Set a person's value at a moment, clipped to its range, whether or
+        not they are in view.
+
+        A value only the operator sets (MANUAL) stands as set, as a key
+        sets it; set to 0, it reads 0 as one never set does. A measured value is taken as evidence at that moment in
+        place of everything measured of it before (lage.measure), and the
+        system carries on from it as from any measurement: Risiko and
+        Menschlichkeit decay, Berechenbarkeit is measured again. Raises
+        ValueError for a value the scene does not know.
+        """
+        if value not in VALUES:
+            raise ValueError(f"Unbekannter Wert {value!r}.")
+        low, high = RANGES[value]
+        wert = min(high, max(low, int(wert)))
+        at = at or datetime.now()
+        with self._lock:
+            if value in MANUAL and wert:
+                self._manual.setdefault(name, {})[value] = (wert, at)
+            elif value in MANUAL:
+                self._manual.get(name, {}).pop(value, None)
+            else:
+                self._set.setdefault(name, {})[value] = (wert, at, cause)
+
+    def set_values(self) -> dict[str, dict[str, tuple[int, datetime, str]]]:
+        """The measured values set at a moment, by person and value, with
+        when and why each was set last."""
+        with self._lock:
+            return {name: dict(values) for name, values in self._set.items()}
+
+    def characters(self, cast: Sequence[str]) -> list[str]:
+        """The names the scene's people go by: every part it gives, or the
+        cast where it gives none."""
+        with self._lock:
+            return self.scene.parts() if self.scene.roles else list(cast)
 
     def manual(self) -> dict[str, dict[str, tuple[int, datetime]]]:
         """The values set by hand, by person and value, with when each was last set."""

@@ -177,7 +177,8 @@ class BodyTracker:
     """Gives each body a stable id for as long as it keeps being detected."""
 
     def __init__(self, *, link: float = LINK, forget: float = FORGET,
-                 history: float = HISTORY, on_new: Callable[[int], None] | None = None):
+                 history: float = HISTORY, on_new: Callable[[int], None] | None = None,
+                 on_count: Callable[[int], None] | None = None):
         self._link = link
         self._forget = forget
         self._history = history
@@ -185,6 +186,10 @@ class BodyTracker:
         self._next_id = 1
         # Called with each new track id, on the thread that calls `update`.
         self._on_new = on_new
+        # Called with the number of bodies followed, those undetected for up
+        # to `forget` included, each time it changes; on the same thread.
+        self._on_count = on_count
+        self._count = 0
         self.frames: deque[Frame] = deque()
 
     def update(self, keypoints: np.ndarray, scores: np.ndarray, at: float) -> Frame:
@@ -228,7 +233,17 @@ class BodyTracker:
         self.frames.append(frame)
         while self.frames and at - self.frames[0].at > self._history:
             self.frames.popleft()
+        if len(self._last) != self._count:
+            self._count = len(self._last)
+            if self._on_count is not None:
+                self._on_count(self._count)
         return frame
+
+    @property
+    def count(self) -> int:
+        """Bodies followed after the latest frame, those undetected for up to
+        `forget` included."""
+        return self._count
 
     def window(self, since: float, until: float) -> list[Frame]:
         """The kept frames from `since` to `until`, inclusive."""

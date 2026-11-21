@@ -10,23 +10,23 @@ from sitrep import scenes
 
 def test_the_scenes_file_holds_the_scenes_of_the_play():
     loaded = scenes.load()
-    assert list(loaded) == [scenes.DEFAULT_NAME, "Szene 1", "Szene 1.2", "Szene 2.3", "Szene 3"]
-    eins = loaded["Szene 1"]
+    assert list(loaded) == [scenes.DEFAULT_NAME, "Szene 1 - Waechter", "Szene 1.2", "Szene 2.3 - Aggression", "Szene 3 - Pylades"]
+    eins = loaded["Szene 1 - Waechter"]
     assert (eins.podest, eins.tracked) == (scenes.PodestRule(step=1, floor=2), 30)
     assert eins.keys["t"].action == "strobe"
     assert eins.keys["s"].action == "black"
     assert eins.keys["l"].action == "outline"
     assert eins.keys["p"].tracked == 3
     assert eins.roles == {"Lena": ["Wächter"]}
-    zwei_drei = loaded["Szene 2.3"]
+    zwei_drei = loaded["Szene 2.3 - Aggression"]
     assert zwei_drei.roles == {"Lena": ["Elektra"], "Alex": ["Orestes"]}
     assert zwei_drei.values_of("Orestes") == ["aggression"]
     assert zwei_drei.values_of("Elektra") == ["risiko", "menschlichkeit", "berechenbarkeit"]
     assert zwei_drei.keys["w"].person == "Orestes"
     assert loaded["Szene 1.2"].prerecorded
     assert loaded["Szene 1.2"].roles == zwei_drei.roles
-    assert loaded["Szene 3"].keys["c"].swap
-    assert loaded["Szene 3"].roles == {"Lena": ["Klytaimnestra"], "Alex": ["Orestes"]}
+    assert loaded["Szene 3 - Pylades"].keys["c"].swap
+    assert loaded["Szene 3 - Pylades"].roles == {"Lena": ["Klytaimnestra"], "Alex": ["Orestes"]}
     assert [name for name, scene in loaded.items() if scene.interference] == [scenes.DEFAULT_NAME]
 
 
@@ -295,3 +295,28 @@ def test_a_part_whose_cast_member_is_not_enrolled_is_not_offered():
     assert current.offered(["Lena"]) == ["Elektra"]
     with pytest.raises(ValueError):
         current.give("Orestes", ["Lena"])
+
+
+def test_a_value_set_is_clipped_to_its_range_and_cleared_by_a_selection():
+    current = scenes.Current(scenes.Scene(name="Szene 2.3"))
+    current.set_value("Orestes", "risiko", 9, "vom Operator gesetzt")
+    current.set_value("Orestes", "aggression", -12, "vom Operator gesetzt")
+    assert current.set_values()["Orestes"]["risiko"][0] == 5
+    # A value only the operator sets stands with the manual values.
+    assert current.manual()["Orestes"]["aggression"][0] == -10
+    with pytest.raises(ValueError):
+        current.set_value("Orestes", "mut", 1, "")
+    current.select(current.scene)
+    assert current.set_values() == {} and current.manual() == {}
+
+
+def test_the_characters_are_the_parts_or_without_parts_the_cast():
+    assert scenes.Current(scenes.Scene(roles={"Lena": "Elektra", "Alex": "Orestes"})).characters(
+        ["Alex", "Lena"]) == ["Elektra", "Orestes"]
+    assert scenes.Current().characters(["Alex", "Lena"]) == ["Alex", "Lena"]
+
+
+def test_szene_1_rates_the_bodies_without_a_characters_name():
+    loaded = scenes.load()
+    assert loaded["Szene 1 - Waechter"].bodies
+    assert not scenes.Scene().bodies

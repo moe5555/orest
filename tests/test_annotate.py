@@ -72,77 +72,51 @@ def test_pips_fill_by_the_share_of_the_values_scale():
         [0, 1, 1, 2, 2, 4, 5, 5]
 
 
-def test_a_value_of_two_digits_and_a_sign_fits_its_panel():
-    original = frame()
+LABELS = ["Risiko", "Menschlichkeit", "Berechenbarkeit"]
+
+
+def test_a_value_of_two_digits_and_a_sign_fits_its_card():
+    original = frame(720, 1280)
     rows = [("Aggression", -10, "calm", 10)]
-    marked = annotate.draw_ratings(original, [(box(100, 150, 160, 300), "Alex", rows)])
-    assert changed(original, marked)[150:300, 165:].any()
-    assert marked.shape == original.shape
+    marked = annotate.draw_ratings_sides(original, [(box(800, 300, 920, 600), "Alex", rows)],
+                                         {"Alex": 0}, ["Aggression"], widest=10)
+    band = band_width(marked)
+    gap = round(1280 * annotate.SIDE_GAP_SHARE)
+    panel = np.array(annotate.PANEL[::-1])
+    card = np.flatnonzero(np.all(marked[:, :band] == panel, axis=2).any(axis=0))
+    assert card.size and card[-1] < band - gap
 
 
-def test_a_frame_with_nobody_to_rate_is_returned_unmarked():
-    original = frame()
-    assert annotate.draw_ratings(original, []) is original
-
-
-def test_ratings_are_set_beside_the_box_and_the_source_frame_stays_clean():
-    original = frame()
+def test_the_source_frame_stays_clean_when_ratings_are_drawn():
+    original = frame(720, 1280)
     copy = original.copy()
-    marked = annotate.draw_ratings(original, [(box(100, 150, 160, 300), "Klara", RATED)])
+    annotate.draw_ratings_sides(original, [(box(800, 300, 920, 600), "Klara", RATED)],
+                                {"Klara": 0}, LABELS)
     assert np.array_equal(original, copy)
-    touched = changed(original, marked)
-    assert touched[150:300, 165:].any()          # panel right of the box
-    assert not touched[:, :95].any()             # nothing left of it
-
-
-def test_ratings_of_a_box_at_the_right_edge_are_set_left_of_it():
-    original = frame()
-    marked = annotate.draw_ratings(original, [(box(560, 150, 639, 300), "Klara", RATED)])
-    assert changed(original, marked)[150:300, :555].any()
 
 
 def test_a_high_risiko_is_drawn_in_red():
-    original = frame()
-    marked = annotate.draw_ratings(original, [(box(100, 150, 160, 300), "Klara", RATED)])
+    original = frame(720, 1280)
+    marked = annotate.draw_ratings_sides(original, [(box(800, 300, 920, 600), "Klara", RATED)],
+                                         {"Klara": 0}, LABELS)
     red = annotate.LEVEL["red"]
     rgb = marked[..., ::-1]
     assert np.all(rgb == red, axis=2).any()
 
 
-LABELS = ["Risiko", "Menschlichkeit", "Berechenbarkeit"]
-
-
-def test_the_strip_lies_beneath_the_picture_and_keeps_its_height():
-    """The picture keeps its size whether or not anyone is rated."""
-    original = frame()
-    empty = annotate.draw_ratings_strip(original, [], {}, LABELS)
-    rated = annotate.draw_ratings_strip(original, [(box(100, 150, 160, 300), "Klara", RATED)],
-                                        {"Klara": 0}, LABELS)
-    assert empty.shape == rated.shape
-    assert empty.shape[0] > original.shape[0] and empty.shape[1] == original.shape[1]
-    assert np.array_equal(empty[:360], original)
-
-
-def test_ratings_in_the_strip_stand_in_their_slot_tied_to_the_box_by_a_white_line():
-    # 720p: at 640 px a slot is narrower than three rating rows at the
-    # smallest legible size.
+def test_a_bodys_ratings_stand_above_its_head_and_take_no_band():
     original = frame(720, 1280)
-    marked = annotate.draw_ratings_strip(original, [(box(800, 300, 920, 600), "Klara", RATED)],
-                                         {"Klara": 3}, LABELS)
-    strip = marked[720:]
+    marked = annotate.draw_ratings_sides(original, [(box(600, 400, 700, 700), "Körper 7", RATED)],
+                                         {"Körper 7": 0}, LABELS, overhead={"Körper 7"})
+    band = band_width(marked)
     ground = np.array(annotate.DISPLAY.tag[::-1])
-    assert np.any(strip[:, 960:] != ground)                  # slot 3 of 4
-    assert np.all(strip[:, :960] == ground)                  # the others stay empty
-    line = np.all(marked[601:720] == annotate.LINK[::-1], axis=2)  # between box foot and strip
-    assert line.any()
-
-
-def test_a_person_without_ratings_gets_no_slot_panel():
-    original = frame()
-    marked = annotate.draw_ratings_strip(original, [(box(100, 150, 160, 300), "Körper 7", [])],
-                                         {}, LABELS)
-    assert np.all(marked[360:] == np.array(annotate.DISPLAY.tag[::-1]))
-    assert changed(original, marked[:360]).any()             # boxed and named in the picture
+    assert np.all(marked[:, :band] == ground)                            # the bands stay empty
+    assert np.all(marked[:, band + 1280:] == ground)
+    picture = marked[:400, band:band + 1280]
+    card = np.all(picture == np.array(annotate.PANEL[::-1]), axis=2)
+    rows, columns = np.nonzero(card)
+    assert rows.max() < 400 - 20                                         # above the name's tag
+    assert columns.min() < 650 < columns.max()                           # centred on the body
 
 
 def band_width(marked, picture_width=1280) -> int:
@@ -220,7 +194,7 @@ def test_a_person_keeps_their_slot_while_in_view():
 
 def test_a_new_person_takes_the_free_slot_nearest_their_place():
     slots = annotate.Slots()
-    assert slots.assign([("Klara", 0.1), ("Orest", 0.8)], now=0) == {"Klara": 0, "Orest": 3}
+    assert slots.assign([("Orest", 0.8)], now=0) == {"Orest": 1}
 
 
 def test_a_slot_is_held_for_a_person_who_left_a_moment_ago():

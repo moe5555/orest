@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regie \ Apollon</title>
+  <link rel="icon" href="/static/seestone.png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="control">
+  <!-- The operator's page. The projection (/sitrep?follow) follows the
+       run this page conducts and shows nothing of it. -->
+  <header class="bar">
+    <div class="brand">APOLLON<span>\ REGIE</span></div>
+    <select id="scene" aria-label="Szene" disabled><option>Wird geladen …</option></select>
+    <div class="status" id="status" data-status="idle">Bereit</div>
+    <div class="meta" id="meta"></div>
+    <a class="button" href="/sitrep?follow" target="_blank" rel="noopener">Projektion öffnen</a>
+    <button id="toggle" type="button">Starten</button>
+  </header>
+
+  <main class="control-grid">
+    <!-- 1 \ The scene's text. Passages marked in it set values when said. -->
+    <section class="panel script">
+      <div class="script-head">
+        <span class="label">Szenentext</span>
+        <span class="cue" id="cue" role="status"></span>
+        <button id="edit-text" type="button">Text ersetzen</button>
+      </div>
+      <p class="hinweis" id="script-notice" hidden></p>
+      <div class="script-editor" id="script-editor" hidden>
+        <textarea id="script-input" spellcheck="false"
+                  placeholder="Den vollständigen Text der Szene hier einfügen."></textarea>
+        <div class="script-editor-actions">
+          <button id="save-text" type="button" class="primary">Übernehmen</button>
+          <button id="cancel-text" type="button">Abbrechen</button>
+          <span class="hinweis">Annotierte Stellen, die unverändert im neuen Text stehen, behalten ihre Annotation.</span>
+        </div>
+      </div>
+      <div class="script-text" id="script-text" tabindex="0"></div>
+      <p class="hinweis script-help">Text markieren, um festzulegen, welche Werte gesetzt werden, wenn die Stelle gesagt wird. Eine markierte Stelle anklicken, um sie zu ändern.</p>
+    </section>
+
+    <div class="control-side">
+      <section class="feed" aria-label="Kamerabild wie projiziert">
+        <img id="video" alt="Kamerabild wie projiziert">
+        <div class="feed-empty" id="feed-empty">Gestoppt.</div>
+      </section>
+
+      <!-- 3 \ Renaming: the bodies in view, left to right, named by hand. -->
+      <section class="panel">
+        <span class="label">Im Bild \ links nach rechts</span>
+        <div class="in-view" id="in-view"></div>
+        <p class="hinweis" id="in-view-error" data-level="red" hidden></p>
+      </section>
+
+      <!-- 2 \ SITREP: each character's values now, set by hand, and the
+           values the scene starts with. -->
+      <section class="panel">
+        <div class="values-head">
+          <span class="label">SITREP \ Werte</span>
+          <button id="apply-initial" type="button" title="Startwerte aller Personen jetzt setzen">Szene beginnen</button>
+        </div>
+        <div class="characters" id="characters"></div>
+        <p class="hinweis" id="values-notice" hidden></p>
+      </section>
+    </div>
+  </main>
+
+  <!-- The values a marked passage sets, beside the marking. -->
+  <div class="annotation-card panel" id="annotation-card" role="dialog" aria-label="Annotation" hidden>
+    <span class="label">Wenn gesagt, setzen</span>
+    <blockquote class="annotation-quote" id="annotation-quote"></blockquote>
+    <div id="annotation-values"></div>
+    <p class="hinweis" id="annotation-error" data-level="red" hidden></p>
+    <div class="annotation-actions">
+      <button id="annotation-save" type="button" class="primary">Speichern</button>
+      <button id="annotation-delete" type="button">Löschen</button>
+      <button id="annotation-cancel" type="button">Abbrechen</button>
+    </div>
+  </div>
+
+  <script src="/static/control.js"></script>
+</body>
+</html>

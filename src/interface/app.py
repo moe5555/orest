@@ -1,7 +1,11 @@
 """HTTP routes of the operator interface.
 
     /                        operator page
-    /sitrep                  live SITREP page: camera feed, live values beneath it
+    /sitrep                  live SITREP page: camera feed, live values beneath it;
+                             ?follow for the projection, which follows the
+                             control page and takes no keys
+    /control                 control page: the scene's text, its people's
+                             values, the people in view
     POST /api/sitrep/start   begin the run (a no-op while one is under way)
     POST /api/sitrep/stop    end it
     POST /api/sitrep/bericht     ask for a report (key R on the page)
@@ -17,16 +21,22 @@
                                  the OSC pulses to Max (sitrep/pulse.py)
     /api/sitrep/state        the current snapshot, as JSON
     /api/sitrep/events       the snapshot as server-sent events, on every change
-    /api/sitrep/video        the camera as an MJPEG stream; ?ratings=1 sets each
-                             person's live values beside their box (Prototype 2),
-                             with &strip=1 in slots beneath the picture (Prototype 3),
-                             with &sides=1 Alex's and Lena's to each side of it
-                             (Prototype 4)
+    /api/sitrep/video        the camera as an MJPEG stream; ?ratings=1 sets Alex's
+                             and Lena's live values to each side of it (Prototype 4)
     /api/sources             the cameras and microphones on offer, and the selection
     POST /api/sources        select the camera and sound source of the next run
     /api/sources/ndi         the NDI sources on the network (takes two seconds)
     /api/scenes              the scenes on offer, and the one in force
     POST /api/scene          put a scene in force, in the run under way too
+    /api/control             the scene in force as the control page edits it
+    PUT /api/control/text    replace the scene's text, keeping the annotations
+                             of the passages it still holds
+    POST /api/control/annotations          annotate a passage of the text
+    PUT /api/control/annotations/{id}      change the values a passage sets
+    DELETE /api/control/annotations/{id}   remove a passage's annotation
+    PUT /api/control/initial               keep the scene's starting values
+    POST /api/control/initial/apply        set them now: the scene begins
+    POST /api/control/set                  set a person's value now
 
 The camera travels as MJPEG because a browser plays it in a plain <img> with
 no script or codec, and on the loopback interface its bandwidth costs
@@ -69,20 +79,19 @@ def _jpeg(frame) -> bytes:
 
 
 async def mjpeg(live: LiveSitrep, disconnected: Callable[[], Awaitable[bool]],
-                ratings: bool = False, strip: bool = False, sides: bool = False):
+                ratings: bool = False):
     """The camera as multipart JPEG parts, until the viewer leaves or the run ends.
 
     Ends when no run holds the camera; the page reopens the feed when a new
-    run starts. With `ratings`, the live values are drawn beside each box,
-    with `strip` on a strip beneath the picture, or with `sides` in a band to
-    each side of it (LiveSitrep.overlay).
+    run starts. With `ratings`, the live values are drawn in a band to each
+    side of the picture (LiveSitrep.overlay).
     """
     while not await disconnected():
         frame = live.latest_frame()
         if frame is None:
             return
         # Marking and encoding both run off the event loop.
-        jpeg = await asyncio.to_thread(lambda: _jpeg(live.overlay(frame, ratings, strip, sides)))
+        jpeg = await asyncio.to_thread(lambda: _jpeg(live.overlay(frame, ratings)))
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n"
                b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
                + jpeg + b"\r\n")
@@ -100,6 +109,39 @@ class StrobeCycle(BaseModel):
     length, in ms from the cycle's start."""
 
     flashes: list[tuple[float, float]]
+
+
+class SceneTextIn(BaseModel):
+    """A scene's full text."""
+
+    text: str
+
+
+class AnnotationIn(BaseModel):
+    """A passage of the scene's text, by character offsets, and per
+    character the values it sets."""
+
+    start: int
+    end: int
+    values: dict[str, dict[str, int]]
+
+
+class AnnotationValues(BaseModel):
+    values: dict[str, dict[str, int]]
+
+
+class InitialValues(BaseModel):
+    """Per character, the values the scene starts with."""
+
+    initial: dict[str, dict[str, int]]
+
+
+class ValueSet(BaseModel):
+    """A value of a character, set now."""
+
+    character: str
+    value: str
+    level: int
 
 
 class Assignment(BaseModel):
@@ -139,6 +181,10 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
     @app.get("/sitrep")
     def sitrep_page():
         return FileResponse(STATIC / "sitrep.html")
+
+    @app.get("/control")
+    def control_page():
+        return FileResponse(STATIC / "control.html")
 
     @app.post("/api/sitrep/start")
     def start():
@@ -208,9 +254,8 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
                                  headers={"Cache-Control": "no-store"})
 
     @app.get("/api/sitrep/video")
-    async def video(request: Request, ratings: bool = False, strip: bool = False,
-                    sides: bool = False):
-        return StreamingResponse(mjpeg(live, request.is_disconnected, ratings, strip, sides),
+    async def video(request: Request, ratings: bool = False):
+        return StreamingResponse(mjpeg(live, request.is_disconnected, ratings),
                                  media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-store"})
 
@@ -246,5 +291,63 @@ def create_app(live: LiveSitrep, selection: Selection | None = None) -> FastAPI:
             return JSONResponse({"selected": live.select(choice.name)})
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
+
+    # The control page ---------------------------------------------------------
+
+    @app.get("/api/control")
+    def control():
+        return JSONResponse(live.control())
+
+    @app.put("/api/control/text")
+    def replace_text(given: SceneTextIn):
+        lost = live.replace_text(given.text)
+        return JSONResponse({"lost": [annotation.text for annotation in lost], **live.control()})
+
+    @app.post("/api/control/annotations")
+    def add_annotation(given: AnnotationIn):
+        try:
+            annotation = live.annotate(given.start, given.end, given.values)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return JSONResponse({"id": annotation.id, **live.control()})
+
+    @app.put("/api/control/annotations/{annotation_id}")
+    def edit_annotation(annotation_id: str, given: AnnotationValues):
+        try:
+            live.edit_annotation(annotation_id, given.values)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Keine solche Annotation.") from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return JSONResponse(live.control())
+
+    @app.delete("/api/control/annotations/{annotation_id}")
+    def remove_annotation(annotation_id: str):
+        try:
+            live.remove_annotation(annotation_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Keine solche Annotation.") from error
+        return JSONResponse(live.control())
+
+    @app.put("/api/control/initial")
+    def set_initial(given: InitialValues):
+        try:
+            live.set_initial(given.initial)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return JSONResponse(live.control())
+
+    @app.post("/api/control/initial/apply")
+    def apply_initial():
+        live.start_values()
+        return JSONResponse(live.snapshot())
+
+    @app.post("/api/control/set")
+    def set_value(given: ValueSet):
+        try:
+            live.set_value(given.character, given.value, given.level)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return JSONResponse(live.snapshot())
 
     return app

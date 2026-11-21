@@ -8,12 +8,11 @@ to lets the model read the assignment instead.
 Only the model's copy of a frame is marked. The camera feed to TouchDesigner
 stays clean, and nothing is written to disk.
 
-The operator's picture is marked the same way. Prototype 2 of the live
-display (knowledge/components/03_render.md) also sets each person's live
-ratings beside their box (draw_ratings); Prototype 3 sets them in fixed slots
-on a strip beneath the picture, each tied to its box by a line
-(draw_ratings_strip); Prototype 4 sets two people's, larger, in a band to each
-side of the picture, tied to their boxes in the same way (draw_ratings_sides).
+The operator's picture is marked the same way. Prototype 4 of the live
+display (knowledge/components/03_render.md) also sets two people's live
+ratings in a band to each side of the picture, each tied to its box by a
+line, and those of bodies without a character's name above their heads
+(draw_ratings_sides).
 
 Text is set with Pillow rather than OpenCV, whose built-in fonts cover ASCII
 only: a cast name with an umlaut has to appear on the frame exactly as it
@@ -29,6 +28,7 @@ Typografie", "CI \\ Raster und Regeln"), like the operator pages
 
 import math
 import threading
+from collections.abc import Collection
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -60,7 +60,7 @@ class Style:
     font: str                       # names and labels
     number_font: str                # rating values
     box: tuple[int, int, int]
-    tag: tuple[int, int, int]       # behind the text, and the ground of the strip
+    tag: tuple[int, int, int]       # behind the text, and the ground of the bands
     text: tuple[int, int, int]
     label: tuple[int, int, int]     # rating labels
     corners: bool                   # a box drawn as its four corners only
@@ -96,26 +96,29 @@ PIPS = 5
 PIP_OFF = RULE
 LEVEL = {"calm": STEEL, "amber": SIGNAL, "red": ALARM}
 
-# Prototype 3: one slot per person the recogniser follows
-# (recognizer.MAX_PEOPLE). A slot stays with its person for HOLD seconds after
-# they leave the view, so a body track lost for a moment returns to the same
-# place.
-SLOTS = 4
-HOLD = 5.0
-LINK = BONE
-
-# Prototype 4: a slot in a band to each side of the picture, each band
-# SIDE_BAND_SHARE of the picture's width, of which SIDE_GAP_SHARE stays clear
-# between the card and the picture. The picture carries a frame of its own
-# (_picture_frame), so the cards stand outside it. On a 1920x1080 projection
-# the page shows the picture about 1280 px wide (style.css), and the bands
-# fill the room either side. The name, the pips and the numbers are set as
-# large as the band allows, up to SIDE_SCALE times Prototype 3's values; the
-# labels as large as the longest fits, up to the same.
+# A slot in a band to each side of the picture, each band SIDE_BAND_SHARE of
+# the picture's width, of which SIDE_GAP_SHARE stays clear between the card
+# and the picture. The picture carries a frame of its own (_picture_frame), so
+# the cards stand outside it. On a 1920x1080 projection the page shows the
+# picture about 1280 px wide (style.css), and the bands fill the room either
+# side. The name, the pips and the numbers are set as large as the band
+# allows, up to SIDE_SCALE times the base size; the labels as large as the
+# longest fits, up to the same. The base size is the name's, smaller where
+# the values at it would not fit a BASE_SLOTS-th of the picture's width.
 SIDES = 2
 SIDE_BAND_SHARE = 0.23
 SIDE_GAP_SHARE = 0.016
 SIDE_SCALE = 3
+BASE_SLOTS = 4
+
+# A slot stays with its person for HOLD seconds after they leave the view, so
+# a body track lost for a moment returns to the same place.
+HOLD = 5.0
+LINK = BONE
+
+# A body's ratings above its head, at this share of the name's size, smaller
+# than the bands' since a scene can box many bodies.
+OVERHEAD_SHARE = 0.6
 
 
 @lru_cache(maxsize=32)
@@ -183,14 +186,25 @@ def _name(draw: ImageDraw.ImageDraw, image: Image.Image, box, name: str,
     else:
         draw.rectangle((x1, y1, x2, y2), outline=style.box, width=line)
 
-    left, top, _, bottom = draw.textbbox((0, 0), text, font=font)
-    width = round(_length(text, font, tracking)) + 2 * padding
-    height = bottom - top + 2 * padding
-    x = min(max(0, x1), max(0, image.width - width))
-    y = y1 - height if y1 - height >= 0 else y2
+    left, top, _, _ = draw.textbbox((0, 0), text, font=font)
+    x, y, width, height = _tag(draw, image, box, name, style)
     draw.rectangle((x, y, x + width, y + height), fill=style.tag)
     _set(draw, (x + padding - left, y + padding - top), text, font, style.text, tracking)
     return x1, y1, x2, y2
+
+
+def _tag(draw: ImageDraw.ImageDraw, image: Image.Image, box, name: str,
+         style: Style) -> tuple[int, int, int, int]:
+    """Left, top, width and height of the tag a person's name is set on (_name)."""
+    size, font, padding, _ = _layout(image, style)
+    text = _cased(name, style)
+    x1, y1, _, y2 = (int(round(float(value))) for value in box)
+    _, top, _, bottom = draw.textbbox((0, 0), text, font=font)
+    width = round(_length(text, font, style.tracking * size)) + 2 * padding
+    height = bottom - top + 2 * padding
+    x = min(max(0, x1), max(0, image.width - width))
+    y = y1 - height if y1 - height >= 0 else y2
+    return x, y, width, height
 
 
 def draw_region(frame: np.ndarray, polygon: np.ndarray) -> np.ndarray:
@@ -312,43 +326,6 @@ def _number(value: int) -> str:
     return f"−{-value}" if value < 0 else str(value)
 
 
-def draw_ratings(frame: np.ndarray,
-                 rated: list[tuple[np.ndarray, str, list[tuple[str, int, str, int]]]]
-                 ) -> np.ndarray:
-    """A copy of a BGR frame with each person boxed and named, and their ratings beside the box.
-
-    Each person comes with rows of (label, value, level, scale), the level being
-    "calm", "amber" or "red" as the page colours it and the scale the largest
-    magnitude the value can take (scenes.extent). A row shows the label, five
-    pips and the number. The panel sits against the box's right edge, at its
-    top, or against its left edge where the frame ends.
-    """
-    if not rated:
-        return frame
-
-    image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    draw = ImageDraw.Draw(image)
-    size, _, padding, line = _layout(image, DISPLAY)
-    rows_drawn = [row for _, _, rows in rated for row in rows]
-    layout = _RatingRows(draw, max(MIN_TEXT, round(size * RATING_SHARE)),
-                         [label for label, _, _, _ in rows_drawn], padding, DISPLAY,
-                         widest=max((scale for _, _, _, scale in rows_drawn), default=PIPS))
-    width = layout.width
-
-    for box, name, rows in rated:
-        x1, y1, x2, _ = _name(draw, image, box, name, DISPLAY)
-        if not rows:
-            continue
-        height = 2 * padding + layout.height(len(rows))
-        x = x2 + line if x2 + line + width <= image.width else x1 - line - width
-        x = min(max(0, x), max(0, image.width - width))
-        y = min(max(0, y1), max(0, image.height - height))
-        _card(draw, (x, y, x + width, y + height))
-        layout.draw(draw, x, y + padding, rows)
-
-    return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
-
-
 def _card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
     """A card as in the CI's deck: dark fill, a thin outline, and corner
     brackets in the outline's colour just inside it."""
@@ -380,8 +357,8 @@ def _card_inset(width: int, height: int) -> int:
 
 
 class Slots:
-    """Which person's ratings stand in which slot of the strip
-    (draw_ratings_strip) or of the bands beside the picture (draw_ratings_sides).
+    """Which person's ratings stand in which band beside the picture
+    (draw_ratings_sides).
 
     A person keeps their slot while in view and for `hold` seconds after. A
     person new to the view takes the free slot nearest their place in the
@@ -389,7 +366,7 @@ class Slots:
     person has been gone longest. Called from every feed's thread.
     """
 
-    def __init__(self, count: int = SLOTS, hold: float = HOLD):
+    def __init__(self, count: int = SIDES, hold: float = HOLD):
         self.count, self.hold = count, hold
         self._held: list[tuple[str, float] | None] = [None] * count
         self._lock = threading.Lock()
@@ -425,69 +402,20 @@ class Slots:
             return slots
 
 
-def draw_ratings_strip(frame: np.ndarray,
-                       rated: list[tuple[np.ndarray, str, list[tuple[str, int, str, int]]]],
-                       slots: dict[str, int], labels: list[str],
-                       count: int = SLOTS, rows: int | None = None,
-                       widest: int = PIPS) -> np.ndarray:
-    """A copy of a BGR frame with a strip beneath it holding the people's ratings.
-
-    In the picture each person is boxed and named. The strip is divided into
-    `count` slots of equal width that do not move with the people. A person
-    with rows (as draw_ratings takes them) and a slot in `slots` has their
-    name and rows set on a card in that slot, and a line in the text colour
-    runs from above the name to the foot of their box.
-    The strip's font follows from `labels`, all the rating labels there can
-    be, and `widest`, the largest magnitude any of them can take; its height
-    from `rows`, the most rows anyone can have (all the labels unless given).
-    So the picture keeps its size from frame to frame.
-    The font is the name's size, smaller where a slot is too narrow for it.
-    """
-    style = DISPLAY
-    base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    size, _, padding, line = _layout(base, style)
-    slot_width = base.width // count
-    layout = _fitted(ImageDraw.Draw(base), max(MIN_TEXT, round(size * RATING_SHARE)), labels,
-                     padding, style, widest, slot_width - 2 * padding, lambda rows: rows.width)
-
-    strip = (3 * padding + layout.row
-             + layout.height(len(labels) if rows is None else rows) + padding)
-    image = Image.new("RGB", (base.width, base.height + strip), style.tag)
-    image.paste(base, (0, 0))
-    draw = ImageDraw.Draw(image)
-
-    margin = max(1, padding // 2)
-    for box, name, rows in rated:
-        x1, _, x2, y2 = _name(draw, base, box, name, style)
-        slot = slots.get(name)
-        if not rows or slot is None:
-            continue
-        card_top = base.height + margin
-        _card(draw, (slot * slot_width + margin, card_top,
-                     (slot + 1) * slot_width - margin - 1, image.height - margin - 1))
-        x = slot * slot_width + (slot_width - layout.width) // 2
-        y = base.height + padding
-        title = _cased(name, style)
-        above_name = x + padding + int(_length(title, layout.font, layout.tracking)) // 2
-        foot = (x1 + x2) // 2, min(max(0, y2), base.height - 1)
-        draw.line(((above_name, card_top), foot), fill=LINK, width=line)
-        layout.text(draw, x + padding, y, name, style.text)
-        layout.draw(draw, x, y + layout.row + 2 * padding, rows)
-
-    return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
-
-
 def draw_ratings_sides(frame: np.ndarray,
                        rated: list[tuple[np.ndarray, str, list[tuple[str, int, str, int]]]],
                        slots: dict[str, int], labels: list[str],
-                       rows: int | None = None, widest: int = PIPS) -> np.ndarray:
+                       rows: int | None = None, widest: int = PIPS,
+                       overhead: Collection[str] = ()) -> np.ndarray:
     """A copy of a BGR frame widened by a band to each side holding people's ratings.
 
     The picture keeps its size, between a band on the left, slot 0 of
     `slots`, and one on the right, slot 1, each SIDE_BAND_SHARE of its width.
     The picture is framed (_picture_frame), and in it each person is boxed
-    and named. A person with rows (as draw_ratings takes them) and a slot has
-    their name and rows set on a card in that band, SIDE_GAP_SHARE of the
+    and named. Each person comes with rows of (label, value, level, scale),
+    the level being "calm", "amber" or "red" as the page colours it and the
+    scale the largest magnitude the value can take (scenes.extent). A person
+    with rows and a slot has their name and rows set on a card in that band, SIDE_GAP_SHARE of the
     picture's width clear of the frame, each label above its pips and number,
     and a line in the text colour runs from beside the name to the near side
     of their box.
@@ -498,6 +426,9 @@ def draw_ratings_sides(frame: np.ndarray,
     to frame. A band is widened where the labels would not fit it at the
     smallest legible size. Both cards start at the same height, centred for
     the tallest card there can be.
+    The people in `overhead` take no slot: their rows are set on a card
+    centred above their name, at OVERHEAD_SHARE of the name's size, within
+    the picture.
     """
     style = DISPLAY
     base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -521,10 +452,9 @@ def draw_ratings_sides(frame: np.ndarray,
     inset = card_inset(card_width)
     room = card_width - 2 * inset
 
-    # Prototype 3's size for these values (draw_ratings_strip).
-    strip = _fitted(probe, max(MIN_TEXT, round(size * RATING_SHARE)), labels, padding, style,
-                    widest, base.width // SLOTS - 2 * padding, lambda layout: layout.width)
-    largest = SIDE_SCALE * strip.size
+    based = _fitted(probe, max(MIN_TEXT, round(size * RATING_SHARE)), labels, padding, style,
+                    widest, base.width // BASE_SLOTS - 2 * padding, lambda layout: layout.width)
+    largest = SIDE_SCALE * based.size
     meters = _fitted(probe, largest, labels, padding, style, widest, room,
                      lambda layout: layout.meter_width)
     captions = _fitted(probe, largest, labels, padding, style, widest, room,
@@ -542,6 +472,19 @@ def draw_ratings_sides(frame: np.ndarray,
 
     marked = ImageDraw.Draw(base)
     boxes = [_name(marked, base, box, name, style) for box, name, _ in rated]
+    # Over every box, so that no bracket cuts through a card.
+    small = _RatingRows(marked, max(MIN_TEXT, round(size * OVERHEAD_SHARE)), labels, padding,
+                        style, widest)
+    for box, name, rows in rated:
+        if name not in overhead or not rows:
+            continue
+        tag_top = _tag(marked, base, box, name, style)[1]
+        width, height = small.width + padding, 2 * small.padding + small.height(len(rows))
+        centre = int(round(float(box[0] + box[2]) / 2))
+        x = min(max(0, centre - width // 2), max(0, base.width - width))
+        y = min(max(0, tag_top - margin - height), max(0, base.height - height))
+        _card(marked, (x, y, x + width, y + height))
+        small.draw(marked, x, y + small.padding, rows)
     image = Image.new("RGB", (base.width + 2 * band, total), style.tag)
     image.paste(base, (band, top))
     draw = ImageDraw.Draw(image)
@@ -549,7 +492,7 @@ def draw_ratings_sides(frame: np.ndarray,
 
     for (x1, y1, x2, y2), (_, name, rows) in zip(boxes, rated):
         slot = slots.get(name)
-        if not rows or slot not in (0, 1):
+        if not rows or name in overhead or slot not in (0, 1):
             continue
         x = margin if slot == 0 else band + base.width + gap
         _card(draw, (x, card_top, x + card_width - 1, card_top + card_height(len(rows)) - 1))

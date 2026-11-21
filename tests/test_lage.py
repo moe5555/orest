@@ -202,6 +202,44 @@ def test_without_the_podest_rule_the_podest_counts_for_nothing():
     assert risiko_of(live) == 2
 
 
+def body_scene(**settings) -> scenes.Current:
+    return scenes.Current(scenes.Scene(name="Szene 1", bodies=True, **settings))
+
+
+def test_where_the_scene_rates_bodies_a_body_without_a_name_is_rated_under_its_label():
+    live = lage.Lage(lambda since: ([evidence(T0, risiko=3.0, members=(7,))], {1: "Klara"}),
+                     lambda since: [], scene=body_scene(), bodies=lambda: [1, 7])
+    stand = live.jetzt(T0)
+    assert stand.koerper["Körper 7"]["risiko"].wert == 3
+    # The characters alone are read by the alarm, the model and TouchDesigner.
+    assert stand.personen == {}
+    assert not stand.alarm.aktiv
+
+
+def test_a_body_is_rated_on_its_podest_count_while_in_view():
+    stance, boxed = {7: False}, [7]
+    live = lage.Lage(lambda since: ([], {}), lambda since: [], podest=lambda: stance,
+                     scene=body_scene(podest=scenes.PodestRule(step=1, floor=2)),
+                     bodies=lambda: boxed)
+    assert live.jetzt(T0).koerper["Körper 7"]["risiko"].wert == 2
+    stance.clear()
+    boxed.clear()
+    assert live.jetzt(T0).koerper == {}
+
+
+def test_without_the_setting_bodies_are_not_rated():
+    live = lage.Lage(lambda since: ([evidence(T0, risiko=3.0, members=(7,))], {}),
+                     lambda since: [], scene=scenes.Current(), bodies=lambda: [7])
+    assert live.jetzt(T0).koerper == {}
+
+
+def test_a_change_in_a_bodys_values_alone_leaves_the_characters_unchanged():
+    before = lage.Stand(T0, {}, lage.Alarm(False))
+    after = lage.Stand(T0, {}, lage.Alarm(False), {"Körper 7": {"risiko": lage.Wert(2, 2.0)}})
+    assert before.gerundet() != after.gerundet()
+    assert before.gerundet(koerper=False) == after.gerundet(koerper=False)
+
+
 def aggression_scene() -> scenes.Current:
     up = scenes.Key(person="Alex", value="aggression", step=1)
     down = scenes.Key(person="Alex", value="aggression", step=-1)
@@ -244,3 +282,44 @@ def test_with_parts_only_the_parts_played_now_are_shown():
     scene.give("Klytaimnestra", ["Lena"])
     stand = live.jetzt(T0)
     assert "Elektra" not in stand.personen and not stand.alarm.aktiv
+
+
+def test_a_value_set_replaces_what_was_measured_before_and_decays_from_there():
+    readings = [evidence(T0, risiko=5.0)]
+    gesetzt = {"Klara": {"risiko": (1, T0 + timedelta(seconds=1), "Szenentext")}}
+    now = T0 + timedelta(seconds=1)
+    personen, _ = lage.measure(readings, {1: "Klara"}, [], now, gesetzt=gesetzt)
+    assert (personen["Klara"]["risiko"].wert, personen["Klara"]["risiko"].anlass) == (1, "Szenentext")
+
+    raised = {"Klara": {"risiko": (4, T0, "vom Operator gesetzt")}}
+    later = T0 + timedelta(seconds=2 * lage.HALBWERTSZEIT)
+    personen, _ = lage.measure([], {}, [], later, gesetzt=raised)
+    assert personen["Klara"]["risiko"].wert == 1
+
+
+def test_evidence_after_a_value_set_counts_as_usual():
+    gesetzt = {"Klara": {"risiko": (0, T0, "Startwert")}}
+    readings = [evidence(T0 + timedelta(seconds=1), risiko=3.0)]
+    personen, _ = lage.measure(readings, {1: "Klara"}, [], T0 + timedelta(seconds=1),
+                               gesetzt=gesetzt)
+    assert personen["Klara"]["risiko"].wert == 3
+
+
+def test_a_berechenbarkeit_set_stands_for_the_span_a_measured_one_is_the_mean_of():
+    gesetzt = {"Klara": {"berechenbarkeit": (-4, T0, "Szenentext")}}
+    soon = lage.measure([], {}, [], T0 + timedelta(seconds=1), gesetzt=gesetzt)[0]
+    assert soon["Klara"]["berechenbarkeit"].wert == -4
+    later = lage.measure([], {}, [], T0 + timedelta(seconds=lage.SMOOTHING), gesetzt=gesetzt)[0]
+    assert "Klara" not in later
+
+
+def test_a_person_out_of_view_shows_a_value_set_for_them():
+    scene = scenes.Current(scenes.Scene(name="Szene 3", roles={"Alex": "Orestes"}))
+    live = lage.Lage(None, lambda since: [], scene=scene)
+    scene.set_value("Orestes", "risiko", 4, lage.MANUELL, at=T0)
+    assert live.jetzt(T0).personen["Orestes"]["risiko"].wert == 4
+
+
+def test_a_value_set_to_0_rates_no_one_with_nothing_else_measured():
+    gesetzt = {"Klara": {"risiko": (0, T0, "Startwert"), "berechenbarkeit": (0, T0, "Startwert")}}
+    assert lage.measure([], {}, [], T0, gesetzt=gesetzt)[0] == {}

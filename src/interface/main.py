@@ -24,11 +24,12 @@ import sys
 
 import uvicorn
 
-from sitrep import cli, report, scenes, session, transcribe
+from sitrep import cli, report, scenes, scenetext, session, transcribe
 
 from .app import create_app
 from .live import LiveSitrep
-from .sources import SCENE_FILE, SOURCES_FILE, Selection, Sources, save_scene, saved_scene
+from .sources import (SCENE_FILE, SCENE_TEXTS, SOURCES_FILE, Selection, Sources, cast_members,
+                      save_scene, saved_scene)
 
 HOST = os.environ.get("APOLLON_UI_HOST", "127.0.0.1")
 PORT = int(os.environ.get("APOLLON_UI_PORT", "9680"))
@@ -83,9 +84,16 @@ def main(argv=None) -> int:
             print(f"no face found in {path}", file=sys.stderr)
         return run
 
+    def cast() -> list[str]:
+        chosen = selection.sources.cast
+        return cast_members(pathlib.Path(chosen)) if chosen else []
+
     live = LiveSitrep(open_session, scene, available,
-                      on_select=lambda name: save_scene(SCENE_FILE, name))
+                      on_select=lambda name: save_scene(SCENE_FILE, name),
+                      texts=scenetext.Store(SCENE_TEXTS), cast=cast)
     print(f"Apollon operator page: http://{args.host}:{args.port}/", flush=True)
+    print(f"Control page:          http://{args.host}:{args.port}/control", flush=True)
+    print(f"Projection:            http://{args.host}:{args.port}/sitrep?follow", flush=True)
     try:
         uvicorn.run(create_app(live, selection), host=args.host, port=args.port,
                     log_level="warning", timeout_graceful_shutdown=2)

@@ -89,6 +89,8 @@ Scenes:
   - The line around the Podest on the picture is shown when the scene is selected. Press "L" to hide it, and again to show it. The Podest rule keeps counting either way. 
   - Manual Interference: press "T" opens a stroboscope page: the screen flashes in fire colours (a glow from the bottom, yellow through orange to deep red) twice in quick succession, stays black for 3 seconds, and repeats until closed with "T" or "X". The second flash is the same fire dying down, moved a little to one side, so it flickers; every cycle is a slightly different fire, and the flash lengths vary a little. 
   - Track up to 30 people at the same time by default. Press "P" to reduce this number to 3. 
+  - Tracked bodies that are not a character have SITREP values too, displayed above their heads (`bodies = true` in `scenes.toml`). They are shown only: not sent to TouchDesigner, not read by the model or the alarm.
+  - The number of bodies tracked is sent to Max as `/apollon/tracking/bodyCount` each time a body is tracked or leaves tracking, e.g. 4 while four are tracked (`body_count = true` in `scenes.toml`). No pulse: the number only. Paused while the stroboscope is open.
   - No auto Einschreiten Interference. 
 - **Scene 1.2**: 
   - Names: Lena is Elektra, Alex is Orestes.

@@ -165,6 +165,40 @@ def test_a_body_lost_past_the_forget_window_is_reported_again():
     assert new == [1, 2]
 
 
+def test_the_body_count_is_sent_as_it_changes_and_not_otherwise():
+    sender = RecordingSender()
+    count = pulse.Count(sender)
+    count.muted = False
+    for tracked in (1, 1, 4, 4, 3):
+        count.update(tracked)
+    assert values(sender, pulse.BODY_COUNT) == [0, 1, 4, 3]
+
+
+def test_a_muted_body_count_sends_nothing_and_the_number_on_unmuting():
+    sender = RecordingSender()
+    count = pulse.Count(sender)
+    count.update(2)
+    count.update(5)
+    assert sender.sent == []
+    count.muted = False
+    count.muted = False
+    assert values(sender, pulse.BODY_COUNT) == [5]
+
+
+def test_the_tracker_counts_bodies_until_they_are_forgotten():
+    counts = []
+    tracker = tracking.BodyTracker(on_count=counts.append)
+    tracker.update(*detections(figure(500)), at=0.0)
+    tracker.update(*detections(figure(505), figure(1500)), at=0.04)
+    tracker.update(*detections(figure(510)), at=0.08)
+    assert counts == [1, 2]
+    tracker.update(*detections(figure(510)), at=tracking.FORGET + 0.1)
+    assert counts == [1, 2, 1]
+    assert tracker.count == 1
+    tracker.update(*detections(), at=2 * tracking.FORGET + 0.2)
+    assert counts == [1, 2, 1, 0]
+
+
 @pytest.fixture
 def receiver():
     """A loopback OSC server that collects three messages."""

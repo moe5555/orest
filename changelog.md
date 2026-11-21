@@ -6,6 +6,47 @@ referenced below.
 
 ---
 
+## 2026-11-21 — Scenes renamed
+
+Requested by Moe. Concerns the scene configurations of the live SITREP
+(`02_processing.md`, "Scene Configurations") in the PROCESSING graph of
+`pipeline.md`.
+
+- In `scenes.toml`, "Szene 1" is now "Szene 1 - Waechter", "Szene 2.3" is
+  "Szene 2.3 - Aggression" and "Szene 3" is "Szene 3 - Pylades". Their
+  settings are unchanged.
+- The pasted scene texts in `data/interface/scenes/` were moved to the file
+  names of the new names (`szene_1_waechter.json`, …), and the last
+  scene selected (`data/interface/scene.txt`) was set to the new name of
+  Szene 3.
+- `PERFORMANCE.md` names the new scenes in its cues.
+
+835 tests pass. `apollon-ui` must be restarted to offer the new names.
+
+---
+
+## 2026-11-21 — Szene 1: the number of bodies tracked sent to Max
+
+Requested by Moe. Concerns Scene 1 (`02_processing.md`, updated) and the
+OSC channel of the RENDER step in `pipeline.md`, beside the pulses to Max
+(2026-11-19 entries).
+
+- With `--send-pulse`, in a scene with the new setting `body_count`
+  (`scenes.Scene`, on in Szene 1 only), Max is sent
+  `/apollon/tracking/bodyCount <n>` each time the number of bodies the
+  tracker follows changes (`pulse.Count`). A value, not a pulse.
+- The count is the body tracker's (`BodyTracker(on_count=...)`), the source
+  of `/apollon/tracking/new`: a body counts from its first frame, one-frame
+  detections included, and leaves the count once undetected for
+  `tracking.FORGET` (3 s). It is not capped by the scene's `tracked` (P).
+- Muted while the stroboscope is open, like the pulses. The current number is
+  sent as the count resumes: as Szene 1 is entered and as the stroboscope
+  closes. Each value is sent once.
+
+843 tests pass (4 new). Not yet checked against Max.
+
+---
+
 ## 2026-11-21 — Athene death scene: an OSC pulse to Max for each cluster
 
 Requested by Moe. Concerns Athene's scene 2, the death scene, and the OSC
@@ -24,6 +65,137 @@ Szene 1 pulses (2026-11-19 entries): Max at `osc.PULSE_HOST` /
 - `athene/` is on pytest's path (`pyproject.toml`), for its first test.
 
 839 tests pass (2 new). Not yet checked in OBS or against Max.
+
+---
+
+## 2026-11-21 — Prototype 4 the only display; Prototypes 1 to 3 removed
+
+Requested by Moe. Concerns the Live SITREP of `03_render.md` (notes added
+under "Live SITREP" and "Prototype 4"; "Operator UI (Regie)" updated) and the
+UI for Rehearsals & Performances of the RENDER graph in `pipeline.md`.
+
+- **Page.** `/sitrep` offers Übersicht and Prototyp 4. `prototyp1.js` to
+  `prototyp3.js` are deleted. The scene's Relevanz, Eskalation and Gefahr
+  beneath the picture moved from `prototyp2.js` into `prototyp4.js`
+  (`p4-scene`). The projection `/sitrep?follow` opens on Prototype 4, and
+  also does so for an address naming a view that no longer exists (`#p3`).
+- **Server.** `annotate.draw_ratings` (Prototype 2) and
+  `draw_ratings_strip` (Prototype 3) are removed. The feed's `?ratings=1`
+  now draws Prototype 4; `&strip` and `&sides` are gone
+  (`LiveSitrep.overlay`, `app.mjpeg`). The bands' text scales from the same
+  base size as before (`annotate.BASE_SLOTS`), so Prototype 4 looks as it did.
+- **Bodies (Szene 1).** Their values, until now on Prototype 3 only, stand on
+  a small card above each body's name tag on Prototype 4
+  (`draw_ratings_sides`, `overhead`), at `OVERHEAD_SHARE` of the name's size.
+  The side bands still show only Alex's and Lena's parts; in Szene 1 that
+  is Lena as Wächter, since Alex has no part there.
+- **Control page.** Its small feed shows Prototype 4 (`control.js`), in a box
+  2.6 times as wide as tall.
+
+835 tests pass (Prototype 1–3 tests removed, the bodies' and values' tests
+moved to Prototype 4). Checked by drawing a 1920×1080 frame with a Wächter
+and two bodies: the Wächter's card in the left band, the bodies' cards above
+their tags. Not yet checked on a live run.
+
+---
+
+## 2026-11-21 — Projection: content in a 16:9 frame
+
+Requested by Moe. Concerns the projection `/sitrep?follow` of the Operator UI
+(`03_render.md`, "Operator UI (Regie)", updated) and the UI for Rehearsals &
+Performances of the RENDER graph in `pipeline.md`.
+
+- On the projection, `body` is a 16:9 frame as large as the window allows,
+  centred, with black around it (`style.css`, "Projection"). Its layout
+  containment makes it the reference of the mark and of the full-screen
+  layers (Einschreiten, the scene's screen, the stroboscope), so these stay
+  inside the frame.
+- The display views' sizes that followed the window (`vh`/`vw`) now follow
+  `--frame-w`/`--frame-h`: the window's size everywhere but on the
+  projection, where they are the frame's. Übersicht, `/control` and the
+  operator page are unchanged.
+- `data-follow` is set on `<html>` rather than `<body>`, so the bars can be
+  black while the frame keeps the ground colour.
+
+Checked with headless Edge on the static page (no server) at 1200×1000:
+Prototype 3, the scene's screen and Einschreiten all sit inside a centred
+1200×675 frame, and the scene's screen is fitted to its width. At 1920×1080
+the page looks as before. Not yet checked on a live run or in OBS. The
+stroboscope's flash fills only the frame, not the bars.
+
+---
+
+## 2026-11-21 — Szene 1: bodies that are not characters have SITREP values
+
+Requested by Moe. Concerns Scene 1 and Prototype 3 (`02_processing.md`,
+`03_render.md`, both updated), and the live SITREP of the PROCESSING graph
+in `pipeline.md`.
+
+- New scene setting `bodies` (`scenes.Scene`), on in Szene 1 only. Each
+  body boxed now that carries no character's name, Alex included since Szene
+  1 gives him no part, is rated under its label "Körper <id>"
+  (`actions.koerper`), on its action readings and its Podest count, with the
+  scene's values. Off the Podest it therefore reads Risiko 2 like the
+  Wächter.
+- The bodies' values are kept apart from the characters' (`lage.Stand.koerper`,
+  `koerper` in the page's live values). The alarm, the model's input and
+  TouchDesigner read the characters only. TouchDesigner is sent the values
+  only when the characters' change (`Session._watch`).
+- Prototype 3 sets a body's values on a card centred above its name tag, at
+  0.6 of the name's size (`annotate.OVERHEAD_SHARE`). The body takes no slot
+  on the strip. Prototype 2 sets them beside the box, as for the characters.
+  Prototype 4 is unchanged.
+
+The recogniser still classifies at most four bodies at a time, named first
+(`recognizer.MAX_PEOPLE`). With many people in view, most bodies are
+therefore rated on the Podest alone. Cards of bodies standing close together
+overlap. 837 tests pass (8 new). Not yet checked in a browser or on a live
+run.
+
+---
+
+## 2026-11-21 — Operator UI (Regie): a control page, and the display as projection
+
+Requested by Moe, first prototype (`03_render.md`, "Operator UI (Regie)",
+added). Concerns the "UI for Rehearsals & Performances" and the Live SITREP of
+`02_processing.md`, and the Human in the loop of the PROCESSING graph in
+`pipeline.md`. Run as Athene is: one page conducts, another is projected.
+Both follow the server's state, so unlike Athene they need not share a
+browser.
+
+- **Control page** `/control` (`control.html`, `control.js`): scene
+  selection, start and stop, the keys of the scene in force with E and X,
+  and a small view of the feed as Prototype 3 draws it.
+- **Projection** `/sitrep?follow`: the SITREP page without tabs or override
+  button, taking no keys and not starting the run itself; Prototype 3 unless
+  the address names another view. `apollon-ui` prints both addresses.
+- **Scene text** (`sitrep/scenetext.py`): pasted per scene. A passage
+  marked in it opens a card for the values it sets per character. A passage
+  is recognised in the lines heard by its first 8 words, 75 % of them
+  in order within the last 20 s, and is not recognised again for 30 s.
+  Replacing the text keeps each annotation whose passage occurs unchanged
+  in the new text, at the occurrence whose surroundings match best; the
+  page lists those lost.
+- **Values set at a moment** (`scenes.Current.set_value`, `lage.measure`):
+  a value set by a passage, by the operator or as a starting value replaces
+  everything measured of it up to then and is taken as evidence from that
+  moment. Risiko and Menschlichkeit decay from it (half-life 20 s),
+  Berechenbarkeit stands for 8 s and is then measured again, Aggression
+  stands as set. Works for characters not in view. A Podest count is still
+  added to a Risiko set.
+- **Starting values**: per scene and character, default 0, set when the scene
+  is selected and on "Szene beginnen"; not on a run's restart, so a restart
+  keeps Aggression. A 0 for someone with nothing else measured or set adds no
+  entry to the live values, so characters never seen are not reported to the
+  model or TouchDesigner.
+- **Renaming**: the "Im Bild" list of the SITREP page, on the control page.
+- Scene texts are kept in `data/interface/scenes/<scene>.json` (machine-local,
+  not versioned).
+
+Not yet available from the control page: R (the report fills the projection
+only on the page where R is pressed). Passage recognition is untested against
+real transcripts; a cue of common words can be recognised by mistake. 829 tests
+pass (22 new). Not yet checked in a browser.
 
 ---
 

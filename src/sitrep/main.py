@@ -15,7 +15,7 @@ is handled separately and is not displayed here.
 
     apollon-sitrep
     apollon-sitrep --window 30 --interval 10 --audio-api WASAPI
-    apollon-sitrep --scene "Szene 1"
+    apollon-sitrep --scene "Szene 1 - Waechter"
     apollon-sitrep --json
 
 Equivalently, without the installed entry point:

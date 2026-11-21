@@ -101,8 +101,9 @@ class Options(BaseModel):
 
     # Pulse Max (pulse.py) each time the body tracker starts following
     # someone, and each time any body steps off or onto the Podest in a scene
-    # with a Podest rule; while a scene's stroboscope is open, signal it
-    # instead. Needs the action recogniser, which runs the body tracker.
+    # with a Podest rule; send it the number of bodies tracked in a scene with
+    # `body_count`; while a scene's stroboscope is open, signal it instead.
+    # Needs the action recogniser, which runs the body tracker.
     send_pulse: bool = False
 
     # Ask the model for a recommendation whenever the live values raise the
@@ -322,6 +323,7 @@ class Session:
         self.roster = None
         self.pulse = None
         self.podest_pulses = None
+        self.body_count = None
         self.strobe = None
         self.missing_enrolment: list[pathlib.Path] = []
         # Bodies the operator named: the face lessons each one taught, and the
@@ -375,6 +377,7 @@ class Session:
                 self.podest_pulses = {
                     False: pulse.Pulse(self.pulse.sender, address=pulse.PODEST_OFF),
                     True: pulse.Pulse(self.pulse.sender, address=pulse.PODEST_ON)}
+                self.body_count = pulse.Count(self.pulse.sender)
                 self.strobe = pulse.Strobe(self.pulse.sender)
             else:
                 print("no action recogniser: no body tracker to pulse Max from",
@@ -406,6 +409,8 @@ class Session:
                                                  role=self.scene.role,
                                                  on_new_body=self.pulse.fire if self.pulse
                                                  else None,
+                                                 on_body_count=self.body_count.update
+                                                 if self.body_count else None,
                                                  on_podest_step=self._podest_step
                                                  if self.podest_pulses else None).start()
 
@@ -459,7 +464,9 @@ class Session:
         self.lage = lage.Lage(self.actions.since if self.actions else None,
                               self.chronik.zeilen_seit, self._gain,
                               podest=self.actions.podest_stance if self.actions else None,
-                              scene=self.scene)
+                              scene=self.scene,
+                              bodies=(lambda: [track for track, *_ in self.actions.in_view()])
+                              if self.actions else None)
         self.utterances = utterances.Utterances(
             self._samplerate, self._zeilen, language=options.language,
             meter=self.meter, laut=self.laut,
@@ -509,7 +516,7 @@ class Session:
 
         The alarm's rising edge asks for a recommendation.
         """
-        shown = None
+        shown, sent = None, None
         alarm = False
         stumm = False
         tick = 0
@@ -524,8 +531,11 @@ class Session:
                 continue
             if stand.gerundet() != shown:
                 shown = stand.gerundet()
-                tick += 1
                 self._emit(Werte(stand))
+            # TouchDesigner receives the characters' values (td.werte_messages).
+            if stand.gerundet(koerper=False) != sent:
+                sent = stand.gerundet(koerper=False)
+                tick += 1
                 self._send(td.werte_messages(stand, tick))
             if stand.alarm.aktiv and not alarm and self.auto_empfehlung:
                 wer = stand.alarm.wer or report.UNKLAR
@@ -615,7 +625,7 @@ class Session:
             raise ValueError("Ohne Aktionserkennung werden keine Körper verfolgt.")
         cast = self.tracker.cast.names if self.tracker.cast else []
         with self._assigning:
-            before = self.actions.names().get(body, f"Körper {body}")
+            before = self.actions.names().get(body, actions.koerper(body))
             member = self.scene.give(name, cast) if name is not None else None
             face = self.actions.assign(body, member)
             for lesson in self._lessons.pop(body, []):
@@ -787,14 +797,16 @@ class Session:
 
     def _signal_pulses(self):
         """Signal Max as the scene's stroboscope opens, closes or is cut to
-        black, muting the other pulses while it is open. The new-body pulse is
-        also muted while the operator has switched it off
-        (scenes.Current.new_body_pulse)."""
+        black, muting the other pulses and the body count while it is open.
+        The new-body pulse is also muted while the operator has switched it
+        off (scenes.Current.new_body_pulse), the body count outside a scene
+        with `body_count`."""
         if self.strobe is None:
             return
         self.pulse.muted = self.scene.strobe or not self.scene.new_body_pulse
         for muted in self.podest_pulses.values():
             muted.muted = self.scene.strobe
+        self.body_count.muted = self.scene.strobe or not self.scene.scene.body_count
         if self.scene.strobe != self.strobe.on:
             self.strobe.show(self.scene.strobe)
         self.strobe.black(self.scene.dark)
@@ -890,7 +902,7 @@ class Session:
             lines.append(f"osc:    {self.sender.host}:{self.sender.port}")
         if self.pulse:
             lines.append(f"pulse:  {pulse.NEW_BODY}, {pulse.PODEST_OFF}, {pulse.PODEST_ON}, "
-                         f"{pulse.ZEICHEN}, {pulse.FACKEL} to "
+                         f"{pulse.BODY_COUNT}, {pulse.ZEICHEN}, {pulse.FACKEL} to "
                          f"{self.pulse.sender.host}:{self.pulse.sender.port}")
         if self.actions:
             lines.append(f"action: NTU120 ST-GCN on {actions.model.active_provider()}")

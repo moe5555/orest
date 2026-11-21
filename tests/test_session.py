@@ -432,6 +432,45 @@ def test_n_mutes_the_new_body_pulse_alone_and_the_stroboscope_keeps_it_muted(
         assert sent[-1] == (session.pulse.NEW_BODY, [1])
 
 
+def test_the_body_count_is_sent_in_a_scene_with_it_and_paused_by_the_stroboscope(
+        monkeypatch, room, readers):
+    video, audio, _, _, _ = room
+    made = {}
+
+    def action_ratings(source, faces, on_body_count=None, **kwargs):
+        made["on_body_count"] = on_body_count
+        return FakeReader(source, [], "actions", faces)
+
+    monkeypatch.setattr(session.actions, "ActionRatings", action_ratings)
+    monkeypatch.setattr(session.pulse, "Sender", lambda host, port: RecordingSender())
+
+    def counts(live):
+        return [arguments[0] for address, arguments in live.pulse.sender.sent
+                if address == session.pulse.BODY_COUNT]
+
+    with session.Session(video, audio, session.Options(send_pulse=True)) as live:
+        made["on_body_count"](3)
+        assert counts(live) == []
+
+    scene = session.scenes.Current(session.scenes.Scene(
+        name="Szene 1", body_count=True, keys={"t": session.scenes.Key(strobe=True)}))
+    with session.Session(video, audio, session.Options(send_pulse=True), scene=scene) as live:
+        assert counts(live) == [0]
+        made["on_body_count"](4)
+        assert counts(live) == [0, 4]
+        scene.press("t")
+        live.apply()
+        made["on_body_count"](6)
+        assert counts(live) == [0, 4]
+        scene.press("t")
+        live.apply()
+        assert counts(live) == [0, 4, 6]
+        scene.select(session.scenes.Scene(name="Szene 1.2"))
+        live.apply()
+        made["on_body_count"](2)
+        assert counts(live) == [0, 4, 6]
+
+
 def test_the_stroboscope_cut_to_black_signals_no_flashes(monkeypatch, room, readers):
     video, audio, _, _, _ = room
     monkeypatch.setattr(session.pulse, "Sender", lambda host, port: RecordingSender())

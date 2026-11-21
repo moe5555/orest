@@ -39,6 +39,13 @@ const EMPFEHLUNG_FRISCH_MS = 60000;
 
 const TENDENZ = { zuspitzend: "↗", gleichbleibend: "→", beruhigend: "↘" };
 
+// The projection (?follow): the page as the audience sees it, run from the
+// control page (control.js). It shows no tabs, takes no keys and does not
+// start the run itself; it opens on Prototype 4 unless the address names
+// the overview.
+const FOLLOW = new URLSearchParams(location.search).has("follow");
+if (FOLLOW) document.documentElement.dataset.follow = "";
+
 let current = null;
 let feedOpen = false;
 
@@ -46,7 +53,7 @@ let feedOpen = false;
 // define render(snapshot), taste(key) returning true for a key it handles in
 // place of the page's own, verlassen() when another tab is chosen, and feed,
 // a query the camera feed is opened with while the view is shown.
-// Prototype scripts add themselves here.
+// The display's script (prototyp4.js) adds itself here.
 const ANSICHTEN = { uebersicht: {} };
 
 function el(tag, className, text) {
@@ -626,7 +633,7 @@ function render(snapshot) {
 
 // ---- Display prototypes ---------------------------------------------------
 
-// Prototypes 1 to 4 (knowledge/components/03_render.md, "Live SITREP") share
+// Prototype 4 (knowledge/components/03_render.md, "Live SITREP") has
 // three states that replace the whole page, set on the body as data-screen. A
 // recommendation to intervene shows alone, with its reason and measure, until
 // the next recommendation or until the operator overrides it (X), in scenes
@@ -849,9 +856,10 @@ function feedSrc() {
   return `/api/sitrep/video?t=${Date.now()}${ANSICHTEN[document.body.dataset.ansicht]?.feed ?? ""}`;
 }
 
-// The chosen view is kept in the address (#p1), so a reload stays on it.
+// The chosen view is kept in the address (#p4), so a reload stays on it. An
+// address naming no view opens the projection's default.
 function setAnsicht(name) {
-  if (!TABS.some((tab) => tab.dataset.ansicht === name)) name = "uebersicht";
+  if (!TABS.some((tab) => tab.dataset.ansicht === name)) name = FOLLOW ? "p4" : "uebersicht";
   const previous = document.body.dataset.ansicht;
   if (previous !== name) ANSICHTEN[previous]?.verlassen?.();
   document.body.dataset.ansicht = name;
@@ -921,7 +929,7 @@ $("ask-empfehlung").addEventListener("click", askEmpfehlung);
 // keys of its own (sitrep/scenes.py); not while typing, and not with a
 // modifier, so the browser's own shortcuts keep working.
 document.addEventListener("keydown", (event) => {
-  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (FOLLOW || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
   const key = event.key.toLowerCase();
   const bound = current?.scene?.keys?.[key];
@@ -949,8 +957,9 @@ function tick() {
 tick();
 setInterval(tick, 1000);
 
-// Opening this page is what "Start live SITREP" asks for.
-post("/api/sitrep/start").finally(() => {
+// Opening this page is what "Start live SITREP" asks for; the projection
+// leaves starting to the control page.
+(FOLLOW ? Promise.resolve() : post("/api/sitrep/start")).finally(() => {
   const events = new EventSource("/api/sitrep/events");
   events.onmessage = (message) => render(JSON.parse(message.data));
 });

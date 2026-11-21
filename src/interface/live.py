@@ -16,6 +16,12 @@ The scene in force (sitrep/scenes.py) is held here rather than by a run, so
 it is selected before a run starts and what the operator changed in it
 outlasts a restart. Every run started reads it, and a change is carried out
 in the run under way at once (session.Session.apply).
+
+So is each scene's text with its annotated passages (sitrep/scenetext.py),
+which the control page edits. The lines the run hears are compared with the
+passages of the scene in force, and a passage recognised sets its values
+(`_hear`). The scene's starting values are set when it is selected and when
+the operator begins it (`start_values`).
 """
 
 import threading
@@ -24,7 +30,7 @@ from collections import deque
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from sitrep import annotate, chronik, lage, report, scenes, session
+from sitrep import annotate, chronik, lage, report, scenes, scenetext, session
 
 # Run states, as the page shows them.
 IDLE, STARTING, RUNNING, STOPPING, ERROR = "idle", "starting", "running", "stopping", "error"
@@ -88,13 +94,17 @@ def zeile(line: report.Aeusserung) -> dict:
 
 
 def werte(stand: lage.Stand) -> dict:
-    """The live values as the page shows them: whole numbers and their causes."""
+    """The live values as the page shows them: whole numbers and their causes,
+    of the characters (`personen`) and of the bodies rated (`koerper`)."""
+    def rows(personen):
+        return [{"name": name,
+                 **{rating: wert.wert for rating, wert in ratings.items()},
+                 **{f"anlass_{rating}": wert.anlass for rating, wert in ratings.items()}}
+                for name, ratings in personen.items()]
     return {
         "zeit": stand.zeit.isoformat(timespec="seconds"),
-        "personen": [{"name": name,
-                      **{rating: wert.wert for rating, wert in ratings.items()},
-                      **{f"anlass_{rating}": wert.anlass for rating, wert in ratings.items()}}
-                     for name, ratings in stand.personen.items()],
+        "personen": rows(stand.personen),
+        "koerper": rows(stand.koerper),
         "alarm": {"aktiv": stand.alarm.aktiv, "wert": stand.alarm.wert,
                   "wer": stand.alarm.wer, "anlass": stand.alarm.anlass},
     }
@@ -138,8 +148,8 @@ def chronik_payload(kept: chronik.Chronik) -> dict:
 # Lines the page lists, newest last.
 ZEILEN_SHOWN = 12
 
-# The live ratings drawn beside each person on the picture of Prototypes 2
-# to 4, with the names the page gives them.
+# The live ratings drawn on the picture of Prototype 4, with the names the
+# page gives them.
 RATING_LABELS = scenes.LABELS
 
 # The cast members whose values Prototype 4 shows, one to each side of the
@@ -201,7 +211,9 @@ class LiveSitrep:
     def __init__(self, open_session: Callable[[], session.Session],
                  scene: scenes.Current | None = None,
                  available: dict[str, scenes.Scene] | None = None,
-                 on_select: Callable[[str], None] | None = None):
+                 on_select: Callable[[str], None] | None = None,
+                 texts: scenetext.Store | None = None,
+                 cast: Callable[[], list[str]] | None = None):
         self._open_session = open_session
         # The scene in force, which `open_session` hands every run, the
         # scenes on offer by name, and who keeps note of a selection.
@@ -222,10 +234,15 @@ class LiveSitrep:
         self.fehler: dict[str, str] = {}
         self.started: datetime | None = None
         self.version = 0
-        # Prototype 3's slots on the strip beneath the picture, and Prototype
-        # 4's bands beside it, by person.
-        self.slots = annotate.Slots()
-        self.sides = annotate.Slots(annotate.SIDES)
+        # Prototype 4's bands beside the picture, by person.
+        self.sides = annotate.Slots()
+        # Each scene's text, the cast selected for the next run, the
+        # passages heard in the scene in force, and the last one recognised.
+        self.texts = texts or scenetext.Store()
+        self._cast = cast or (lambda: [])
+        self.listener = scenetext.Listener()
+        self.cue: dict | None = None
+        self.start_values()
 
     def start(self) -> bool:
         """Begin a run. Returns False if one is already under way."""
@@ -238,8 +255,7 @@ class LiveSitrep:
             self.zeilen.clear()
             self.fehler = {}
             self.started = datetime.now()
-            self.slots = annotate.Slots()
-            self.sides = annotate.Slots(annotate.SIDES)
+            self.sides = annotate.Slots()
             self.version += 1
             self._thread = threading.Thread(target=self._run, args=(self._stop,),
                                             daemon=True)
@@ -290,6 +306,7 @@ class LiveSitrep:
                     self.zeilen.append(row)
                 else:
                     self.zeilen[index] = row
+            self._hear(event.zeilen)
         elif isinstance(event, session.Werte):
             self.werte = werte(event.stand)
         elif isinstance(event, session.NeuerBericht):
@@ -301,6 +318,20 @@ class LiveSitrep:
             self.fehler.pop("empfehlung", None)
         elif isinstance(event, session.Fehlgeschlagen):
             self.fehler[event.was] = event.fehler
+
+    def _hear(self, lines: list[report.Aeusserung]):
+        """Set the values of the passages of the scene's text the lines complete."""
+        annotations = self.texts.get(self.scene.scene.name).annotations
+        for cue in self.listener.heard(lines, annotations):
+            passage = cue.annotation.text
+            shown = passage if len(passage) <= 60 else passage[:59] + "…"
+            now = datetime.now()
+            for character, values in cue.annotation.values.items():
+                for value, wert in values.items():
+                    self.scene.set_value(character, value, wert,
+                                         f"{scenetext.ANLASS}: „{shown}“", now)
+            self.cue = {"id": cue.annotation.id, "time": now.isoformat(timespec="seconds"),
+                        "heard": cue.heard, "summary": cue.annotation.summary()}
 
     def _finish(self, status: str, error: Exception | None):
         with self._lock:
@@ -357,6 +388,10 @@ class LiveSitrep:
         if name not in self.available:
             raise ValueError(f"Keine Szene {name!r}.")
         self.scene.select(self.available[name])
+        with self._lock:
+            self.listener = scenetext.Listener()
+            self.cue = None
+        self.start_values()
         self._apply()
         if self._on_select is not None:
             self._on_select(name)
@@ -383,6 +418,109 @@ class LiveSitrep:
         if run is None or self.status != RUNNING:
             return False
         return run.strobe_cycle(flashes)
+
+    # The scene's text and values, as the control page edits them ------------
+
+    def cast(self) -> list[str]:
+        """The cast of the run under way, else of the one selected for the next."""
+        run = self.session
+        if run is not None and run.tracker.cast:
+            return list(run.tracker.cast.names)
+        return self._cast()
+
+    def characters(self) -> list[str]:
+        return self.scene.characters(self.cast())
+
+    def start_values(self):
+        """Set each character's starting values in the scene in force, 0 where
+        none is given, as if measured now (scenes.Current.set_value)."""
+        initial = self.texts.get(self.scene.scene.name).initial
+        now = datetime.now()
+        for character in self.characters():
+            for value in self.scene.values_of(character):
+                self.scene.set_value(character, value, initial.get(character, {}).get(value, 0),
+                                     scenetext.STARTWERT, now)
+        with self._lock:
+            self.version += 1
+
+    def set_value(self, character: str, value: str, wert: int):
+        """Set a character's value now, whether or not they are in view.
+        A value the scene does not show them with raises ValueError."""
+        if character not in self.characters():
+            raise ValueError(f"{character!r} spielt nicht in {self.scene.scene.name}.")
+        if value not in self.scene.values_of(character):
+            raise ValueError(f"{character} wird in {self.scene.scene.name} "
+                             f"nicht mit {scenes.LABELS.get(value, value)} gezeigt.")
+        self.scene.set_value(character, value, wert, lage.MANUELL)
+        with self._lock:
+            self.version += 1
+
+    def _edit_text(self, change: Callable[[scenetext.SceneText], object]):
+        """Change the scene's text with `change` and keep it; returns what
+        `change` returns."""
+        name = self.scene.scene.name
+        held = self.texts.get(name)
+        result = change(held)
+        self.texts.put(name, held)
+        return result
+
+    def replace_text(self, text: str) -> list[scenetext.Annotation]:
+        """Put a new text in place of the scene's. Returns the annotations lost:
+        those whose passage it no longer holds unchanged (scenetext.revise)."""
+        name = self.scene.scene.name
+        revised, lost = scenetext.revise(self.texts.get(name), text)
+        self.texts.put(name, revised)
+        return lost
+
+    def annotate(self, start: int, end: int,
+                 values: dict[str, dict[str, int]]) -> scenetext.Annotation:
+        """Annotate a passage of the scene's text. ValueError for a passage
+        not in it or overlapping one annotated."""
+        return self._edit_text(lambda held: held.annotate(start, end, values))
+
+    def edit_annotation(self, annotation_id: str, values: dict[str, dict[str, int]]):
+        """Change the values a passage sets. KeyError for one not there."""
+        scenetext.check_values(values)
+
+        def change(held):
+            held.find(annotation_id).values = values
+        self._edit_text(change)
+
+    def remove_annotation(self, annotation_id: str):
+        """Remove a passage's annotation. KeyError for one not there."""
+        def change(held):
+            held.annotations.remove(held.find(annotation_id))
+        self._edit_text(change)
+
+    def set_initial(self, initial: dict[str, dict[str, int]]):
+        """Keep the scene's starting values; they are set from its next
+        selection or beginning on."""
+        scenetext.check_values(initial)
+
+        def change(held):
+            held.initial = initial
+        self._edit_text(change)
+
+    def control(self) -> dict:
+        """The scene in force as the control page edits it: its characters
+        with the values each is shown with, the values' names and ranges,
+        the text with its annotations, the starting values, and the passage
+        last recognised."""
+        held = self.texts.get(self.scene.scene.name)
+        with self._lock:
+            cue = self.cue
+        return {
+            "scene": self.scene.scene.name,
+            "characters": [{"name": character, "values": self.scene.values_of(character)}
+                           for character in self.characters()],
+            "labels": scenes.LABELS,
+            "ranges": scenes.RANGES,
+            "text": held.text,
+            "annotations": [{**annotation.model_dump(), "summary": annotation.summary()}
+                            for annotation in held.annotations],
+            "initial": held.initial,
+            "cue": cue,
+        }
 
     def _apply(self):
         run = self.session
@@ -448,6 +586,7 @@ class LiveSitrep:
                 "empfehlung": self.empfehlung,
                 "report": self.report,
                 "scene": self.scene.snapshot(),
+                "cue": self.cue,
             }
 
     def latest_frame(self):
@@ -457,20 +596,16 @@ class LiveSitrep:
             return None
         return run.stream.latest()
 
-    def overlay(self, frame, ratings: bool = False, strip: bool = False,
-                sides: bool = False):
+    def overlay(self, frame, ratings: bool = False):
         """The frame with the people the run tracks boxed and named.
 
-        With `ratings`, each recognised person's live values are set beside
-        their box (Prototype 2), those the scene shows them with; a
-        recognised person with no recent evidence reads 0, as on Prototype 1.
-        A body not carrying a cast name is boxed and labelled "Körper <id>",
-        without values. With
-        `strip` as well, the values stand in fixed slots on a strip beneath
-        the picture, each tied to its box by a line (Prototype 3). With
-        `sides` instead, only SIDE_PEOPLE's values are shown, in a band to
-        each side of the picture, tied to their boxes in the same way
-        (Prototype 4). People are named by the parts the scene gives them.
+        With `ratings`, as Prototype 4 shows it: SIDE_PEOPLE's live values in
+        a band to each side of the picture, each tied to their box by a line,
+        those the scene shows them with; a recognised person with no recent
+        evidence reads 0. A body not carrying a cast name is boxed and
+        labelled "Körper <id>", with the scene's values on a card above its
+        head where the scene rates bodies (scenes.Scene.bodies) and without
+        otherwise. People are named by the parts the scene gives them.
         """
         run = self.session
         if run is None:
@@ -479,43 +614,38 @@ class LiveSitrep:
             return run.overlay(frame)
         frame = run.outline_podest(frame)
         with self._lock:
-            live = {person["name"]: person for person in (self.werte or {}).get("personen", [])}
+            held = self.werte or {}
+            live = {person["name"]: person
+                    for person in held.get("personen", []) + held.get("koerper", [])}
         members = run.tracker.cast.names if run.tracker.cast else []
         cast = {self.scene.role(member) for member in members} - {None}
         side = [name for name in (self.scene.role(member) for member in SIDE_PEOPLE
                                   if member in members) if name is not None]
-        shown = set(side) if sides else cast
         scene = self.scene.scene
-        rated = []
+        rated, bodies = [], set()
         for box, name in run.actions.visible():
+            body = name not in cast and scene.bodies
+            if body:
+                bodies.add(name)
             values = live.get(name, {})
             rows = [(RATING_LABELS[rating], values.get(rating, 0),
                      rating_level(rating, values.get(rating, 0)), scenes.extent(rating))
-                    for rating in scene.values_of(name)] if name in shown else []
+                    for rating in scene.values_of(name)] if name in side or body else []
             rated.append((box, name, rows))
-        if not strip and not sides:
-            return annotate.draw_ratings(frame, rated)
         width = frame.shape[1]
-        placed = [(name, float(box[0] + box[2]) / 2 / width) for box, name, rows in rated if rows]
-        if sides:
-            # The bands are as wide as the longest label and the widest range
-            # among the values SIDE_PEOPLE can have, and the cards as tall as
-            # the most values either has, so the picture keeps its size as
-            # people come and go.
-            values = {value for name in side for value in scene.values_of(name)}
-            return annotate.draw_ratings_sides(
-                frame, rated, self.sides.assign(placed, time.monotonic()),
-                [RATING_LABELS[value] for value in scenes.VALUES if value in values],
-                rows=max((len(scene.values_of(name)) for name in side),
-                         default=len(scene.values)),
-                widest=max(map(scenes.extent, values), default=annotate.PIPS))
-        slots = self.slots.assign(placed, time.monotonic())
-        # The strip is as tall as the most values anyone in the scene has, and
-        # its numbers as wide as the widest range among them, so the picture
-        # keeps its size as people come and go.
-        most = max([len(scene.values)] + [len(scene.values_of(name)) for name in cast])
-        return annotate.draw_ratings_strip(frame, rated, slots,
-                                           [RATING_LABELS[rating] for rating in scene.all_values()],
-                                           rows=most,
-                                           widest=max(map(scenes.extent, scene.all_values()),
-                                                      default=annotate.PIPS))
+        placed = [(name, float(box[0] + box[2]) / 2 / width) for box, name, rows in rated
+                  if rows and name not in bodies]
+        # The bands are as wide as the longest label and the widest range among
+        # the values SIDE_PEOPLE and the bodies can have, and the cards as tall
+        # as the most values either of SIDE_PEOPLE has, so the picture keeps
+        # its size as people come and go.
+        values = {value for name in side for value in scene.values_of(name)}
+        if bodies:
+            values |= set(scene.values)
+        return annotate.draw_ratings_sides(
+            frame, rated, self.sides.assign(placed, time.monotonic()),
+            [RATING_LABELS[value] for value in scenes.VALUES if value in values],
+            rows=max((len(scene.values_of(name)) for name in side),
+                     default=len(scene.values)),
+            widest=max(map(scenes.extent, values), default=annotate.PIPS),
+            overhead=bodies)

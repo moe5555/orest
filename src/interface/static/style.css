@@ -65,6 +65,10 @@
   --track: 0.3em;
   --track-tight: 0.14em;
   color-scheme: dark;
+  /* The size the display views are laid out in: the window's, or on the
+     projection that of its 16:9 frame (Projection, below). */
+  --frame-w: 100vw;
+  --frame-h: 100vh;
 }
 
 * { box-sizing: border-box; }
@@ -91,8 +95,8 @@ html, body {
 /* Corner brackets (the CI's HUD motif) just inside a card's outline and
    round the picture, drawn by a pseudo-element so that the element keeps
    its own background. */
-.panel, .person, .p1-person, .feed { position: relative; }
-.panel::after, .person::after, .p1-person::after, .feed::after {
+.panel, .person, .feed { position: relative; }
+.panel::after, .person::after, .feed::after {
   --hud-c: var(--hud-color, var(--line-strong));
   --hud-l: var(--hud-arm, 10px);
   content: "";
@@ -259,7 +263,7 @@ button:focus-visible, .button:focus-visible { outline: 1px solid var(--accent); 
   background: #000;
   border: 1px solid var(--line);
   overflow: hidden;
-  height: min(48vh, calc((100vw - 48px) * 0.5625));
+  height: min(calc(var(--frame-h) * 0.48), calc((var(--frame-w) - 48px) * 0.5625));
   min-height: 200px;
 }
 .feed img { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -398,7 +402,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .top { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); align-items: start; }
 @media (max-width: 1000px) { .top { grid-template-columns: minmax(0, 1fr); } }
-.top .feed { height: min(56vh, calc((100vw - 48px) * 0.5625)); }
+.top .feed { height: min(calc(var(--frame-h) * 0.56), calc((var(--frame-w) - 48px) * 0.5625)); }
 .live { align-content: start; }
 .live .panel { padding: 14px 16px; }
 
@@ -497,131 +501,51 @@ button:disabled { opacity: 0.45; cursor: default; }
 .ansichten button:hover { background: none; color: var(--text-dim); }
 .ansichten button[aria-current="page"] { color: var(--text-dim); box-shadow: inset 0 -1px 0 var(--text-faint); }
 
-body:not([data-ansicht="p1"]) .p1-only { display: none; }
-body:not(:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])) .p2-only { display: none; }
-body:not(:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])) .display-only { display: none; }
+body:not([data-ansicht="p4"]) .display-only { display: none; }
 
-/* ---- Prototype 1: picture, the two people in view, nothing else -------- */
+/* ---- Prototype 4: picture in the centre, the values beside it --------- */
 
-body[data-ansicht="p1"] .bar,
-body[data-ansicht="p1"] .top .live { display: none; }
-body[data-ansicht="p1"] .top { grid-template-columns: minmax(0, 1fr); }
+body[data-ansicht="p4"] .bar,
+body[data-ansicht="p4"] .top .live { display: none; }
+body[data-ansicht="p4"][data-screen="normal"] .wrap > :not(.top, .p4-scene, #error) { display: none; }
 
-/* Errors stay visible: without them the view would go blank with no reason
-   given. */
-body[data-ansicht="p1"][data-screen="normal"] .wrap > :not(.top, .p1-seite, #error) { display: none; }
-
-/* Laid out for a landscape projection: the picture on the left, and on the
-   right the people in view, the left-most on top, with the alarm beneath
-   them. Errors span both columns above. Rows are spaced by margins rather
-   than the grid's gap, so the row of a hidden error takes no room. */
-body[data-ansicht="p1"][data-screen="normal"] .wrap {
+/* The picture with a band of values annotate.SIDE_BAND_SHARE (0.23) of its
+   width to either side, so the feed is 1.46 times as wide as the picture,
+   and 2.6 times as wide as tall on a 16:9 camera. It is as large as the
+   window allows with the scene beneath it, and centred; 150px holds the
+   tabs, the padding and the scene's row. On 1920x1080 it fills the width,
+   which puts the picture at about 1280 px. The server frames the picture
+   itself, so the feed has no frame of its own and the cards in the bands
+   stand outside the picture's. The scene beneath and the clock keep to the
+   picture, whose left edge is 15.75 % into the feed. */
+body[data-ansicht="p4"][data-screen="normal"] .wrap {
+  --p4-width: min(100%, calc((var(--frame-h) - 150px) * 2.6));
+  --p4-picture: calc(var(--p4-width) / 1.46);
   max-width: none;
-  min-height: calc(100vh - 30px);
-  padding: 16px 24px;
-  grid-template-columns: minmax(0, 2fr) minmax(340px, 1fr);
-  grid-template-rows: repeat(2, auto);
-  column-gap: 24px; row-gap: 0;
-  align-content: center;
-}
-body[data-ansicht="p1"][data-screen="normal"] #error { grid-column: 1 / -1; grid-row: 1; margin-bottom: 16px; }
-body[data-ansicht="p1"][data-screen="normal"] .top { grid-column: 1; grid-row: 2; }
-body[data-ansicht="p1"] .top .feed { height: auto; aspect-ratio: 16 / 9; max-height: calc(100vh - 64px); }
-.p1-seite { grid-column: 2; grid-row: 2; display: grid; gap: 16px; align-content: start; }
-
-.p1-personen { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-content: start; }
-.p1-personen .waiting { grid-column: 1 / -1; }
-.p1-person {
-  --hud-arm: 14px; --hud-inset: 7px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  padding: 24px 28px;
-  min-width: 0;
-}
-.p1-person h2 {
-  margin: 0 0 20px;
-  font: 400 26px/1.2 var(--display);
-  letter-spacing: 0.02em;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.p1-person .ratings { gap: 14px; }
-.p1-person .rating { grid-template-columns: minmax(0, 1fr) auto 40px; gap: 16px; font-size: 13px; }
-.p1-person .ratings:has(> .rating.wide) > .rating { grid-template-columns: minmax(0, 1fr) auto 58px; }
-.p1-person .pip { width: clamp(16px, 2vw, 40px); height: 12px; }
-.p1-person .rating .value { font: 400 22px/1 var(--display); }
-/* Three people or more: tighter cards, so up to four (recognizer.MAX_PEOPLE)
-   stand beside the picture with the alarm still beneath them. */
-.p1-personen:has(> .p1-person:nth-child(3)) { gap: 10px; }
-.p1-personen:has(> .p1-person:nth-child(3)) .p1-person { padding: 14px 20px; }
-.p1-personen:has(> .p1-person:nth-child(3)) .p1-person h2 { margin-bottom: 10px; font-size: 20px; }
-.p1-personen:has(> .p1-person:nth-child(3)) .p1-person .ratings { gap: 8px; }
-.p1-personen:has(> .p1-person:nth-child(3)) .p1-person .rating .value { font-size: 18px; }
-
-.p1-alarm {
-  display: grid; gap: 8px;
-  padding: 20px 28px;
-  border: 1px solid var(--alarm-line);
-  background: var(--alarm-ground);
-}
-.p1-alarm-kopf { color: var(--red); font: 600 18px/1.3 var(--mono); letter-spacing: var(--track-tight); text-transform: uppercase; }
-.p1-alarm-anlass { color: var(--text); font-size: 16px; }
-.p1-alarm-anlass:empty { display: none; }
-
-/* ---- Prototypes 2 to 4: picture in the centre, the scene beneath it ---- */
-
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) .bar,
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) .top .live { display: none; }
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="normal"] .wrap > :not(.top, .p2-scene, #error) { display: none; }
-
-/* The picture as large as the window allows with the scene beneath it, and
-   centred. 150px holds the tabs, the padding and the scene's row. */
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="normal"] .wrap {
-  --p2-width: min(100%, calc((100vh - 150px) * 16 / 9));
-  max-width: none;
-  min-height: calc(100vh - 30px);
+  min-height: calc(var(--frame-h) - 30px);
   padding: 8px 16px;
   align-content: center;
   justify-items: center;
 }
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) #error { width: var(--p2-width); }
-body:is([data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"]) .top { width: var(--p2-width); grid-template-columns: minmax(0, 1fr); }
-body[data-ansicht="p2"] .top .feed { height: auto; aspect-ratio: 16 / 9; }
-
-/* Prototype 3: the server adds the strip of values beneath the picture,
-   about a seventh of its height on a 16:9 camera, so the feed is taller
-   than 16:9 and takes its height from the picture. */
-body[data-ansicht="p3"][data-screen="normal"] .wrap { --p2-width: min(100%, calc((100vh - 150px) * 1.55)); }
-body:is([data-ansicht="p3"], [data-ansicht="p4"]) .top .feed { height: auto; }
-body:is([data-ansicht="p3"], [data-ansicht="p4"]) .top .feed img { height: auto; max-height: calc(100vh - 150px); }
-
-/* Prototype 4: the picture with a band of values annotate.SIDE_BAND_SHARE
-   (0.23) of its width to either side, so the feed is 1.46 times as wide as
-   the picture, and 2.6 times as wide as tall on a 16:9 camera. It fills the
-   window's width, which on 1920x1080 puts the picture at about 1280 px. The
-   server frames the picture itself, so the feed has no frame of its own and
-   the cards in the bands stand outside the picture's. The scene beneath and
-   the clock keep to the picture, whose left edge is 15.75 % into the feed. */
-body[data-ansicht="p4"][data-screen="normal"] .wrap {
-  --p2-width: min(100%, calc((100vh - 150px) * 2.6));
-  --p4-picture: calc(var(--p2-width) / 1.46);
-}
-body[data-ansicht="p4"] .top .feed { border: 0; background: none; }
+body[data-ansicht="p4"] #error { width: var(--p4-width); }
+body[data-ansicht="p4"] .top { width: var(--p4-width); grid-template-columns: minmax(0, 1fr); }
+body[data-ansicht="p4"] .top .feed { height: auto; border: 0; background: none; }
 body[data-ansicht="p4"] .top .feed::after { content: none; }
+body[data-ansicht="p4"] .top .feed img { height: auto; max-height: calc(var(--frame-h) - 150px); }
 body[data-ansicht="p4"] .feed-tag { left: calc(15.75% + 18px); }
-body[data-ansicht="p4"] .p2-scene { width: var(--p4-picture); }
 
-.p2-scene { width: var(--p2-width); display: grid; gap: 10px; }
-.p2-scene-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
-.p2-scene .meter { grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; }
-.p2-scene .meter + .meter { margin-top: 0; }
-.p2-scene .meter .name { font: 500 14px/1 var(--mono); letter-spacing: var(--track); text-transform: uppercase; color: var(--text-dim); }
-.p2-scene .meter .value { font: 400 34px/1 var(--display); min-width: 1.6em; }
-.p2-scene .track { height: 10px; }
-.p2-scene .tick { top: -6px; bottom: -6px; width: 3px; }
-.p2-scene-source { margin: 0; font: 11px/1.4 var(--mono); letter-spacing: var(--track-tight); color: var(--text-faint); text-align: right; }
-.p2-scene-source:empty { display: none; }
+.p4-scene { width: var(--p4-picture); display: grid; gap: 10px; }
+.p4-scene-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
+.p4-scene .meter { grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; }
+.p4-scene .meter + .meter { margin-top: 0; }
+.p4-scene .meter .name { font: 500 14px/1 var(--mono); letter-spacing: var(--track); text-transform: uppercase; color: var(--text-dim); }
+.p4-scene .meter .value { font: 400 34px/1 var(--display); min-width: 1.6em; }
+.p4-scene .track { height: 10px; }
+.p4-scene .tick { top: -6px; bottom: -6px; width: 3px; }
+.p4-scene-source { margin: 0; font: 11px/1.4 var(--mono); letter-spacing: var(--track-tight); color: var(--text-faint); text-align: right; }
+.p4-scene-source:empty { display: none; }
 
-/* ---- All prototypes: Einschreiten and the report replace the page ------ */
+/* ---- Prototype 4: Einschreiten and the report replace the page ------- */
 
 /* Einschreiten: the only thing on the page, the word first, beneath it why
    and what to do. */
@@ -632,15 +556,16 @@ body[data-ansicht="p4"] .p2-scene { width: var(--p4-picture); }
   background: var(--alarm-ground);
   overflow-y: auto;
 }
-/* Michroma is wide: at 8vw the word fills about nine tenths of the window. */
+/* Michroma is wide: at 8 % of the width the word fills about nine tenths
+   of it. */
 .intervene-word {
   color: var(--red);
-  font: 400 clamp(40px, 8vw, 170px)/1 var(--display);
+  font: 400 clamp(40px, calc(var(--frame-w) * 0.08), 170px)/1 var(--display);
   letter-spacing: 0.02em; text-transform: uppercase;
 }
 .intervene-row { display: grid; gap: 10px; max-width: 1100px; text-align: center; }
 .intervene-row .label { color: var(--red); font-size: 14px; }
-.intervene-row p { margin: 0; color: var(--text); font: 500 clamp(18px, 2.2vw, 32px)/1.4 var(--mono); }
+.intervene-row p { margin: 0; color: var(--text); font: 500 clamp(18px, calc(var(--frame-w) * 0.022), 32px)/1.4 var(--mono); }
 .intervene-override {
   margin-top: 8px;
   padding: 12px 28px;
@@ -651,8 +576,8 @@ body[data-ansicht="p4"] .p2-scene { width: var(--p4-picture); }
 }
 .intervene-override:hover, .intervene-override:focus-visible { color: var(--text); border-color: var(--red); background: transparent; }
 .intervene-override kbd { margin-right: 10px; font-size: 13px; }
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="intervene"] .ansichten,
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="intervene"] .wrap > :not(.intervene) { display: none; }
+body[data-ansicht="p4"][data-screen="intervene"] .ansichten,
+body[data-ansicht="p4"][data-screen="intervene"] .wrap > :not(.intervene) { display: none; }
 body:not([data-screen="intervene"]) .intervene { display: none; }
 
 /* A scene's screen (Manual Interference): its text alone, as large as fits
@@ -661,18 +586,18 @@ body:not([data-screen="intervene"]) .intervene { display: none; }
 .manual-screen {
   position: fixed; inset: 0; z-index: 4;
   display: flex; align-items: center; justify-content: center;
-  padding: 6vw;
+  padding: calc(var(--frame-w) * 0.06);
   background: var(--ground);
 }
 .manual-screen-text {
   max-width: 100%;
   color: var(--text);
-  font: 400 clamp(36px, 6vw, 130px)/1.15 var(--display);
+  font: 400 clamp(36px, calc(var(--frame-w) * 0.06), 130px)/1.15 var(--display);
   letter-spacing: 0.02em; text-transform: uppercase; text-align: center;
   text-wrap: balance;
 }
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="manual"] .ansichten,
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="manual"] .wrap > :not(.manual-screen) { display: none; }
+body[data-ansicht="p4"][data-screen="manual"] .ansichten,
+body[data-ansicht="p4"][data-screen="manual"] .wrap > :not(.manual-screen) { display: none; }
 body:not([data-screen="manual"]) .manual-screen { display: none; }
 
 /* A scene's stroboscope (Manual Interference): pure black, above the mark so
@@ -683,17 +608,170 @@ body:not([data-screen="manual"]) .manual-screen { display: none; }
   background: #000;
 }
 .strobe-flash { position: absolute; inset: 0; opacity: 0; }
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="strobe"] .ansichten,
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="strobe"] .wrap > :not(.strobe) { display: none; }
+body[data-ansicht="p4"][data-screen="strobe"] .ansichten,
+body[data-ansicht="p4"][data-screen="strobe"] .wrap > :not(.strobe) { display: none; }
 body:not([data-screen="strobe"]) .strobe { display: none; }
 
 /* The report on R: alone, in the middle of the page, and clear of the mark
    when it is taller than the window. */
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="report"] .ansichten,
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="report"] .wrap > :not(#report-bereich) { display: none; }
-body:is([data-ansicht="p1"], [data-ansicht="p2"], [data-ansicht="p3"], [data-ansicht="p4"])[data-screen="report"] .wrap { max-width: 960px; min-height: 100vh; align-content: center; padding-top: 40px; }
+body[data-ansicht="p4"][data-screen="report"] .ansichten,
+body[data-ansicht="p4"][data-screen="report"] .wrap > :not(#report-bereich) { display: none; }
+body[data-ansicht="p4"][data-screen="report"] .wrap { max-width: 960px; min-height: var(--frame-h); align-content: center; padding-top: 40px; }
 
 .waiting { color: var(--text-faint); font: 13px/1.5 var(--mono); padding: 28px 4px; text-align: center; }
 .error-text { color: var(--red); font: 13px/1.5 var(--mono); white-space: pre-wrap; margin: 0 0 14px; }
+
+/* ---- Projection (/sitrep?follow) -------------------------------------- */
+
+/* The projection shows nothing of the operator's: no tabs, no buttons. */
+:root[data-follow] .ansichten,
+:root[data-follow] .intervene-override { display: none; }
+
+/* Its content is 16:9 whatever the window: a frame as large as the window
+   allows, centred, black around it. Layout containment makes the frame the
+   reference of the mark and of the full-screen layers (Einschreiten, the
+   scene's screen, the stroboscope); paint containment keeps what overflows
+   it off the bars. */
+:root[data-follow] { background: #000; }
+:root[data-follow] body {
+  --frame-w: min(100vw, 100vh * 16 / 9);
+  --frame-h: min(100vh, 100vw * 9 / 16);
+  position: absolute; inset: 0;
+  width: var(--frame-w); height: var(--frame-h);
+  margin: auto;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+/* ---- Control page (/control) ------------------------------------------ */
+
+.control { min-height: 100vh; }
+.control .bar select,
+.control input,
+.control textarea,
+.control .in-view-row select {
+  font: 13px/1.3 var(--mono);
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  padding: 7px 9px;
+}
+.control :is(select, input, textarea):focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.control button.primary { border-color: var(--accent); }
+.control button.primary:hover { background: var(--signal-ground); }
+
+/* The text on the left, as tall as the window; the picture, the people in
+   view and the values on the right. */
+.control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 560px);
+  gap: 16px;
+  padding: 16px 24px 24px;
+  align-items: start;
+}
+@media (max-width: 1000px) { .control-grid { grid-template-columns: minmax(0, 1fr); } }
+.control-side { display: grid; gap: 16px; }
+/* Prototype 4's picture with its bands: 2.6 times as wide as tall on a 16:9
+   camera. */
+.control-side .feed { height: auto; aspect-ratio: 2.6; min-height: 0; }
+
+.script { display: flex; flex-direction: column; height: calc(100vh - 90px); }
+.script-head { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.script-head .label::before { content: "\\ "; color: var(--accent); }
+.script-head button { margin-left: auto; padding: 7px 12px; }
+.cue { color: var(--accent); font: 12px/1.3 var(--mono); min-width: 0;
+       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.script-editor { display: grid; gap: 10px; margin-bottom: 12px; }
+.script-editor textarea { width: 100%; min-height: 42vh; resize: vertical; line-height: 1.6; }
+.script-editor-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.script-editor-actions .hinweis { margin: 0; }
+
+/* The text as the play's book: wide leading, the passages marked in Signal,
+   each followed by the values it sets. */
+.script-text {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  white-space: pre-wrap;
+  font: 15px/1.8 var(--mono);
+  padding: 4px 12px 4px 0;
+  outline: none;
+}
+.script-text::selection, .script-text ::selection { background: var(--signal-line); }
+.passage {
+  color: var(--text);
+  background: var(--signal-ground);
+  box-shadow: inset 0 -1px 0 var(--accent);
+  cursor: pointer;
+}
+.passage::after {
+  content: " \\ " attr(data-summary);
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.passage:hover { background: var(--signal-line); }
+.passage[data-fired] { background: var(--signal-line); box-shadow: inset 0 -2px 0 var(--accent); }
+.script-help { margin: 10px 0 0; }
+
+/* The values: one card per character, a scale of cells per value. */
+.values-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.values-head .label::before { content: "\\ "; color: var(--accent); }
+.values-head button { margin-left: auto; padding: 7px 12px; }
+.characters { display: grid; gap: 12px; }
+.character { border-top: 1px solid var(--line); padding-top: 12px; }
+.character:first-child { border-top: 0; padding-top: 0; }
+.character-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.character h2 { margin: 0; font: 400 14px/1.2 var(--display); letter-spacing: 0.04em; }
+.character-seen { color: var(--text-faint); font: 11px/1 var(--mono); letter-spacing: var(--track-tight); text-transform: uppercase; }
+.character[data-seen="true"] .character-seen { color: var(--accent); }
+
+.value-row { display: grid; gap: 6px; padding: 6px 0; }
+.value-label { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.value-cause { color: var(--text-faint); font: 11px/1.3 var(--mono); min-width: 0;
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.value-start { margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+               color: var(--text-faint); font: 11px/1 var(--mono); text-transform: uppercase;
+               letter-spacing: var(--track-tight); }
+.value-start input { width: 58px; padding: 4px 6px; }
+
+.scale { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
+.scale-cell {
+  padding: 7px 0;
+  justify-content: center;
+  font: 400 11px/1 var(--display);
+  letter-spacing: 0;
+  color: var(--text-dim);
+  border-color: var(--line);
+}
+.scale.wide .scale-cell { font-size: 9px; padding: 7px 0; }
+.scale-cell[data-current] { color: var(--void); background: var(--steel); border-color: var(--steel); }
+.scale-cell[data-current][data-level="amber"] { background: var(--level-amber); border-color: var(--level-amber); }
+.scale-cell[data-current][data-level="red"] { background: var(--level-red); border-color: var(--level-red); }
+.scale-cell[data-current]:not([data-level]) { color: var(--text); background: var(--panel-raised); border-color: var(--text-dim); }
+
+/* The card for a passage's values, beside the passage. */
+.annotation-card {
+  position: fixed; z-index: 5;
+  width: min(480px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  background: var(--panel-raised);
+  border-color: var(--line-strong);
+}
+.annotation-quote {
+  margin: 0 0 12px;
+  padding-left: 10px;
+  border-left: 1px solid var(--accent);
+  color: var(--text-dim);
+  font: 12px/1.5 var(--mono);
+  max-height: 6em; overflow: hidden;
+  white-space: pre-wrap;
+}
+.annotation-character h3 { margin: 10px 0 2px; font: 400 12px/1.2 var(--display); letter-spacing: 0.04em; }
+.annotation-actions { display: flex; gap: 8px; margin-top: 14px; }
+.annotation-actions button { padding: 8px 12px; }
 
 [hidden] { display: none !important; }

@@ -31,6 +31,11 @@ SOURCES_FILE = Path(os.environ.get("APOLLON_UI_SOURCES",
 SCENE_FILE = Path(os.environ.get("APOLLON_UI_SCENE",
                                  REPO_ROOT / "data" / "interface" / "scene.txt"))
 
+# Where each scene's text, its annotated passages and its starting values are
+# kept, one file per scene (sitrep/scenetext.py).
+SCENE_TEXTS = Path(os.environ.get("APOLLON_UI_SCENE_TEXTS",
+                                  REPO_ROOT / "data" / "interface" / "scenes"))
+
 # The cast folder offered on the operator page: one folder per person, each
 # holding enrolment photographs (face/gallery.py).
 CAST_DIR = REPO_ROOT / "data" / "cast"

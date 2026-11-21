@@ -28,7 +28,7 @@ green). Page numbers as printed in the script. PowerShell, from
    ```
 
 4. http://127.0.0.1:9680/ → Kamera `OBS Virtual Camera`, Ton, Besetzung
-   `data/cast` (Alex, Lena) → **Start live SITREP** → new tab: **Prototyp 3**, F11.
+   `data/cast` (Alex, Lena) → **Start live SITREP** → new tab: **Prototyp 4**, F11.
    A second tab on http://127.0.0.1:9680/sitrep stays on **Übersicht**, off the
    wall, for naming people by hand (Im Bild).
 5. TouchDesigner: open `TouchDesigner/Apollon_TD_New.toe`.
@@ -42,7 +42,7 @@ back into the SITREP tab. Keys only reach the window in focus.
 
 | Cue | Do |
 |---|---|
-| Audience comes in | SITREP running, Szene 1 (30 people tracked) |
+| Audience comes in | SITREP running, Szene → **Szene 1 - Waechter** (30 people tracked) |
 | "wenn alle sitzen, Zoom In" | Camera zoom in. SITREP **P** (30 → 3 people) (?) |
 
 ## Szenario 1: Wächter (p. 1–4)
@@ -68,7 +68,7 @@ back into the SITREP tab. Keys only reach the window in focus.
 
 | Cue | Do |
 |---|---|
-| Lena puts the blindfold on Orest (p. 9) | SITREP back on the wall. Szene → **Szene 2.3** |
+| Lena puts the blindfold on Orest (p. 9) | SITREP back on the wall. Szene → **Szene 2.3 - Aggression** |
 | Each "Ich bin derjenige der es entscheidet" (p. 10–11) | SITREP **W** (Orestes's Aggression +1, **S** −1) (?) |
 | "Ich sagte lauter du drecksau" (p. 11) | SITREP **M** ("Maximales Aggressionspotenzial erreicht.") (?) |
 | "now get on your fucking knees" / SEX TRACK IN (p. 11) | SITREP **X** (close). SITREP off the wall |
@@ -77,7 +77,7 @@ back into the SITREP tab. Keys only reach the window in focus.
 
 | Cue | Do |
 |---|---|
-| Start (p. 13) | SITREP back on the wall. Szene → **Szene 3** (Lena is Elektra) |
+| Start (p. 13) | SITREP back on the wall. Szene → **Szene 3 - Pylades** (Lena is Elektra) |
 | Lena becomes Klytaimnestra (?) | Übersicht tab → Im Bild: Lena's row → **Klytaimnestra**. Elektra is then no longer offered |
 | "…mischen sich hier meinetwillen ein." (p. 14) | SITREP **C** (live → rehearsal clip). TBD: clip from the last rehearsal in December, `video` in `scenes.toml` |
 

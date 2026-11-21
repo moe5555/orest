@@ -8,7 +8,11 @@
 #   tracked = 4                  bodies boxed, named and judged on the Podest
 #   values = ["risiko", "menschlichkeit", "berechenbarkeit"]
 #   values_per_person.<Name> = [...]   for whom the values differ
+#   bodies = true                bodies with no character's name rated too, with
+#                                `values`, shown above their heads; off unless given
 #   podest = { step = 1, floor = 2 }   the Podest count; off unless given
+#   body_count = true            the number of bodies tracked sent to Max as
+#                                /apollon/tracking/bodyCount; off unless given
 #   video = "data/scenes/clip.mp4"     pre-recorded video, from the repository root
 #   prerecorded = false          play the video from the start of the scene
 #   roles = { Lena = "Elektra" }       the part a cast member plays, by the name
@@ -34,11 +38,13 @@
 #
 # The page must be restarted (apollon-ui) to read changes to this file.
 
-["Szene 1"]
+["Szene 1 - Waechter"]
 interference = false
 roles = { Lena = "Wächter" }
 podest = { step = 1, floor = 2 }
 tracked = 30
+bodies = true
+body_count = true
 keys.t = { strobe = true }
 keys.s = { black = true }
 keys.l = { outline = true }
@@ -50,7 +56,7 @@ roles = { Lena = "Elektra", Alex = "Orestes" }
 prerecorded = true
 # video = "data/scenes/szene_1_2.mp4"
 
-["Szene 2.3"]
+["Szene 2.3 - Aggression"]
 interference = false
 roles = { Lena = "Elektra", Alex = "Orestes" }
 values_per_person.Orestes = ["aggression"]
@@ -58,7 +64,7 @@ keys.w = { person = "Orestes", value = "aggression", step = 1 }
 keys.s = { person = "Orestes", value = "aggression", step = -1 }
 keys.m = { screen = "Maximales Aggressionspotenzial erreicht." }
 
-["Szene 3"]
+["Szene 3 - Pylades"]
 interference = false
 roles = { Lena = "Klytaimnestra", Alex = "Orestes" }
 keys.c = { swap = true }

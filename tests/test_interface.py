@@ -138,29 +138,20 @@ def test_the_sitrep_page_is_served_with_its_script(client):
     assert client.get("/static/sitrep.js").status_code == 200
 
 
-def test_the_sitrep_page_offers_the_prototypes_as_tabs(client):
+def test_the_sitrep_page_offers_the_overview_and_prototype_4_as_tabs(client):
     page = client.get("/sitrep").text
-    assert 'data-ansicht="uebersicht"' in page
-    for prototype in ("p1", "p2", "p3", "p4"):
-        assert f'data-ansicht="{prototype}"' in page
-    for script in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js",
-                   "/static/prototyp4.js"):
-        assert script in page
-        assert client.get(script).status_code == 200
+    tabs = [tab for tab in ("uebersicht", "p1", "p2", "p3", "p4")
+            if f'data-ansicht="{tab}"' in page]
+    assert tabs == ["uebersicht", "p4"]
+    assert "/static/prototyp4.js" in page
+    assert client.get("/static/prototyp4.js").status_code == 200
+    for script in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js"):
+        assert script not in page
 
 
-def test_prototype_2_asks_for_a_feed_with_the_ratings_drawn_in(client):
-    script = client.get("/static/prototyp2.js").text
-    assert 'feed: "&ratings=1"' in script
-    assert 'id="p2-scene-meters"' in client.get("/sitrep").text
-
-
-def test_prototype_3_asks_for_a_feed_with_the_ratings_on_a_strip(client):
-    assert 'feed: "&ratings=1&strip=1"' in client.get("/static/prototyp3.js").text
-
-
-def test_prototype_4_asks_for_a_feed_with_the_ratings_beside_the_picture(client):
-    assert 'feed: "&ratings=1&sides=1"' in client.get("/static/prototyp4.js").text
+def test_prototype_4_asks_for_a_feed_with_the_ratings_drawn_in(client):
+    assert 'feed: "&ratings=1"' in client.get("/static/prototyp4.js").text
+    assert 'id="p4-scene-meters"' in client.get("/sitrep").text
 
 
 def test_the_people_in_view_are_named_left_to_right():
@@ -192,7 +183,7 @@ def test_a_report_is_made_when_asked_for_and_reaches_the_snapshot(client, live, 
 
 
 def test_the_snapshot_carries_the_scene_rating_beside_the_scene_in_force(client, live, run):
-    """Prototypes 2 and 3 show the rating beneath the picture; the page reads
+    """Prototype 4 shows the rating beneath the picture; the page reads
     the values, keys and screens of the scene in force from `scene`."""
     client.post("/api/sitrep/start")
     assert wait_for(lambda: live.status == live_module.RUNNING)
@@ -279,14 +270,12 @@ def test_an_override_keeps_a_recommendation_that_arrived_meanwhile(client, live,
     assert answer["empfehlung"]["nummer"] == 2
 
 
-def test_all_prototypes_offer_the_override_on_x(client):
+def test_prototype_4_offers_the_override_on_x(client):
     page = client.get("/sitrep").text
     assert 'id="intervene-override"' in page and "<kbd>X</kbd> Override" in page
     script = client.get("/static/sitrep.js").text
     assert "/api/sitrep/override?nummer=" in script and 'key === "x"' in script
-    for prototype in ("/static/prototyp1.js", "/static/prototyp2.js", "/static/prototyp3.js",
-                      "/static/prototyp4.js"):
-        assert "fullPage.key(key)" in client.get(prototype).text
+    assert "fullPage.key(key)" in client.get("/static/prototyp4.js").text
 
 
 def test_starting_twice_does_not_open_a_second_run(client, live):
@@ -386,48 +375,67 @@ def test_the_video_feed_with_ratings_ends_when_no_run_holds_the_camera(client):
     assert response.content == b""
 
 
-def test_ratings_are_drawn_beside_the_recognised_people_in_view(monkeypatch, run):
-    """A recognised person without recent evidence reads 0, as on Prototype 1;
-    bodies without a cast name carry no values."""
+def test_a_recognised_person_without_recent_evidence_reads_0(monkeypatch, run):
+    """Bodies without a cast name carry no values where the scene does not rate them."""
     boxes = [np.array([10 * i, 10, 10 * i + 8, 90]) for i in range(4)]
     run.actions = SimpleNamespace(visible=lambda: list(zip(
-        boxes, ["Klara", "Orest", "Körper 7", "Körper 8"])))
-    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Klara", "Orest"]))
+        boxes, ["Alex", "Lena", "Körper 7", "Körper 8"])))
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
     drawn = []
-    monkeypatch.setattr(live_module.annotate, "draw_ratings",
-                        lambda frame, rated: drawn.append(rated) or frame)
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
+                        lambda frame, rated, slots, labels, rows=None, widest=None, overhead=():
+                        drawn.append((rated, set(overhead))) or frame)
     controller = LiveSitrep(lambda: run)
     controller.session = run
-    controller.werte = {"personen": [{"name": "Klara", "risiko": 4, "menschlichkeit": 1,
+    controller.werte = {"personen": [{"name": "Alex", "risiko": 4, "menschlichkeit": 1,
                                       "berechenbarkeit": -4}]}
 
     controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
 
-    (rated,) = drawn
+    ((rated, overhead),) = drawn
     assert [(name, rows) for _, name, rows in rated] == [
-        ("Klara", [("Risiko", 4, "red", 5), ("Menschlichkeit", 1, "calm", 5),
-                   ("Berechenbarkeit", -4, "red", 5)]),
-        ("Orest", [("Risiko", 0, "calm", 5), ("Menschlichkeit", 0, "calm", 5),
-                   ("Berechenbarkeit", 0, "calm", 5)]),
+        ("Alex", [("Risiko", 4, "red", 5), ("Menschlichkeit", 1, "calm", 5),
+                  ("Berechenbarkeit", -4, "red", 5)]),
+        ("Lena", [("Risiko", 0, "calm", 5), ("Menschlichkeit", 0, "calm", 5),
+                  ("Berechenbarkeit", 0, "calm", 5)]),
         ("Körper 7", []),
         ("Körper 8", []),
     ]
+    assert overhead == set()
 
 
-def test_on_the_strip_only_recognised_people_take_a_slot(monkeypatch, run):
+def test_where_the_scene_rates_bodies_their_values_stand_above_their_heads(monkeypatch, run):
     run.actions = SimpleNamespace(visible=lambda: [
-        (np.array([10, 10, 30, 90]), "Klara"), (np.array([60, 10, 90, 90]), "Körper 7")])
-    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Klara"]))
+        (np.array([10, 10, 30, 90]), "Wächter"), (np.array([60, 10, 90, 90]), "Körper 7"),
+        (np.array([40, 10, 50, 90]), "Körper 8")])
+    run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
     drawn = []
-    monkeypatch.setattr(live_module.annotate, "draw_ratings_strip",
-                        lambda frame, rated, slots, labels, rows=None, widest=None:
-                        drawn.append((slots, labels, rows, widest)) or frame)
-    controller = LiveSitrep(lambda: run)
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
+                        lambda frame, rated, slots, labels, rows=None, widest=None, overhead=():
+                        drawn.append((rated, slots, set(overhead))) or frame)
+    controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
+        name="Szene 1", roles={"Lena": ["Wächter"]}, bodies=True)))
     controller.session = run
+    controller.werte = {"personen": [{"name": "Wächter", "risiko": 1}],
+                        "koerper": [{"name": "Körper 7", "risiko": 2, "menschlichkeit": 0}]}
 
-    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
 
-    assert drawn == [({"Klara": 0}, ["Risiko", "Menschlichkeit", "Berechenbarkeit"], 3, 5)]
+    (rated, slots, overhead) = drawn[0]
+    assert slots == {"Wächter": 0}
+    assert overhead == {"Körper 7", "Körper 8"}
+    assert rated[1][1:] == ("Körper 7", [("Risiko", 2, "amber", 5),
+                                         ("Menschlichkeit", 0, "calm", 5),
+                                         ("Berechenbarkeit", 0, "calm", 5)])
+    assert [value for _, value, _, _ in rated[2][2]] == [0, 0, 0]
+
+
+def test_the_page_receives_the_bodies_values_apart_from_the_characters():
+    stand = lage.Stand(datetime(2026, 11, 21, 20), {"Wächter": {"risiko": lage.Wert(1, 1.0)}},
+                       lage.Alarm(False), {"Körper 7": {"risiko": lage.Wert(2, 2.0, "Podest +2")}})
+    shown = live_module.werte(stand)
+    assert [person["name"] for person in shown["personen"]] == ["Wächter"]
+    assert shown["koerper"] == [{"name": "Körper 7", "risiko": 2, "anlass_risiko": "Podest +2"}]
 
 
 def test_beside_the_picture_only_alex_and_lena_have_values(monkeypatch, run):
@@ -437,13 +445,13 @@ def test_beside_the_picture_only_alex_and_lena_have_values(monkeypatch, run):
     run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena", "Nils"]))
     drawn = []
     monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
-                        lambda frame, rated, slots, labels, rows=None, widest=None:
+                        lambda frame, rated, slots, labels, rows=None, widest=None, overhead=():
                         drawn.append((rated, slots, labels, rows, widest)) or frame)
     controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
         values_per_person={"Alex": ["aggression"]})))
     controller.session = run
 
-    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, sides=True)
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
 
     ((rated, slots, labels, rows, widest),) = drawn
     assert [(name, len(values)) for _, name, values in rated] == [
@@ -455,8 +463,8 @@ def test_beside_the_picture_only_alex_and_lena_have_values(monkeypatch, run):
 
 def test_the_overview_feed_carries_names_only(monkeypatch, run):
     run.actions = SimpleNamespace(visible=lambda: [])
-    monkeypatch.setattr(live_module.annotate, "draw_ratings",
-                        lambda frame, rated: pytest.fail("ratings drawn"))
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
+                        lambda *args, **kwargs: pytest.fail("ratings drawn"))
     controller = LiveSitrep(lambda: run)
     controller.session = run
     frame = np.zeros((10, 10, 3), dtype=np.uint8)
@@ -533,14 +541,14 @@ def test_in_a_scene_with_parts_the_sides_show_alex_and_lena_under_their_parts(mo
     run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
     drawn = []
     monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
-                        lambda frame, rated, slots, labels, rows=None, widest=None:
+                        lambda frame, rated, slots, labels, rows=None, widest=None, overhead=():
                         drawn.append((rated, slots, rows)) or frame)
     controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
         roles={"Lena": "Elektra", "Alex": "Orestes"},
         values_per_person={"Orestes": ["aggression"]})))
     controller.session = run
 
-    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, sides=True)
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
 
     ((rated, slots, rows),) = drawn
     assert [(name, len(values)) for _, name, values in rated] == [
@@ -634,7 +642,7 @@ def test_a_stopped_recogniser_reports_its_error():
 
 def test_the_page_and_its_script_are_revalidated_on_every_load(client):
     """A cached page paired with a newer script renders nothing."""
-    for path in ("/", "/sitrep", "/static/sitrep.js", "/static/prototyp1.js", "/static/style.css"):
+    for path in ("/", "/sitrep", "/static/sitrep.js", "/static/prototyp4.js", "/static/style.css"):
         assert client.get(path).headers["cache-control"] == "no-cache"
 
 
@@ -736,28 +744,25 @@ def test_a_stroboscope_cycle_reaches_the_run_under_way(run):
     controller.stop()
 
 
-def test_on_the_strip_each_person_has_the_values_the_scene_shows_them_with(monkeypatch, run):
+def test_each_person_has_the_values_the_scene_shows_them_with(monkeypatch, run):
     run.actions = SimpleNamespace(visible=lambda: [
         (np.array([10, 10, 30, 90]), "Alex"), (np.array([60, 10, 90, 90]), "Lena")])
     run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
     drawn = []
-    monkeypatch.setattr(live_module.annotate, "draw_ratings_strip",
-                        lambda frame, rated, slots, labels, rows=None, widest=None:
-                        drawn.append((rated, labels, rows, widest)) or frame)
+    monkeypatch.setattr(live_module.annotate, "draw_ratings_sides",
+                        lambda frame, rated, slots, labels, rows=None, widest=None, overhead=():
+                        drawn.append(rated) or frame)
     controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
         values_per_person={"Alex": ["aggression"]})))
     controller.session = run
     controller.werte = {"personen": [{"name": "Alex", "aggression": -7}]}
 
-    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True, strip=True)
+    controller.overlay(np.zeros((100, 100, 3), dtype=np.uint8), ratings=True)
 
-    rated, labels, rows, widest = drawn[0]
+    rated = drawn[0]
     assert rated[0][1:] == ("Alex", [("Aggression", -7, "calm", 10)])
     assert [(label, scale) for label, _, _, scale in rated[1][2]] == [
         ("Risiko", 5), ("Menschlichkeit", 5), ("Berechenbarkeit", 5)]
-    assert labels == ["Risiko", "Menschlichkeit", "Berechenbarkeit", "Aggression"]
-    assert rows == 3
-    assert widest == 10
 
 
 def test_aggression_is_coloured_at_the_shares_of_its_range_where_risiko_is():
@@ -766,3 +771,96 @@ def test_aggression_is_coloured_at_the_shares_of_its_range_where_risiko_is():
     assert levels == ["calm", "calm", "amber", "amber", "red", "red"]
     assert [live_module.rating_level("risiko", value) for value in (1, 2, 4)] == \
         ["calm", "amber", "red"]
+
+
+# ---- The control page ---------------------------------------------------------
+
+SCENE_TEXT = "ORESTES: Ich bin gekommen, um den Vater zu rächen.\nELEKTRA: So geh.\n"
+
+
+def control_controller(run):
+    available = {
+        scenes.DEFAULT_NAME: scenes.Scene(),
+        "Szene 3": scenes.Scene(name="Szene 3", roles={"Lena": "Klytaimnestra", "Alex": "Orestes"},
+                                values_per_person={"Orestes": ["risiko"]}),
+    }
+    controller = LiveSitrep(lambda: run, scenes.Current(available["Szene 3"]), available)
+    return controller, TestClient(create_app(controller))
+
+
+def test_the_control_page_is_served_with_its_script(client):
+    page = client.get("/control")
+    assert page.status_code == 200 and "/static/control.js" in page.text
+    assert client.get("/static/control.js").status_code == 200
+
+
+def test_the_projection_follows_and_opens_on_prototype_4(client):
+    script = client.get("/static/sitrep.js").text
+    assert 'has("follow")' in script and 'FOLLOW ? "p4" : "uebersicht"' in script
+
+
+def test_the_control_page_offers_the_scenes_characters_with_their_values(run):
+    controller, client = control_controller(run)
+    control = client.get("/api/control").json()
+    assert control["scene"] == "Szene 3"
+    assert control["characters"] == [
+        {"name": "Klytaimnestra", "values": ["risiko", "menschlichkeit", "berechenbarkeit"]},
+        {"name": "Orestes", "values": ["risiko"]}]
+    assert control["ranges"]["berechenbarkeit"] == [-5, 5]
+
+
+def test_a_text_is_annotated_and_a_revision_keeps_the_unchanged_passages(run):
+    controller, client = control_controller(run)
+    client.put("/api/control/text", json={"text": SCENE_TEXT})
+    start = SCENE_TEXT.index("um den Vater")
+    added = client.post("/api/control/annotations", json={
+        "start": start, "end": start + len("um den Vater zu rächen"),
+        "values": {"Orestes": {"risiko": 4}}}).json()
+    assert added["annotations"][0]["summary"] == "Orestes: Risiko 4"
+    assert client.post("/api/control/annotations", json={
+        "start": start, "end": start + 3, "values": {}}).status_code == 400
+
+    revised = client.put("/api/control/text", json={"text": "Neu.\n" + SCENE_TEXT}).json()
+    assert revised["lost"] == [] and revised["annotations"][0]["id"] == added["id"]
+    edited = client.put(f"/api/control/annotations/{added['id']}",
+                        json={"values": {"Orestes": {"risiko": 5}}}).json()
+    assert edited["annotations"][0]["values"] == {"Orestes": {"risiko": 5}}
+    assert client.delete(f"/api/control/annotations/{added['id']}").json()["annotations"] == []
+    assert client.delete(f"/api/control/annotations/{added['id']}").status_code == 404
+
+
+def test_a_passage_said_sets_its_values(run):
+    controller, client = control_controller(run)
+    client.put("/api/control/text", json={"text": SCENE_TEXT})
+    start = SCENE_TEXT.index("Ich bin")
+    client.post("/api/control/annotations", json={
+        "start": start, "end": SCENE_TEXT.index("\n"), "values": {"Orestes": {"risiko": 4}}})
+    client.post("/api/sitrep/start")
+    assert wait_for(lambda: controller.status == live_module.RUNNING)
+    now = datetime.now()
+    run.emit(session.Zeilen([report.Aeusserung(name=None, text="Ich bin gekommen, um den Vater zu rächen",
+                                               beginn=now, ende=now)], bewertet=False))
+    assert wait_for(lambda: controller.cue is not None)
+    wert, _, cause = controller.scene.set_values()["Orestes"]["risiko"]
+    assert wert == 4 and cause.startswith("Szenentext: „Ich bin gekommen")
+    assert client.get("/api/sitrep/state").json()["cue"]["summary"] == "Orestes: Risiko 4"
+    controller.stop()
+
+
+def test_values_are_set_now_and_the_scene_begins_with_its_starting_values(run):
+    controller, client = control_controller(run)
+    assert controller.scene.set_values()["Orestes"]["risiko"][0] == 0
+    client.post("/api/control/set", json={"character": "Orestes", "value": "risiko", "level": 3})
+    assert controller.scene.set_values()["Orestes"]["risiko"][:1] == (3,)
+    assert client.post("/api/control/set", json={
+        "character": "Orestes", "value": "menschlichkeit", "level": 3}).status_code == 400
+    assert client.post("/api/control/set", json={
+        "character": "Elektra", "value": "risiko", "level": 3}).status_code == 400
+
+    client.put("/api/control/initial", json={"initial": {"Klytaimnestra": {"berechenbarkeit": -2}}})
+    client.post("/api/control/initial/apply")
+    gesetzt = controller.scene.set_values()
+    assert gesetzt["Klytaimnestra"]["berechenbarkeit"][0] == -2
+    assert gesetzt["Orestes"]["risiko"][0] == 0
+    assert client.put("/api/control/initial", json={
+        "initial": {"Orestes": {"risiko": 7}}}).status_code == 400

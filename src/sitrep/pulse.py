@@ -1,4 +1,5 @@
-"""Pulses to Max over OSC for events on stage: 1, then 0 after WIDTH seconds.
+"""Pulses to Max over OSC for events on stage: 1, then 0 after WIDTH seconds;
+and the number of bodies tracked.
 
     /apollon/tracking/new         the body tracker starts following someone
     /apollon/tracking/podestOff   a tracked body steps off the Podest
@@ -17,8 +18,20 @@ and finds with the other stance has taken a step; one re-found as a new body
 (tracking.FORGET) has not. A step is sent from the frame that completes it,
 podest.HALTEN frames (0.16 s) after the feet cross.
 
+In a scene with `body_count` (scenes.Scene), which in scenes.toml is Szene 1,
+Max is also sent the number of bodies the tracker follows (Count), not as a
+pulse but as a value, each time it changes:
+
+    /apollon/tracking/bodyCount   e.g. 4 while four bodies are tracked
+
+A body counts from the frame the tracker starts following it, as for
+/apollon/tracking/new, until it has gone undetected for tracking.FORGET (3 s).
+The current number is also sent each time the count resumes, as such a scene
+is entered from another and as its stroboscope closes, so Max holds it from
+then on whatever it held before.
+
 While a scene's stroboscope is open (key T, scenes.Current.strobe), these
-three are muted and the stroboscope is signalled instead (Strobe):
+four are muted and the stroboscope is signalled instead (Strobe):
 
     /apollon/strobe/zeichen   1 as the stroboscope opens, 0 as it closes
     /apollon/strobe/fackel    1 while each flash of fire is lit, 0 between:
@@ -33,8 +46,8 @@ In Max:
 
     [udpreceive 7400]
     -> [route /apollon/tracking/new /apollon/tracking/podestOff /apollon/tracking/podestOn
-              /apollon/strobe/zeichen /apollon/strobe/fackel]
-    -> [sel 1] on each outlet
+              /apollon/strobe/zeichen /apollon/strobe/fackel /apollon/tracking/bodyCount]
+    -> [sel 1] on each outlet but bodyCount's, which carries the number
 
 Host and port are osc.PULSE_HOST and osc.PULSE_PORT.
 """
@@ -49,6 +62,7 @@ PODEST_OFF = "/apollon/tracking/podestOff"
 PODEST_ON = "/apollon/tracking/podestOn"
 ZEICHEN = "/apollon/strobe/zeichen"
 FACKEL = "/apollon/strobe/fackel"
+BODY_COUNT = "/apollon/tracking/bodyCount"
 
 # Seconds the pulse stays at 1. Long enough for Max's scheduler to see the 1
 # before the 0, short enough that people entering together still give one edge
@@ -107,6 +121,43 @@ class Pulse:
                 self._timer.cancel()
                 self._timer = None
                 self._send_low()
+
+
+class Count:
+    """Sends the number of bodies tracked each time it changes, while not muted.
+
+    `update` is called on the thread that tracks the bodies, `muted` set from
+    the scene's; unmuting sends the number at once.
+    """
+
+    def __init__(self, sender: Sender, *, address: str = BODY_COUNT):
+        self.sender = sender
+        self.address = address
+        self._lock = threading.Lock()
+        self._count = 0
+        self._muted = True
+
+    @property
+    def muted(self) -> bool:
+        return self._muted
+
+    @muted.setter
+    def muted(self, muted: bool):
+        with self._lock:
+            if muted == self._muted:
+                return
+            self._muted = muted
+            if not muted:
+                self.sender.send((self.address, [self._count]))
+
+    def update(self, count: int):
+        """The tracker now follows `count` bodies."""
+        with self._lock:
+            if count == self._count:
+                return
+            self._count = count
+            if not self._muted:
+                self.sender.send((self.address, [count]))
 
 
 class Strobe:
