@@ -880,7 +880,7 @@ def test_a_name_given_by_hand_may_appear_in_the_report_and_an_unrecognised_face_
 
 def test_a_body_named_by_its_part_is_given_the_cast_member_playing_it():
     run, naming = naming_session(scene=scenes.Scene(
-        roles={"Lena": ["Elektra", "Klytaimestra"], "Alex": "Orestes"}))
+        roles={"Lena": ["Elektra", "Klytaimnestra"], "Alex": "Orestes"}))
     run.assign(20, "Orestes")
     assert naming.given[20] == "Alex" and naming.taught == [("#3", "Alex")]
     assert "Körper 20 ist Orestes" in run.chronik.kontext()
@@ -890,11 +890,11 @@ def test_a_body_named_by_its_part_is_given_the_cast_member_playing_it():
 
 def test_a_cast_member_moving_on_to_their_next_part_is_no_reassignment():
     run, naming = naming_session(face=None, scene=scenes.Scene(
-        roles={"Lena": ["Elektra", "Klytaimestra"]}))
+        roles={"Lena": ["Elektra", "Klytaimnestra"]}))
     naming.shown[20] = "Elektra"
-    run.assign(20, "Klytaimestra")
+    run.assign(20, "Klytaimnestra")
     assert naming.given[20] == "Lena"
-    assert run.scene.role("Lena") == "Klytaimestra"
+    assert run.scene.role("Lena") == "Klytaimnestra"
     assert run._zuordnungen() == []
 
 

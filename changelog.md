@@ -6,12 +6,12 @@ referenced below.
 
 ---
 
-## 2026-11-20 — Szene 3: Lena is Klytaimestra from the start
+## 2026-11-20 — Szene 3: Lena is Klytaimnestra from the start
 
 Requested by Moe. Concerns the names of Scene 3 (`02_processing.md`, updated).
-`scenes.toml` gives Lena the single part Klytaimestra in Szene 3, in place of
-Elektra followed by Klytaimestra. She is shown, rated and reported as
-Klytaimestra from the scene's selection, and Im Bild no longer offers
+`scenes.toml` gives Lena the single part Klytaimnestra in Szene 3, in place of
+Elektra followed by Klytaimnestra. She is shown, rated and reported as
+Klytaimnestra from the scene's selection, and Im Bild no longer offers
 Elektra. Multiple parts per cast member remain supported by `scenes.py`; no
 scene uses them now.
 
@@ -357,7 +357,7 @@ voices. Each scene shows them under the part they play there:
 | Standard | Lena | Alex |
 | Szene 1 | Wächter | not named |
 | Szene 1.2, Szene 2.3 | Elektra | Orestes |
-| Szene 3 | Elektra, then Klytaimestra | Orestes |
+| Szene 3 | Elektra, then Klytaimnestra | Orestes |
 
 - **Config** (`scenes.toml`, `scenes.Scene.roles`). A cast member can have
   one part or a list of parts in order. In a scene with parts,
@@ -370,11 +370,11 @@ voices. Each scene shows them under the part they play there:
   report's roster, and TouchDesigner's roster (`td.RosterStream`). A cast
   member the scene gives no part, such as Alex in Szene 1, shows as
   `Körper <id>` and is not rated.
-- **Klytaimestra.** In Szene 3, Lena's row in Im Bild offers Elektra and
-  Klytaimestra. Choosing Klytaimestra names that body as Lena and moves her
-  on to Klytaimestra for the rest of the scene; Elektra is then no longer
+- **Klytaimnestra.** In Szene 3, Lena's row in Im Bild offers Elektra and
+  Klytaimnestra. Choosing Klytaimnestra names that body as Lena and moves her
+  on to Klytaimnestra for the rest of the scene; Elektra is then no longer
   offered (`scenes.Current.give`). The model is not told "Elektra ist
-  Klytaimestra": a new part is not a correction of the old one. Live values
+  Klytaimnestra": a new part is not a correction of the old one. Live values
   of a part since left are dropped (`lage.Lage.jetzt`). Selecting the scene
   again starts her as Elektra.
 - **Page.** The Im Bild menu offers the scene's names (`quelle.namen`), and

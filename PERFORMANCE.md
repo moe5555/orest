@@ -78,7 +78,7 @@ back into the SITREP tab. Keys only reach the window in focus.
 | Cue | Do |
 |---|---|
 | Start (p. 13) | SITREP back on the wall. Szene → **Szene 3** (Lena is Elektra) |
-| Lena becomes Klytaimnestra (?) | Übersicht tab → Im Bild: Lena's row → **Klytaimestra**. Elektra is then no longer offered |
+| Lena becomes Klytaimnestra (?) | Übersicht tab → Im Bild: Lena's row → **Klytaimnestra**. Elektra is then no longer offered |
 | "…mischen sich hier meinetwillen ein." (p. 14) | SITREP **C** (live → rehearsal clip). TBD: clip from the last rehearsal in December, `video` in `scenes.toml` |
 
 ## Human in the Loop: Loop des Mordes (p. 15)

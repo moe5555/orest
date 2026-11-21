@@ -552,11 +552,11 @@ def test_in_a_scene_with_parts_the_sides_show_alex_and_lena_under_their_parts(mo
 def test_a_body_in_view_is_offered_the_parts_of_the_scene(run):
     run.tracker = SimpleNamespace(cast=SimpleNamespace(names=["Alex", "Lena"]))
     controller = LiveSitrep(lambda: run, scenes.Current(scenes.Scene(
-        roles={"Lena": ["Elektra", "Klytaimestra"], "Alex": "Orestes"})))
+        roles={"Lena": ["Elektra", "Klytaimnestra"], "Alex": "Orestes"})))
     controller.session = run
     quelle = controller.snapshot()["quelle"]
     assert quelle["besetzung"] == ["Alex", "Lena"]
-    assert quelle["namen"] == ["Elektra", "Klytaimestra", "Orestes"]
+    assert quelle["namen"] == ["Elektra", "Klytaimnestra", "Orestes"]
 
 
 def test_nothing_is_named_while_no_run_is_live(client):

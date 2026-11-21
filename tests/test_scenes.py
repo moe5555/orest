@@ -26,7 +26,7 @@ def test_the_scenes_file_holds_the_scenes_of_the_play():
     assert loaded["Szene 1.2"].prerecorded
     assert loaded["Szene 1.2"].roles == zwei_drei.roles
     assert loaded["Szene 3"].keys["c"].swap
-    assert loaded["Szene 3"].roles == {"Lena": ["Klytaimestra"], "Alex": ["Orestes"]}
+    assert loaded["Szene 3"].roles == {"Lena": ["Klytaimnestra"], "Alex": ["Orestes"]}
     assert [name for name, scene in loaded.items() if scene.interference] == [scenes.DEFAULT_NAME]
 
 
@@ -273,15 +273,15 @@ def test_a_cast_member_is_shown_under_their_part_and_one_without_a_part_not_at_a
 
 
 def test_naming_a_body_as_a_later_part_moves_its_cast_member_on_until_the_scene_is_selected():
-    scene = scenes.Scene(roles={"Lena": ["Elektra", "Klytaimestra"], "Alex": "Orestes"})
+    scene = scenes.Scene(roles={"Lena": ["Elektra", "Klytaimnestra"], "Alex": "Orestes"})
     current = scenes.Current(scene)
-    assert current.offered(CAST) == ["Elektra", "Klytaimestra", "Orestes"]
+    assert current.offered(CAST) == ["Elektra", "Klytaimnestra", "Orestes"]
     assert current.give("Elektra", CAST) == "Lena" and current.role("Lena") == "Elektra"
 
-    assert current.give("Klytaimestra", CAST) == "Lena"
-    assert current.role("Lena") == "Klytaimestra"
-    assert current.offered(CAST) == ["Klytaimestra", "Orestes"]
-    assert current.shown() == {"Klytaimestra", "Orestes"}
+    assert current.give("Klytaimnestra", CAST) == "Lena"
+    assert current.role("Lena") == "Klytaimnestra"
+    assert current.offered(CAST) == ["Klytaimnestra", "Orestes"]
+    assert current.shown() == {"Klytaimnestra", "Orestes"}
     assert current.member("Elektra") == "Lena"
     with pytest.raises(ValueError):
         current.give("Elektra", CAST)

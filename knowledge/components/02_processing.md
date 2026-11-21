@@ -25,7 +25,7 @@ Overview: components/pipeline.md
 - the system should be able to understand when it is spoken to. If the system is directly spoken to, e.g. via "System" or "Apollon", it should be able to react. 
 - hand gun detection. The system should recognize whether someone is holding a handgun. TBD how this effects the scene. 
 - per scene config. 
-- cast vs character names. Alex plays Orestes, Lena plays Wächter, Elektra and Klytaimestra. Recognition is always of Alex and Lena; each scene shows them under the part they play there (see Scenes below). With no scene selected (Standard), they go by their own names. A cast member a scene gives no part is not named there. The cast is Alex and Lena only.
+- cast vs character names. Alex plays Orestes, Lena plays Wächter, Elektra and Klytaimnestra. Recognition is always of Alex and Lena; each scene shows them under the part they play there (see Scenes below). With no scene selected (Standard), they go by their own names. A cast member a scene gives no part is not named there. The cast is Alex and Lena only.
 
 #### Calculating Values
 How do we calculate the values the system comes up with? 
@@ -101,7 +101,7 @@ Scenes:
   - **Manual Interference**: Press "M" and page opens that reads "Maximales Aggressionspotenzial erreicht." 
   - No auto Einschreiten Interference. 
 - **Scene 3**:
-  - Names: Alex is Orestes, Lena is Klytaimestra from the start.
+  - Names: Alex is Orestes, Lena is Klytaimnestra from the start.
   - default settings
   - Press "C" and live-feed is swamped for a pre-recorded clip TBD.
   - No auto Einschreiten Interference. 

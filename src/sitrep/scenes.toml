@@ -13,7 +13,7 @@
 #   prerecorded = false          play the video from the start of the scene
 #   roles = { Lena = "Elektra" }       the part a cast member plays, by the name
 #                                      they are enrolled under (data/cast)
-#   roles = { Lena = ["Elektra", "Klytaimestra"] }   several parts in order: the
+#   roles = { Lena = ["Elektra", "Klytaimnestra"] }   several parts in order: the
 #                                first, then a later one once a body is named so
 #                                on the SITREP page (Im Bild)
 #
@@ -60,6 +60,6 @@ keys.m = { screen = "Maximales Aggressionspotenzial erreicht." }
 
 ["Szene 3"]
 interference = false
-roles = { Lena = "Klytaimestra", Alex = "Orestes" }
+roles = { Lena = "Klytaimnestra", Alex = "Orestes" }
 keys.c = { swap = true }
 # video = "data/scenes/szene_3.mp4"

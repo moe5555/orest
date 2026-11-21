@@ -236,11 +236,11 @@ def test_each_person_keeps_only_the_values_the_scene_shows_them_with():
 
 def test_with_parts_only_the_parts_played_now_are_shown():
     scene = scenes.Current(scenes.Scene(name="Szene 3",
-                                        roles={"Lena": ["Elektra", "Klytaimestra"]}))
+                                        roles={"Lena": ["Elektra", "Klytaimnestra"]}))
     lines = [line("Mutter.", T0, name="Elektra", risiko=4)]
     live = lage.Lage(None, lambda since: lines, scene=scene)
     assert live.jetzt(T0).personen["Elektra"]["risiko"].wert == 4
 
-    scene.give("Klytaimestra", ["Lena"])
+    scene.give("Klytaimnestra", ["Lena"])
     stand = live.jetzt(T0)
     assert "Elektra" not in stand.personen and not stand.alarm.aktiv
