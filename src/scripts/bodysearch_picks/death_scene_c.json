@@ -1,0 +1,397 @@
+{
+ "grid": [
+  3,
+  3
+ ],
+ "segments": [
+  7.0,
+  9.7,
+  9.7,
+  6.6,
+  11.0,
+  9.2,
+  9.4,
+  9.4
+ ],
+ "query": "Timed on 2026-10-07 16-38-50_deathScene 0:00-1:12: aim, two pushes, slaps landing at 27.3 s and 38.2 s, the standing strangle and the fall at 54.2 s, the strangle on the platform. Runs of the death scene located with the pose index and pose tracks, each moment checked by eye",
+ "tiles": [
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1510.0,
+    "shows": "Alex aims a gun at Lena on the platform"
+   },
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 24.5,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 629.5,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 672.5,
+    "shows": "slap at 673.4 s"
+   },
+   {
+    "file": "2026-10-15 13-16-03_DeathScene.mp4",
+    "start": 58.2,
+    "shows": "slap at 63.4 s"
+   },
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 812.58,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-10-15 12-20-09_pylades_death.mp4",
+    "start": 771.64,
+    "shows": "taken down at 772.66 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-07 16-38-50_deathScene.mp4",
+    "start": 182.4,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 13-16-03_DeathScene.mp4",
+    "start": 35.0,
+    "shows": "Alex aims a gun at Lena on the platform"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2693.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 306.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-23 13-13-42_DeathScene.mp4",
+    "start": 122.5,
+    "shows": "slap at 123.4 s"
+   },
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 344.4,
+    "shows": "slap at 349.6 s"
+   },
+   {
+    "file": "2026-10-14 13-06-22_masturbation_Death.mp4",
+    "start": 969.34,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-11-20 14-38-58_death.mp4",
+    "start": 135.8,
+    "shows": "taken down at 136.82 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-08 13-26-38_DeathandLAWS.mp4",
+    "start": 527.44,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 498.0,
+    "shows": "Lena aims a gun up at Alex on the platform"
+   },
+   {
+    "file": "2026-10-14 13-06-22_masturbation_Death.mp4",
+    "start": 953.5,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-15 12-20-09_pylades_death.mp4",
+    "start": 738.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 185.7,
+    "shows": "slap at 186.6 s"
+   },
+   {
+    "file": "2026-10-15 13-16-03_DeathScene.mp4",
+    "start": 63.1,
+    "shows": "slap at 68.3 s"
+   },
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 184.84,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2172.26,
+    "shows": "taken down at 2173.28 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 556.6,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 594.0,
+    "shows": "Alex aims a gun at Lena on the platform"
+   },
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 240.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 1922.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 641.1,
+    "shows": "slap at 642 s"
+   },
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 340.3,
+    "shows": "slap at 345.5 s"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2163.06,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-10-23 13-13-42_DeathScene.mp4",
+    "start": 132.88,
+    "shows": "taken down at 133.9 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 664.34,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-23 13-13-42_DeathScene.mp4",
+    "start": 99.5,
+    "shows": "Lena aims a gun up at Alex on the platform"
+   },
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 167.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-07 16-38-50_deathScene.mp4",
+    "start": 148.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 327.9,
+    "shows": "slap at 328.8 s"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 777.2,
+    "shows": "slap at 782.4 s"
+   },
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 585.28,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2941.18,
+    "shows": "taken down at 2942.2 s, strangled on the platform"
+   },
+   {
+    "file": "2026-11-20 14-38-58_death.mp4",
+    "start": 145.2,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 634.0,
+    "shows": "Alex aims a gun at Lena on the platform"
+   },
+   {
+    "file": "2026-10-23 13-13-42_DeathScene.mp4",
+    "start": 26.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-20 13-16-49_ende.mp4",
+    "start": 183.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-14 13-06-22_masturbation_Death.mp4",
+    "start": 962.3,
+    "shows": "slap at 963.2 s"
+   },
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 925.0,
+    "shows": "slap at 930.2 s"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 457.22,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-10-07 16-38-50_deathScene.mp4",
+    "start": 173.0,
+    "shows": "taken down at 174.02 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2950.58,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-23 13-13-42_DeathScene.mp4",
+    "start": 11.0,
+    "shows": "Lena aims a gun up at Alex on the platform"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 682.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 729.5,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-12 15-59-52_DeathScene.mp4",
+    "start": 182.7,
+    "shows": "slap at 183.6 s"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 530.4,
+    "shows": "slap at 535.6 s"
+   },
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 935.08,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-11-20 15-29-12_preanddeath.mp4",
+    "start": 944.38,
+    "shows": "taken down at 945.4 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2181.66,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2047.0,
+    "shows": "Alex aims a gun at Lena on the platform"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 427.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-08 13-26-38_DeathandLAWS.mp4",
+    "start": 475.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-20 13-16-49_ende.mp4",
+    "start": 195.9,
+    "shows": "slap at 196.8 s"
+   },
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 37.3,
+    "shows": "slap at 42.5 s"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 782.66,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-10-23 13-13-42_DeathScene.mp4",
+    "start": 51.04,
+    "shows": "taken down at 52.06 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-15 13-22-27_Death.mp4",
+    "start": 206.6,
+    "shows": "strangled on the platform"
+   }
+  ],
+  [
+   {
+    "file": "2026-10-15 13-16-03_DeathScene.mp4",
+    "start": 22.0,
+    "shows": "Alex aims a gun at Lena on the platform"
+   },
+   {
+    "file": "2026-10-14 13-06-22_masturbation_Death.mp4",
+    "start": 1212.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-08 11-00-31_DeathScene.mp4",
+    "start": 657.0,
+    "shows": "they push each other"
+   },
+   {
+    "file": "2026-10-13 12-21-06_DeathScene.mp4",
+    "start": 764.9,
+    "shows": "slap at 765.8 s"
+   },
+   {
+    "file": "2026-10-14 13-06-22_masturbation_Death.mp4",
+    "start": 965.8,
+    "shows": "slap at 971 s"
+   },
+   {
+    "file": "2026-11-20 14-38-58_death.mp4",
+    "start": 126.6,
+    "shows": "strangled standing, before the fall"
+   },
+   {
+    "file": "2026-10-07 11-52-05.mp4",
+    "start": 2814.5,
+    "shows": "taken down at 2815.52 s, strangled on the platform"
+   },
+   {
+    "file": "2026-10-20 13-16-49_ende.mp4",
+    "start": 216.52,
+    "shows": "strangled on the platform"
+   }
+  ]
+ ]
+}

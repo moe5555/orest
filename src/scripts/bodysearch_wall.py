@@ -12,6 +12,12 @@ same moments and the wall runs clips x clip_seconds long. An optional
      "tiles": [[{"file": "2026-10-15 15-01-44_LAWS.mp4", "start": 1633.5,
                  "shows": "woman in a red top walks right"}, ...], ...]}
 
+In place of "clip_seconds", "segments" gives the length of each clip position
+in turn, so a wall can follow the timing of a scene: the n-th clip of every
+tile runs segments[n] seconds and all tiles still cut together:
+
+    {"grid": [3, 3], "segments": [7.0, 19.4, ...], "tiles": [...]}
+
 The clips are cut from the rehearsal recordings, scaled to fill a tile
 (the wall's size divided by the grid) and encoded as H.264 at 25 fps
 without sound, as the walls TouchDesigner loops.
@@ -36,26 +42,34 @@ def load_picks(path):
         raise SystemExit(f"{path}: {len(tiles)} tiles for a {columns}x{rows} grid")
     if len({len(tile) for tile in tiles}) != 1:
         raise SystemExit(f"{path}: tiles hold different numbers of clips")
-    return columns, rows, float(picks["clip_seconds"]), tiles
+    if "segments" in picks:
+        segments = [float(s) for s in picks["segments"]]
+        if len(segments) != len(tiles[0]):
+            raise SystemExit(f"{path}: {len(segments)} segments for {len(tiles[0])} clips per tile")
+    else:
+        segments = [float(picks["clip_seconds"])] * len(tiles[0])
+    return columns, rows, segments, tiles
 
 
-def command(columns, rows, seconds, tiles, source, output, width, height, crf):
+def command(columns, rows, segments, tiles, source, output, width, height, crf):
     tile_w, tile_h = width // columns, height // rows
     args = ["ffmpeg", "-v", "error", "-y"]
     for tile in tiles:
-        for clip in tile:
+        for clip, seconds in zip(tile, segments):
             recording = source / clip["file"]
             if not recording.exists():
                 raise SystemExit(f"missing recording: {recording}")
             args += ["-ss", f"{clip['start']:.3f}", "-t", f"{seconds:.3f}", "-i", str(recording)]
 
-    # Each clip is cut to exactly its length in frames, so tiles stay in step
+    # Each clip is cut to exactly its length in frames, counted from the
+    # wall's start so rounding never accumulates, and tiles stay in step
     # whatever the recording's own timestamps.
-    frames = round(seconds * FPS)
+    edges = [round(sum(segments[:n]) * FPS) for n in range(len(segments) + 1)]
     graph, index = [], 0
     for t, tile in enumerate(tiles):
         names = []
-        for _ in tile:
+        for n in range(len(tile)):
+            frames = edges[n + 1] - edges[n]
             graph.append(
                 f"[{index}:v]fps={FPS},scale={tile_w}:{tile_h}:force_original_aspect_ratio=increase,"
                 f"crop={tile_w}:{tile_h},setsar=1,trim=end_frame={frames},setpts=PTS-STARTPTS[c{index}]")
@@ -82,10 +96,10 @@ def main():
     args = parser.parse_args()
 
     width, height = (int(v) for v in args.size.lower().split("x"))
-    columns, rows, seconds, tiles = load_picks(args.picks)
-    subprocess.run(command(columns, rows, seconds, tiles, args.source, Path(args.output),
+    columns, rows, segments, tiles = load_picks(args.picks)
+    subprocess.run(command(columns, rows, segments, tiles, args.source, Path(args.output),
                            width, height, args.crf), check=True)
-    print(f"{args.output}: {columns}x{rows} tiles, {len(tiles[0])} clips of {seconds:g} s each")
+    print(f"{args.output}: {columns}x{rows} tiles, {len(tiles[0])} clips, {sum(segments):g} s")
 
 
 if __name__ == "__main__":

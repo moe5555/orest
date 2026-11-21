@@ -6,6 +6,46 @@ referenced below.
 
 ---
 
+## 2026-11-21 — Body search walls timed on the death scene
+
+Requested by Moe: three 3 × 3 body search walls that follow the death scene
+rehearsal `2026-10-07 16-38-50_deathScene.mp4` from 0:00 to 1:12, the
+sequence and timing of its motions shown in other rehearsals. Concerns the
+body search results of the Smart Search (`02_processing.md`) and the wall
+they fill (`QB["BODY SEARCH"]` in the RENDER graph of `pipeline.md`),
+rendered as video like the walls of 2026-11-19.
+
+- `bodysearch_wall.py` takes `"segments"` in place of `"clip_seconds"`: the
+  length of each clip position in turn. All tiles still cut on the same frame.
+- The walls cut where the reference changes motion, eight clips per tile
+  over 72 s: the gun held at the other's head (0–7 s), two stretches of
+  pushing (7–26.4 s), a slap landing at 27.3 s and one at 38.2 s, the
+  standing strangle (44–53.2 s), the fall onto the platform at 54.2 s and
+  the strangle on the platform (53.2–72 s). Each clip is placed so its slap
+  or fall lands on the reference's frame.
+- Three gun tiles per wall, one per row, show Lena aiming at Alex; the other
+  six show Alex aiming at Lena. The direction was checked with the cast face
+  gallery.
+- The takes come from 32 runs of the scene in 14 recordings, 7 October to
+  20 November. Gun and push takes started from the WISE text and pose
+  searches and the picks of 2026-11-19. Takedowns were located with pose
+  tracks of every death scene recording (the head of one performer dropping
+  to the floor), then each was refined at 12.5 fps and checked by eye.
+  Detecting the slaps from wrist speed near the other's head did not work.
+  Each strike was timed by eye at 2.5–5 fps, to about 0.2 s.
+- No event repeats within a wall, and no recording follows itself within a
+  tile. Neighbouring tiles never show the same recording at the same
+  moment. The rehearsals hold fewer pushes (35) and slaps (34) than the 54
+  places each across the three walls, so those repeat across walls.
+- In runs with a short standing strangle, the grab lands up to about 3 s
+  later than in the reference, at 46.5 s.
+
+Picks in `src/scripts/bodysearch_picks/death_scene_{a,b,c}.json`, rendered
+to `bodysearch_death_{a,b,c}_2111.mp4` on the Desktop (1920 × 1080, 25 fps,
+no sound).
+
+---
+
 ## 2026-11-20 — Szene 3: Lena is Klytaimnestra from the start
 
 Requested by Moe. Concerns the names of Scene 3 (`02_processing.md`, updated).
