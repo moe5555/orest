@@ -84,6 +84,24 @@ OSC channel of the RENDER step in `pipeline.md`, beside the pulses to Max
 
 ---
 
+## 2026-11-22 — Athene death scene: one pulse per clip of a cluster
+
+Requested by Moe. Changes the cluster pulse of 2026-11-21 (below).
+
+- `/athene/cluster` pulses once for each clip of a cluster as it appears,
+  instead of once per C: 16 pulses 50 ms apart (`AXES.clipIn`), starting
+  1.6 s after C, the last cluster 10.
+- The page announces each clip on the frame it appears (`update` in
+  `rehearsal.js`, `pulsed` per cluster), so the pulses keep to the frames,
+  within one frame of 50 ms apart. A cluster drawing back announces none
+  of its clips still to come.
+- The pulse lasts 25 ms (`live.CLIP_PULSE`), half the clips' spacing, so
+  it is back at 0 before the next clip.
+
+Not yet checked in a browser or against Max.
+
+---
+
 ## 2026-11-21 — Athene death scene: an OSC pulse to Max for each cluster
 
 Requested by Moe. Concerns Athene's scene 2, the death scene, and the OSC

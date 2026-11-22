@@ -726,9 +726,7 @@ function deathCluster() {
     dy: AXES.clipScatter * 0.7 * (2 * Math.random() - 1),
     tilt: AXES.clipTilt * (2 * Math.random() - 1),
   }));
-  live.clusters.push({ id: clustersMade++, x, y, appear: live.clock + 0.8 * LIVE.deathGrow, leaving: null, clips });
-  // The server pulses /athene/cluster to Max (athene/live.py).
-  fetch("/cluster", { method: "POST" }).catch(() => {});
+  live.clusters.push({ id: clustersMade++, x, y, appear: live.clock + 0.8 * LIVE.deathGrow, leaving: null, clips, pulsed: 0 });
   showHint();
 }
 let clustersMade = 0;
@@ -1114,6 +1112,15 @@ function update(dt) {
   live.pokes = live.pokes.filter((p) => live.clock - p.start < p.rise + p.fall);
   live.bolts = live.bolts.filter((b) => live.clock - b.start < 3 + 5 * AXES.boltFade);
   live.deathAxes = live.deathAxes.filter((d) => d.leaving === null || live.clock - d.leaving < LIVE.deathRetract);
+  // Each clip of a cluster, as it appears (drawClusters), is announced to the
+  // server, which pulses /athene/cluster to Max (athene/live.py). A cluster
+  // drawing back announces none of its clips still to come.
+  for (const c of live.clusters) {
+    while (c.leaving === null && c.pulsed < c.clips.length && live.clock >= c.appear + c.pulsed * AXES.clipIn) {
+      c.pulsed++;
+      fetch("/cluster", { method: "POST" }).catch(() => {});
+    }
+  }
   live.clusters = live.clusters.filter((c) => {
     const kept = c.leaving === null || live.clock - c.leaving < LIVE.clusterLeave;
     if (!kept) release(c);

@@ -103,11 +103,14 @@ Options:
 
 ### The cluster pulse to Max
 
-Each cluster C places sends `/athene/cluster 1` over
-OSC, then `0` 100 ms later, as Apollon's pulses do (`src/sitrep/pulse.py`):
-a C pressed while the pulse is still high gives a fresh 0 → 1 edge, and
-the closing 0 is sent twice against UDP loss. A C that places no cluster
-(outside the death scene, or with all clips shown) sends nothing. The
+Each clip of a cluster sends `/athene/cluster 1` over OSC as it appears,
+then `0` 25 ms later, by Apollon's pulse (`src/sitrep/pulse.py`). A cluster's
+clips appear 50 ms apart, starting 1.6 s after C, so each C gives a quick
+run of 16 pulses (10 for the last cluster), each on the frame its clip
+appears. A pulse still high when the next comes drops to 0 and rises
+again, and the closing 0 is sent twice against UDP loss. A C that places
+no cluster (outside the death scene, or with all clips shown) sends
+nothing, and a cluster drawing back sends none of the clips still to come. The
 target is Apollon's Max, `192.168.10.3:7400` (`APOLLON_PULSE_HOST`,
 `APOLLON_PULSE_PORT`). In Max:
 

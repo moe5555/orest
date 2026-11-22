@@ -37,11 +37,12 @@ or stop the scene's next voice clip, C a cluster in the death scene, E the
 ending, S the strobe, L automatic or manual strikes and T (held) the manual
 strikes in the growth scene, X the cut to black at its end, H the help line.
 
-Each cluster C places pulses Max over OSC: CLUSTER is
-sent 1, then 0 after pulse.WIDTH seconds, as Apollon's pulses are
-(src/sitrep/pulse.py), to osc.PULSE_HOST and osc.PULSE_PORT. The page
-announces each cluster to the server (POST /cluster); a C that places no
-cluster, outside the death scene or with all clips shown, sends nothing.
+Each clip of a cluster pulses Max over OSC as it appears, 16 pulses in quick
+succession for each C: CLUSTER is sent 1, then 0 after CLIP_PULSE seconds,
+by Apollon's pulse (src/sitrep/pulse.py), to osc.PULSE_HOST and
+osc.PULSE_PORT. The page announces each clip to the server as it appears
+(POST /cluster); a C that places no cluster, outside the death scene or
+with all clips shown, sends nothing.
 """
 
 import argparse
@@ -83,8 +84,11 @@ WHISPER = "large-v3-turbo"
 # Seconds within which a word's start moves to the voice's nearest syllable
 # onset (analyse.py), so that the finale's strobe starts on the word's audible attack.
 SNAP = 0.2
-# The pulse to Max for each cluster placed.
+# The pulse to Max for each clip of a cluster as it appears.
 CLUSTER = "/athene/cluster"
+# Seconds the pulse stays at 1: half the 50 ms between a cluster's clips
+# (AXES.clipIn in rehearsal.js), so that it is back at 0 before the next.
+CLIP_PULSE = 0.025
 
 
 def analysed(voice):
@@ -239,7 +243,7 @@ def main():
         table[f"/clips/{k}.mp4"] = path
         table[f"/clips/{k}_sheet.jpg"] = sheet
 
-    cluster = pulse.Pulse(address=CLUSTER)
+    cluster = pulse.Pulse(address=CLUSTER, width=CLIP_PULSE)
     server = render.serve(table, args.port, {"/cluster": cluster.fire})
     url = f"http://127.0.0.1:{server.server_address[1]}/?design={DESIGN}&mode=live"
     if args.rehearsal:
@@ -258,7 +262,7 @@ def main():
     if args.obs or not args.rehearsal:
         wall += "&follow"
     print(f"{len(voices)} voice clips, {len(clips)} cluster clips")
-    print(f"pulse: {CLUSTER} to {PULSE_HOST}:{PULSE_PORT} for each cluster")
+    print(f"pulse: {CLUSTER} to {PULSE_HOST}:{PULSE_PORT} for each clip of a cluster")
     if args.obs:
         print(f"regie (9:1, 1920 x 213, conducts, no NDI): {regie}")
     if args.rehearsal:
