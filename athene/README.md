@@ -94,7 +94,7 @@ clip is analysed again only when its file is newer.
 
 Options:
 
-    python -m athene.live --voices FOLDER       # other voice clips (default: example_audio/athene_voice_2110)
+    python -m athene.live --voices FOLDER       # other voice clips (default: example_audio/athene_voice_2211)
     python -m athene.live --clips A B           # other cluster clip folders, one group each
     python -m athene.live --res 0.5             # draw at a fixed half of the view's size (default: fitted to the screen)
     python -m athene.live --port 8800           # another port

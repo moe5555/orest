@@ -59,7 +59,7 @@ from sitrep import pulse
 from . import analyse, render
 
 HERE = Path(__file__).resolve().parent
-VOICES = HERE / "example_audio" / "athene_voice_2110"
+VOICES = HERE / "example_audio" / "athene_voice_2211"
 OUT = render.OUT / "live"
 CLIPS_OUT = OUT / "clips"
 # The width of the end videos, about that of a clip at its largest on the wall.

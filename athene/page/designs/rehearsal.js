@@ -122,14 +122,14 @@ const AXES = {
 };
 
 // The scenes: their voice clips (by the start of their file names, played
-// in this order), whether the network moves, whether the axes probe, and
+// in this order, a clip named twice played twice), whether the network moves, whether the axes probe, and
 // whether it grows. The death scene moves and probes until its first
 // cluster.
 const SCENES = [
-  { name: "ZWEI ACHSEN", voices: ["athene_1", "athene_2"], motion: 1, probing: true },
-  { name: "TODESSZENE", voices: ["athene_3"], motion: 1, probing: true, death: true },
-  { name: "WIEDER ZWEI ACHSEN", voices: ["athene_4_new"], motion: 1, probing: true },
-  { name: "WACHSTUM", voices: ["athene_5_new", "athene_6_new"], motion: 1, growing: true },
+  { name: "ZWEI ACHSEN", voices: ["athene_1_panned", "athene_2_panned"], motion: 1, probing: true },
+  { name: "TODESSZENE", voices: ["athene_3_panned"], motion: 1, probing: true, death: true },
+  { name: "WIEDER ZWEI ACHSEN", voices: ["athene_4_panned"], motion: 1, probing: true },
+  { name: "WACHSTUM", voices: ["athene_5_panned", "athene_5.5_panned_normal", "athene_6_panned", "athene_6_panned"], motion: 1, growing: true },
 ];
 
 const LIVE = {

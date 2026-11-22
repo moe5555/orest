@@ -6,6 +6,43 @@ referenced below.
 
 ---
 
+## 2026-11-22 — Athene growth scene: four voices, clip 6 twice
+
+Requested by Moe. The growth scene plays, P by P, `athene_5_panned`,
+`athene_5.5_panned_normal` (27.6 s, new in `athene_voice_2211`),
+`athene_6_panned` and `athene_6_panned` again (`SCENES` in
+`athene/page/designs/rehearsal.js`; `athene/description.md`). A clip named
+twice in a scene plays twice.
+
+Driven headless (Edge): in scene 4 the hint reads "P: STIMME 1/4", the four
+P presses played the clips in that order, a fifth played nothing. No errors.
+
+---
+
+## 2026-11-22 — Athene: the voice recordings of 22 November
+
+Requested by Moe. Concerns Athene's voices in the RENDER step of
+`pipeline.md` (playback on stage).
+
+- `python -m athene.live` plays `athene/example_audio/athene_voice_2211/`
+  by default (`VOICES` in `athene/live.py`): six stereo-panned AAC clips
+  (`.m4a`) in place of the mono MP3s of `athene_voice_2110`, which stay in
+  their folder, unused.
+- Same scenes as before, the clips named in full (`SCENES` in
+  `athene/page/designs/rehearsal.js`; `athene/description.md`):
+  `athene_1_panned` (6.8 s) and `athene_2_panned` (3.8 s) in scene 1,
+  `athene_3_panned` (20.1 s) in the death scene, `athene_4_panned` (23.1 s)
+  in scene 3, `athene_5_panned` (33.5 s) and `athene_6_panned` (46.1 s) in
+  the growth scene.
+- Whisper finds the closing "von null auf eins" of `athene_6_panned` at
+  43.78, 44.26, 44.54 and 45.24 s. `athene_5_panned` says it too (14.9 s);
+  the ending starts on E only, so this changes nothing on stage.
+
+Analyses written and the server checked: `/voices.json` lists the six clips,
+served as `audio/mp4`. Not yet played through on the page or in OBS.
+
+---
+
 ## 2026-11-21 — Scenes renamed
 
 Requested by Moe. Concerns the scene configurations of the live SITREP
